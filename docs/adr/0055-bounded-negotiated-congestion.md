@@ -1,6 +1,7 @@
 # ADR-0055: Add a bounded negotiated-congestion coordinator
 
-- **Status:** Accepted
+- **Status:** Accepted; request-shape clause superseded in part by
+  [ADR-0126](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md)
 - **Date:** 2026-08-05
 
 ## Context
@@ -53,3 +54,10 @@ the search fails closed as `CANCELLED`; the negotiated coordinator discards the 
 and publishes no partial candidates. If cancellation arrives before a later retry, any partial
 result retained from an earlier pass is discarded as well. This preserves the candidate-only
 contract without claiming hard process interruption.
+
+## Partial supersession — 2026-08-29
+
+[ADR-0126](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md)
+supersedes only the first Decision bullet's two-pad and single-world-origin request shape. The
+bounded coordinator, deterministic ledger, immutable-policy identity, cancellation behavior and
+separate physical-clearance authority recorded here remain in force.

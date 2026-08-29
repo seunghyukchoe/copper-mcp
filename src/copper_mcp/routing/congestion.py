@@ -92,6 +92,8 @@ from copper_mcp.routing.spatial_index import (
 
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _MAX_NETS = MAX_NEGOTIATED_NETS
+_MIN_PADS_PER_NET = 2
+_MAX_PADS_PER_NET = 32
 _MAX_ITERATIONS = 32
 _MAX_PENALTY_NM = 1_000_000_000
 _MAX_HISTORY = 1_000_000
@@ -157,9 +159,10 @@ class NegotiatedRoutingStatus(StrEnum):
 class NegotiatedRoutingRequest:
     """Immutable policy and request envelope for one multi-net routing run.
 
-    The first slice intentionally requires two-pin requests on one signal layer and one common
-    grid.  That lets the coordinator report exact lattice resource conflicts while leaving
-    multilayer vias, differential pairs, and length matching to their dedicated validators.
+    The coordinator admits two to thirty-two selected-layer pads per net on one signal layer and
+    one common grid step.  Each request keeps the private A* router's deterministic local lattice
+    origin; absolute-world resources and the mandatory whole-set physical gate reconcile the
+    requests without giving the coordinator a new geometry authority.
     """
 
     board_revision: str
@@ -963,7 +966,7 @@ def _request_pads(snapshot: BoardIRSnapshot, request: RouteRequest) -> tuple[Pad
             key=lambda pad: pad.id,
         )
     )
-    if len(pads) != 2:
+    if not _MIN_PADS_PER_NET <= len(pads) <= _MAX_PADS_PER_NET:
         return None
     return pads
 
@@ -999,7 +1002,7 @@ def _candidate_is_bound(
 
     The generic router seam is an untrusted boundary.  A candidate ID binds every canonical
     geometry byte and metadata field, while this check binds those bytes to the current immutable
-    snapshot, the *bounded* request settings, and the selected net's exact two pad identities.
+    snapshot, the *bounded* request settings, and the selected net's exact pad identities.
     It deliberately runs before accounting, re-identification, or ledger mutation.
     """
 
@@ -1016,13 +1019,19 @@ def _candidate_is_bound(
             or candidate.patch.net_id != request.net_id
             or candidate.patch.layer_id != request.layer_id
             or candidate.patch.width_nm != expected_width
+            or candidate.fill_binding is not None
             or candidate.seed != request.seed
             or candidate.settings != request.settings
             or candidate.start_pad_id != pads[0].id
-            or candidate.end_pad_id != pads[1].id
-            or candidate.pad_count != 2
-            or candidate.ordering_policy != SINGLE_PATH_ORDERING
-            or len(candidate.patch.paths) != 1
+            or candidate.end_pad_id != pads[-1].id
+            or candidate.pad_count != len(pads)
+            or (
+                len(pads) == 2
+                and (
+                    candidate.ordering_policy != SINGLE_PATH_ORDERING
+                    or len(candidate.patch.paths) != 1
+                )
+            )
         ):
             return False
         # ``candidate_id`` covers the unmodified patch geometry, cost, metrics, route settings,
@@ -1051,8 +1060,8 @@ def _connection_is_bound(
             connection.base_revision == snapshot.snapshot_digest
             and connection.base_revision == request.board_revision
             and connection.start_pad_id == pads[0].id
-            and connection.end_pad_id == pads[1].id
-            and connection.pad_count == 2
+            and connection.end_pad_id == pads[-1].id
+            and connection.pad_count == len(pads)
             and not isinstance(connection.obstacle_checks, bool)
             and 0 <= connection.obstacle_checks <= request.settings.max_obstacle_checks
         )
@@ -1114,6 +1123,7 @@ def _results_are_semantically_equal(left: RouteResult, right: RouteResult) -> bo
                 and left.candidate.seed == right.candidate.seed
                 and left.candidate.pad_count == right.candidate.pad_count
                 and left.candidate.ordering_policy == right.candidate.ordering_policy
+                and left.candidate.fill_binding == right.candidate.fill_binding
             )
         if left.connected is not None and right.connected is not None:
             return left.connected == right.connected
@@ -1187,29 +1197,39 @@ def _validate_snapshot_requests(
         return "the Board IR snapshot failed canonical verification"
     if snapshot.snapshot_digest != envelope.board_revision:
         return "the negotiated request is stale against the immutable board revision"
-    origin: PointNM | None = None
-    step = envelope.grid_step_nm
     for request in sorted(envelope.requests, key=lambda item: (item.net_id, item.seed)):
         centres = _request_pad_centres(snapshot, request)
         if centres is None:
-            return "each negotiated net must expose exactly two pads on the selected layer"
-        if origin is None:
-            origin = centres[0]
-        if any(
-            (centre.x - origin.x) % step != 0 or (centre.y - origin.y) % step != 0
-            for centre in centres
-        ):
-            return "all negotiated pad centres must share one world-coordinate grid"
+            return "each negotiated net must expose 2 to 32 pads on the selected layer"
     return None
+
+
+def _pad_demand_cells(centres: tuple[PointNM, ...], grid_step_nm: int) -> int:
+    """Return a deterministic O(pads) bounding-box demand in whole lattice cells.
+
+    The two-axis span is the former Manhattan endpoint distance for every admitted two-pin
+    request.  Rounding up additionally keeps a request-local shifted lattice from understating
+    demand without changing any legacy two-pin value, whose endpoints were grid-congruent.
+    """
+
+    span_nm = (
+        max(point.x for point in centres)
+        - min(point.x for point in centres)
+        + max(point.y for point in centres)
+        - min(point.y for point in centres)
+    )
+    cells = (span_nm + grid_step_nm - 1) // grid_step_nm
+    return max(1, min(cells, 1_000_000))
 
 
 def _net_demand_cells(
     snapshot: BoardIRSnapshot, envelope: NegotiatedRoutingRequest
 ) -> dict[str, int]:
-    """Return each net's exact Manhattan pad separation in whole lattice cells.
+    """Return each net's deterministic bounding-box demand in whole lattice cells.
 
     This is the same bounded, pre-routing feature the closed policy input already carries.  It is
-    derived by the coordinator from the verified snapshot, never supplied by a caller.
+    derived by the coordinator from the verified snapshot, never supplied by a caller.  The
+    two-pin result is byte-for-byte identical to the former endpoint-distance calculation.
     """
 
     demand: dict[str, int] = {}
@@ -1217,8 +1237,7 @@ def _net_demand_cells(
         centres = _request_pad_centres(snapshot, request)
         if centres is None:
             raise ValueError("validated negotiated pads are unavailable")
-        distance = abs(centres[0].x - centres[1].x) + abs(centres[0].y - centres[1].y)
-        demand[request.net_id] = max(1, min(distance // envelope.grid_step_nm, 1_000_000))
+        demand[request.net_id] = _pad_demand_cells(centres, envelope.grid_step_nm)
     return demand
 
 
@@ -1234,14 +1253,11 @@ def _derive_policy_input(
         # future caller cannot turn a stale assumption into an exception at the policy boundary.
         if centres is None:
             raise ValueError("validated negotiated pads are unavailable")
-        distance = (abs(centres[0].x - centres[1].x) + abs(centres[0].y - centres[1].y)) // (
-            envelope.grid_step_nm
-        )
         nets.append(
             PolicyNet(
                 net_id=request.net_id,
                 criticality=0,
-                demand_cells=max(1, min(distance, 1_000_000)),
+                demand_cells=_pad_demand_cells(centres, envelope.grid_step_nm),
                 congestion_score=0,
             )
         )
@@ -1511,7 +1527,9 @@ def _attempt_local_repair(
             (
                 candidate_by_net[net_id]
                 for net_id in violating_nets
-                if net_id in candidate_by_net and net_id in requests
+                if net_id in candidate_by_net
+                and net_id in requests
+                and candidate_by_net[net_id].pad_count == 2
             ),
             key=lambda item: item.candidate_id,
         )[: settings.max_attempts]

@@ -8,6 +8,15 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
+  request's own lattice origin while retaining one common signal layer and grid step. Exact legacy
+  two-pad identities remain pinned; malformed 1/33-pad requests refuse before router work; complete
+  pad connectivity, trusted endpoint binding, deterministic replay and the mandatory whole-set
+  physical-clearance gate remain atomic. Absolute resource keys are still a congestion heuristic,
+  so a shifted-phase crossing invisible to that ledger is caught by the physical gate rather than
+  published. Local exact repair intentionally remains two-pad-only. The custom-router seam also
+  rejects and replay-compares `fill_binding`, preventing unverified fill provenance from being
+  attached to a re-hashed candidate (`ADR-0126`, `D-233`, `R-184`, `SEC-169`, issue #90).
 - Board IR converts boards whose outline is drawn with `Edge.Cuts` **arcs** -- which is what a
   rounded corner is, and what eight of ten licence-clean public boards stopped on. A root
   `gr_arc` is now an outline edge chained with `gr_line` segments into the same single closed

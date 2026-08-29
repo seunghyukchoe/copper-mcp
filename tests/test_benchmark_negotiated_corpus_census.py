@@ -1,23 +1,21 @@
-"""Replay and guard tests for the whole-board negotiated corpus census (B-124).
+"""Historical and successor guards for the negotiated whole-corpus census.
 
-The census reports a negative — no board on the committed corpus reaches ADR-0117's local-repair
-firing precondition — so almost every test here is about whether the instrument was *capable* of
-reporting a positive.  A recorder that silently observes nothing, a stage ladder whose top rung is
-unreachable, and a cross-check that agrees with everything would all produce exactly the same
-artifact, and none of them would be a measurement.
+B-124 is immutable evidence for the former two-pin, shared-world-origin contract.  It is verified
+as history and is never compared with current code.  The successor census has no committed artifact
+yet: its report is built in memory under the new 2-to-32-pad, request-local-origin contract.
 
-So the file is organised around four questions.
+So the file is organised around five questions.
 
-1. Does the census artifact still match a fresh run?  It is fully deterministic — no executable
-   probing, no host-dependent branch — so parity is a plain re-run rather than a replay of recorded
-   observations.
-2. Does the pass-through recorder actually record, and actually change nothing?  Answered on the
+1. Does B-124 retain its exact self-digest, source commit, and historical 0-of-20 result?
+2. Does the successor freeze and enforce 16 admitted / four envelope-ineligible boards before
+   measurement, without predicting a routing outcome?
+3. Does the pass-through recorder actually record, and actually change nothing?  Answered on the
    committed two-net KiCad crossing fixture, where the coordinator genuinely reaches its
-   physical-clearance gate, rather than on the corpus, where it never does.
-3. Does every rung of the blocking-stage ladder, including ``repair_precondition_reached``,
-   respond to input?  Answered with constructed gate observations, because the corpus supplies
-   none.
-4. Do the harness's own refusals fire?  A drifted B-088 baseline, a disagreeing admission
+   physical-clearance gate without relying on a successor corpus outcome.
+4. Does every rung of the blocking-stage ladder distinguish the complete-allocation physical
+   trigger from the presence of a selectable two-pin violating target?  Answered with constructed
+   gate observations rather than predeclaring either corpus outcome.
+5. Do the harness's own refusals fire?  A drifted B-088 baseline, a disagreeing admission
    predicate, and an observer that perturbs the result must each raise rather than be recorded.
 """
 
@@ -25,135 +23,309 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from copper_mcp.benchmarks.simple_route_json import import_simple_route_json
-from copper_mcp.routing import AStarRouter
+from copper_mcp.routing import (
+    AStarRouter,
+    NegotiatedRoutingStatus,
+    RouteDiagnostic,
+    RouteFailureCode,
+    RouteResult,
+)
 from copper_mcp.routing import congestion as coordinator
 from copper_mcp.routing.congestion import NegotiatedRoutingRequest, negotiate_routes
 from copper_mcp.routing.physical_clearance import PhysicalClearanceFailure
 from scripts import benchmark_negotiated_congestion as crossing
 from scripts import benchmark_negotiated_corpus_census as census
 from scripts import benchmark_simple_route_json_corpus as reference
+from tests.test_routing_congestion import _multipin_requests, _multipin_shifted_snapshot
 
-ARTIFACT = census.DEFAULT_OUTPUT
+LEGACY_ARTIFACT = census.LEGACY_ARTIFACT
 
 
-def _artifact() -> dict[str, Any]:
-    document = json.loads(ARTIFACT.read_text(encoding="utf-8"))
+def _legacy_artifact() -> dict[str, Any]:
+    document = json.loads(LEGACY_ARTIFACT.read_text(encoding="utf-8"))
     assert isinstance(document, dict)
     return document
 
 
+@pytest.fixture(scope="module")
+def successor_report() -> dict[str, Any]:
+    """Measure once in memory; the not-yet-created successor artifact is never opened or written."""
+
+    return census.build_report(repetitions=1)
+
+
 def _observation(
-    *, candidates: int, failure: str | None, violating_nets: int
+    *,
+    candidates: int,
+    failure: str | None,
+    violating_nets: int,
+    two_pin_targets: int = 0,
 ) -> census.GateObservation:
     return census.GateObservation(
-        candidates=candidates, failure=failure, violating_nets=violating_nets, pair_checks=1
+        candidates=candidates,
+        failure=failure,
+        violating_nets=violating_nets,
+        two_pin_repair_eligible_violating_targets=two_pin_targets,
+        pair_checks=1,
     )
 
 
 # --------------------------------------------------------------------------------------------
-# 1. The artifact
+# 1. Immutable B-124 history and the in-memory successor
 # --------------------------------------------------------------------------------------------
 
 
-def test_the_artifact_validates_against_its_own_self_digest() -> None:
-    report = _artifact()
+def test_legacy_b124_keeps_its_exact_identity() -> None:
+    report = _legacy_artifact()
     recorded = report.pop("run_id")
 
     canonical = json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
     assert recorded == "sha256:" + hashlib.sha256(canonical).hexdigest()
+    assert recorded == "sha256:c72cf0a6061b90efb15cf7e61701e4caebd0e0baeb2311e6017c7ef43d6b5df2"
+    assert report["schema"] == "copper-mcp/benchmark/negotiated-corpus-census/v1"
+    assert report["source_commit"] == "7b6d7aa1cf40623d6d2e85fb75b615a6af46192c"
 
 
-def test_the_artifact_matches_a_fresh_run_of_the_committed_corpus() -> None:
-    recorded = _artifact()["metrics"]
+def test_legacy_b124_records_the_exact_historical_zero_of_twenty() -> None:
+    report = _legacy_artifact()
+    metrics = report["metrics"]
+    primary = metrics["configurations"]["b088-routable"]
 
-    fresh = census.build_report(repetitions=1)
-
-    assert fresh["metrics"] == recorded
-
-
-def test_the_artifact_records_that_repair_was_never_enabled() -> None:
-    report = _artifact()
-
+    assert metrics["headline"]["boards_offered"] == 20
+    assert metrics["headline"]["boards_reaching_the_repair_precondition"] == 0
+    assert primary["boards_admitted_by_the_coordinator"] == 0
+    assert primary["negotiated_nets_completed"] == 0
+    assert primary["first_unmet_conjunct_breakdown"] == {
+        "at_least_two_requests": 4,
+        "exactly_two_selected_layer_pads_per_net": 16,
+        "none": 0,
+        "one_selected_layer_and_grid_step": 0,
+        "one_shared_world_grid": 0,
+    }
     assert report["metrics"]["repair_settings_enabled"] is False
     assert report["configuration"]["repair_settings"] is None
-    assert any("repair is never" in claim for claim in report["not_claimed"])
 
 
-def test_the_census_reports_the_predeclared_per_board_fields_for_every_board() -> None:
-    required = {
+def test_successor_paths_schema_and_prediction_are_disjoint_from_b124() -> None:
+    assert census.LEGACY_ARTIFACT.name == "2026-08-20-negotiated-corpus-census-v1.json"
+    assert census.DEFAULT_OUTPUT.name == "2026-08-29-negotiated-multipin-corpus-census-v1.json"
+    assert census.DEFAULT_OUTPUT != census.LEGACY_ARTIFACT
+    assert census.REPORT_SCHEMA == "copper-mcp/benchmark/negotiated-multipin-corpus-census/v1"
+    assert census.REFERENCE_RUN_ID == (
+        "sha256:facf95ee9770ffab8c1bc403a32a403e55ca79f2c56d1eabc6679eb6ec4dfca3"
+    )
+    assert census.PREDECLARED_PRIMARY_ADMISSION == {
+        "configuration": "b088-routable",
+        "population": "the per-board net sets routed by B-088's fixed-policy configuration",
+        "boards_offered": 20,
+        "boards_admitted_by_the_coordinator": 16,
+        "boards_unable_to_form_a_two_request_envelope": 4,
+        "routing_outcomes": "not_predicted",
+    }
+    assert census.BLOCKING_STAGES == (
+        "envelope_construction",
+        "coordinator_admission",
+        "no_physical_gate_call",
+        "no_clearance_violation",
+        "clearance_violation_on_incomplete_allocation",
+        "complete_allocation_clearance_violation_with_fewer_than_two_violating_nets",
+        "complete_allocation_physical_clearance_trigger_without_two_pin_repair_eligible_target",
+        "complete_allocation_physical_clearance_trigger_with_two_pin_repair_eligible_target",
+    )
+
+
+def test_current_admission_vocabulary_pins_2_and_32_without_a_shared_origin() -> None:
+    names = tuple(name for name, _stage, _description in census.ADMISSION_CONJUNCTS)
+    assert names == (
+        "at_least_two_requests",
+        "one_selected_layer_and_grid_step",
+        "selected_layer_pad_count_between_2_and_32",
+    )
+    assert "one_shared_world_grid" not in names
+    assert set(census.COORDINATOR_DIAGNOSTICS) == {"selected_layer_pad_count_between_2_and_32"}
+
+    def submitted(count: int, *, layer: str = "layer:F.Cu") -> census.SubmittedNet:
+        return census.SubmittedNet("net:test", layer, "routed", count)
+
+    for count in (2, 32):
+        held = census._admission(None, (submitted(count), submitted(count)))  # type: ignore[arg-type]
+        assert held["selected_layer_pad_count_between_2_and_32"] is True
+    for count in (1, 33):
+        held = census._admission(None, (submitted(count), submitted(count)))  # type: ignore[arg-type]
+        assert held["selected_layer_pad_count_between_2_and_32"] is False
+
+
+@pytest.mark.parametrize(
+    ("pad_count", "admitted"), ((2, True), (32, True), (1, False), (33, False))
+)
+def test_real_coordinator_enforces_the_pad_census_before_router_work(
+    pad_count: int,
+    admitted: bool,
+) -> None:
+    snapshot = _multipin_shifted_snapshot(pad_count)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_multipin_requests(snapshot),
+        max_iterations=1,
+    )
+
+    class RouterSpy:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def propose(self, *_args: object, **_kwargs: object) -> RouteResult:
+            self.calls += 1
+            return RouteResult(
+                diagnostic=RouteDiagnostic(RouteFailureCode.NO_PATH, "synthetic bounded refusal")
+            )
+
+    router = RouterSpy()
+    result = negotiate_routes(snapshot, envelope, router=router)
+
+    if admitted:
+        assert router.calls > 0
+        assert result.diagnostic != (
+            "each negotiated net must expose 2 to 32 pads on the selected layer"
+        )
+    else:
+        assert router.calls == 0
+        assert result.status is NegotiatedRoutingStatus.INVALID_REQUEST
+        assert result.diagnostic == (
+            "each negotiated net must expose 2 to 32 pads on the selected layer"
+        )
+
+
+def test_successor_report_matches_only_the_predeclared_admission(
+    successor_report: dict[str, Any],
+) -> None:
+    report = dict(successor_report)
+    recorded = report.pop("run_id")
+    canonical = json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    metrics = report["metrics"]
+    primary = metrics["configurations"]["b088-routable"]
+
+    assert recorded == "sha256:" + hashlib.sha256(canonical).hexdigest()
+    assert report["schema"] == census.REPORT_SCHEMA
+    assert report["predeclared_prediction"] == census.PREDECLARED_PRIMARY_ADMISSION
+    assert metrics["premeasurement_admission_check"] == {
+        "boards_offered": 20,
+        "boards_admitted_by_the_coordinator": 16,
+        "boards_unable_to_form_a_two_request_envelope": 4,
+    }
+    assert primary["boards_admitted_by_the_coordinator"] == 16
+    assert primary["first_unmet_conjunct_breakdown"]["at_least_two_requests"] == 4
+    assert (
+        primary["first_unmet_conjunct_breakdown"]["selected_layer_pad_count_between_2_and_32"] == 0
+    )
+    assert "one_shared_world_grid" not in primary["first_unmet_conjunct_breakdown"]
+    assert metrics["repair_settings_enabled"] is False
+    assert report["configuration"]["repair_settings"] is None
+    assert any("any predeclared routing outcome" in claim for claim in report["not_claimed"])
+    # Actual routing outcomes are present because they were measured, but no value is asserted here.
+    assert isinstance(metrics["headline"]["negotiated_nets_completed"], int)
+    assert isinstance(
+        metrics["headline"]["boards_reaching_complete_allocation_physical_clearance_trigger"],
+        int,
+    )
+    assert isinstance(
+        metrics["headline"]["boards_with_a_two_pin_repair_eligible_violating_target"],
+        int,
+    )
+    assert "boards_reaching_the_repair_precondition" not in metrics["headline"]
+
+
+def test_successor_report_contains_no_candidate_or_geometry_payload(
+    successor_report: dict[str, Any],
+) -> None:
+    forbidden_keys = {
+        "_negotiated_result",
         "board",
         "board_revision",
+        "boards",
+        "candidate",
+        "candidate_id",
+        "candidate_ids",
+        "coordinates",
         "document_sha256",
-        "submitted_nets",
+        "geometry",
+        "negotiated",
+        "paths",
+        "segments",
         "submitted_net_ids",
-        "admission_conjuncts",
-        "first_unmet_conjunct",
-        "envelope_constructed",
-        "terminal_status",
-        "physical_gate_calls",
-        "physical_gate_observations",
-        "blocking_stage",
-        "repair_precondition_reached",
-        "reference_nets_routed",
+        "two_pin_repair_eligible_violating_targets",
+        "unrouted_nets",
+        "vertices",
     }
 
-    for configuration in _artifact()["metrics"]["configurations"].values():
-        assert len(configuration["boards"]) == 20
-        for board in configuration["boards"]:
-            assert required <= set(board), board["board"]
-            assert board["blocking_stage"] in census.BLOCKING_STAGES
+    def keys(value: Any) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | {item for child in value.values() for item in keys(child)}
+        if isinstance(value, list):
+            return {item for child in value for item in keys(child)}
+        return set()
+
+    assert keys(successor_report).isdisjoint(forbidden_keys)
 
 
-def test_the_headline_is_a_measured_zero_against_a_named_reference_baseline() -> None:
-    metrics = _artifact()["metrics"]
-    headline = metrics["headline"]
-
-    assert headline["boards_offered"] == 20
-    assert headline["boards_reaching_the_repair_precondition"] == 0
-    # The census's second, independently valuable number. Zero completed is an admission refusal,
-    # not a routing outcome, and the artifact must carry both halves so it cannot be read as one.
-    assert headline["negotiated_nets_completed"] == 0
-    assert headline["reference_per_net_nets_routed"] == 70
-    assert metrics["reference_baseline"]["nets_attempted"] == 117
-    assert any("routing-quality claim" in claim for claim in _artifact()["not_claimed"])
-
-
-def test_the_two_admission_conjuncts_that_block_this_corpus_are_recorded_separately() -> None:
-    configurations = _artifact()["metrics"]["configurations"]
-    primary = configurations["b088-routable"]
-    control = configurations["two-pad-control"]
-
-    # 16 boards carry two or more reference-routed nets and are refused by the coordinator for the
-    # two-pin conjunct; the remaining 4 cannot even form a two-request envelope.
-    assert (
-        primary["first_unmet_conjunct_breakdown"]["exactly_two_selected_layer_pads_per_net"] == 16
+def test_hostile_per_board_identifiers_and_values_remain_private(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret_board = "board:HOSTILE_DO_NOT_PUBLISH"
+    secret_net = "net:HOSTILE_DO_NOT_PUBLISH"
+    secret_document = "document:HOSTILE_DO_NOT_PUBLISH"
+    secret_revision = "revision:HOSTILE_DO_NOT_PUBLISH"
+    secret_geometry = "geometry:HOSTILE_DO_NOT_PUBLISH"
+    problem = SimpleNamespace(name=secret_board)
+    submitted = (
+        census.SubmittedNet(secret_net, "layer:F.Cu", "routed", 2),
+        census.SubmittedNet(f"{secret_net}:second", "layer:F.Cu", "routed", 2),
     )
-    assert primary["first_unmet_conjunct_breakdown"]["at_least_two_requests"] == 4
-    assert primary["boards_admitted_by_the_coordinator"] == 0
-    # The control moves the block to the *other* conjunct, which is what makes it a control: the
-    # corpus is excluded twice over, not once.
-    assert control["first_unmet_conjunct_breakdown"]["one_shared_world_grid"] == 6
-    assert control["boards_admitted_by_the_coordinator"] == 0
-    # And the two populations do not overlap at all: no net that the per-net reference routed has
-    # exactly two selected-layer pads.
-    assert primary["submitted_nets_the_reference_routed"] == 70
-    assert control["nets_submitted"] == 36
-    assert control["submitted_nets_the_reference_routed"] == 0
+    private_record = {
+        "board": secret_board,
+        "document_sha256": secret_document,
+        "board_revision": secret_revision,
+        "submitted_net_ids": [secret_net],
+        "geometry": secret_geometry,
+        "blocking_stage": "no_physical_gate_call",
+        "first_unmet_conjunct": None,
+        "terminal_status": "partial",
+        "physical_gate_calls": 0,
+        "envelope_constructed": True,
+        "negotiated": {"status": "partial", "unrouted_nets": [secret_net]},
+        "_negotiated_result": SimpleNamespace(secret=secret_geometry),
+    }
 
+    monkeypatch.setattr(census, "import_simple_route_json", lambda *_args: problem)
+    monkeypatch.setattr(census, "_solo_reference", lambda *_args: submitted)
+    monkeypatch.setattr(census, "_assert_reference_authority", lambda *_args: 2)
+    monkeypatch.setattr(census, "census_board", lambda *_args: dict(private_record))
 
-def test_no_board_reached_the_gate_so_no_gate_observation_was_recorded() -> None:
-    for configuration in _artifact()["metrics"]["configurations"].values():
-        assert configuration["physical_gate_calls"] == 0
-        for board in configuration["boards"]:
-            assert board["physical_gate_observations"] == []
-            assert board["repair_precondition_reached"] is False
+    measurement = census.run_configuration(
+        ((f"{secret_board}.json", secret_geometry.encode()),),
+        census.PRIMARY,
+        {},
+    )
+    private = json.dumps(measurement.replay_evidence, default=str)
+    public = json.dumps(measurement.aggregate, sort_keys=True)
+
+    assert all(
+        value in private for value in (secret_board, secret_net, secret_document, secret_geometry)
+    )
+    assert all(
+        value not in public
+        for value in (secret_board, secret_net, secret_document, secret_revision, secret_geometry)
+    )
+    assert "boards" not in measurement.aggregate
 
 
 # --------------------------------------------------------------------------------------------
@@ -162,22 +334,71 @@ def test_no_board_reached_the_gate_so_no_gate_observation_was_recorded() -> None
 
 
 def test_the_recorder_observes_a_real_gate_call_and_changes_no_published_field() -> None:
-    # The corpus never reaches the gate, so a corpus-only test would pass on a recorder that does
-    # nothing at all. The committed two-net crossing fixture does reach it, and is used here for
-    # exactly that reason: it is the positive control the census itself cannot supply.
+    # A corpus result must not be the recorder's only positive control. The committed two-net
+    # crossing fixture reaches the gate independently of whatever the successor measurement finds.
     snapshot, requests, _source = crossing._load_fixture()
     envelope = NegotiatedRoutingRequest(
         board_revision=snapshot.snapshot_digest, requests=requests, max_iterations=8
     )
 
-    control = census._projection(negotiate_routes(snapshot, envelope))
+    control = negotiate_routes(snapshot, envelope)
     with census.observed_physical_gate() as observations:
-        instrumented = census._projection(negotiate_routes(snapshot, envelope))
+        instrumented = negotiate_routes(snapshot, envelope)
 
     assert observations, "the recorder saw no gate call on a fixture that reaches the gate"
     assert instrumented == control
     assert all(item.candidates == len(requests) for item in observations)
     assert all(item.pair_checks >= 0 for item in observations)
+
+
+def test_the_recorder_counts_only_two_pin_candidates_named_by_the_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    two_pin_violating = SimpleNamespace(
+        patch=SimpleNamespace(net_id="net:two-pin-violating"), pad_count=2
+    )
+    multipin_violating = SimpleNamespace(
+        patch=SimpleNamespace(net_id="net:multipin-violating"), pad_count=3
+    )
+    two_pin_not_violating = SimpleNamespace(
+        patch=SimpleNamespace(net_id="net:two-pin-clear"), pad_count=2
+    )
+    candidates = (two_pin_violating, multipin_violating, two_pin_not_violating)
+    physical = SimpleNamespace(
+        failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION,
+        violating_nets=("net:two-pin-violating", "net:multipin-violating"),
+        pair_checks=3,
+    )
+    calls = 0
+
+    def physical_gate(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        assert args == ("snapshot", candidates)
+        assert kwargs == {
+            "layer_id": "layer:F.Cu",
+            "max_pair_checks": 10,
+            "cancelled": None,
+        }
+        return physical
+
+    monkeypatch.setattr(coordinator, "verify_negotiated_physical_clearance", physical_gate)
+    with census.observed_physical_gate() as observations:
+        returned = coordinator.verify_negotiated_physical_clearance(
+            "snapshot", candidates, layer_id="layer:F.Cu", max_pair_checks=10
+        )
+
+    assert returned is physical
+    assert calls == 1
+    assert observations == [
+        census.GateObservation(
+            candidates=3,
+            failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION.value,
+            violating_nets=2,
+            two_pin_repair_eligible_violating_targets=1,
+            pair_checks=3,
+        )
+    ]
 
 
 def test_the_recorder_restores_the_coordinator_symbol_even_when_the_body_raises() -> None:
@@ -191,28 +412,34 @@ def test_the_recorder_restores_the_coordinator_symbol_even_when_the_body_raises(
     assert coordinator.verify_negotiated_physical_clearance is original
 
 
-def test_an_observer_that_perturbs_the_published_result_is_refused() -> None:
-    # The census's honesty rests on the recorder being inert. This proves the runner would notice
-    # if it were not: a recorder that changed a published field must fail the run, not the review.
+def test_parity_refuses_a_change_to_a_semantic_field_omitted_from_the_projection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # policy_digest is deliberately absent from the redacted aggregate projection. Complete-object
+    # parity must still catch it, or the recorder could alter provenance without changing a count.
     _manifest, samples = reference.load_corpus()
     name, payload = next(item for item in samples if item[0].startswith("ts18"))
     problem = import_simple_route_json(Path(name).stem, payload)
     router = AStarRouter()
     submitted = census.PRIMARY.select(census._solo_reference(problem, router))
     calls = {"n": 0}
-    honest = census._projection
+    honest = census.negotiate_routes
 
-    def perturbing(result: Any) -> dict[str, Any]:
+    def perturbing(*args: Any, **kwargs: Any) -> Any:
         calls["n"] += 1
-        projected = honest(result)
-        return projected if calls["n"] == 1 else {**projected, "iterations": 999}
+        result = honest(*args, **kwargs)
+        if calls["n"] == 1:
+            return result
+        digest = f"sha256:{'0' * 64}"
+        if result.policy_digest == digest:
+            digest = f"sha256:{'1' * 64}"
+        changed = replace(result, policy_digest=digest)
+        assert census._projection(changed) == census._projection(result)
+        return changed
 
-    census._projection = perturbing  # type: ignore[assignment]
-    try:
-        with pytest.raises(census.NegotiatedCensusError, match="changed the published"):
-            census.census_board(problem, submitted, router)
-    finally:
-        census._projection = honest  # type: ignore[assignment]
+    monkeypatch.setattr(census, "negotiate_routes", perturbing)
+    with pytest.raises(census.NegotiatedCensusError, match="complete immutable"):
+        census.census_board(problem, submitted, router)
     assert calls["n"] == 2
 
 
@@ -221,16 +448,31 @@ def test_an_observer_that_perturbs_the_published_result_is_refused() -> None:
 # --------------------------------------------------------------------------------------------
 
 
-def test_the_ladder_reports_the_precondition_when_all_three_conjuncts_hold() -> None:
-    # The rung the whole census exists to count. No corpus board reaches it, so if this rung were
-    # unreachable in code the artifact's zero would be a constant rather than a measurement.
+def test_complete_allocation_physical_trigger_without_two_pin_target_is_distinct() -> None:
     reached = _observation(
-        candidates=4, failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION.value, violating_nets=2
+        candidates=4,
+        failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION.value,
+        violating_nets=2,
+        two_pin_targets=0,
     )
 
     assert (
         census._stage_from_observations((reached,), submitted=4, connectable=0)
-        == "repair_precondition_reached"
+        == census.PHYSICAL_TRIGGER_WITHOUT_TWO_PIN_TARGET
+    )
+
+
+def test_complete_allocation_physical_trigger_with_two_pin_target_is_distinct() -> None:
+    reached = _observation(
+        candidates=4,
+        failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION.value,
+        violating_nets=2,
+        two_pin_targets=1,
+    )
+
+    assert (
+        census._stage_from_observations((reached,), submitted=4, connectable=0)
+        == census.PHYSICAL_TRIGGER_WITH_TWO_PIN_TARGET
     )
 
 
@@ -274,7 +516,7 @@ def test_the_ladder_reports_the_precondition_when_all_three_conjuncts_hold() -> 
                 ),
             ),
             4,
-            "clearance_violation_with_one_violating_net",
+            "complete_allocation_clearance_violation_with_fewer_than_two_violating_nets",
         ),
     ],
 )
@@ -294,16 +536,19 @@ def test_the_latest_rung_any_iteration_reached_is_the_one_recorded() -> None:
         candidates=2, failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION.value, violating_nets=2
     )
     late = _observation(
-        candidates=4, failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION.value, violating_nets=2
+        candidates=4,
+        failure=PhysicalClearanceFailure.CLEARANCE_VIOLATION.value,
+        violating_nets=2,
+        two_pin_targets=1,
     )
 
     assert (
         census._stage_from_observations((early, late), submitted=4, connectable=0)
-        == "repair_precondition_reached"
+        == census.PHYSICAL_TRIGGER_WITH_TWO_PIN_TARGET
     )
     assert (
         census._stage_from_observations((late, early), submitted=4, connectable=0)
-        == "repair_precondition_reached"
+        == census.PHYSICAL_TRIGGER_WITH_TWO_PIN_TARGET
     )
 
 
@@ -321,7 +566,7 @@ def test_an_already_connected_net_counts_toward_a_complete_allocation() -> None:
     )
     assert (
         census._stage_from_observations((partial,), submitted=4, connectable=1)
-        == "repair_precondition_reached"
+        == census.PHYSICAL_TRIGGER_WITHOUT_TWO_PIN_TARGET
     )
 
 
@@ -340,84 +585,295 @@ def test_a_tampered_reference_artifact_is_refused(tmp_path: Path) -> None:
         census.load_reference_artifact(tampered)
 
 
-def test_a_submitted_set_that_drifts_from_the_recorded_baseline_is_refused() -> None:
-    # The census's comparability with B-088 rests entirely on submitting the same nets B-088
-    # routed. If the re-derived set ever stops matching the committed artifact, the run must fail
-    # rather than quietly measure a different population under the same name.
-    _manifest, samples = reference.load_corpus()
-    routed = census._reference_routed_by_board(census.load_reference_artifact())
-    drifted = {**routed, "ts18_dual_reg": routed["ts18_dual_reg"] + 1}
+def test_a_self_digest_valid_rewritten_root_stops_before_import_or_routing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    document = json.loads(census.REFERENCE_ARTIFACT.read_text(encoding="utf-8"))
+    document["source_commit"] = "f" * 40
+    body = {key: value for key, value in document.items() if key != "run_id"}
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    document["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    rewritten = tmp_path / "rewritten-b088-root.json"
+    rewritten.write_text(json.dumps(document), encoding="utf-8")
+    original_loader = census.load_reference_artifact
+    calls = {"imports": 0, "routes": 0}
 
-    with pytest.raises(census.NegotiatedCensusError, match="does not match the committed"):
-        census.run_configuration(samples, census.PRIMARY, drifted)
+    def forbidden_import(*_args: Any, **_kwargs: Any) -> Any:
+        calls["imports"] += 1
+        raise AssertionError("corpus import must not start")
+
+    def forbidden_route(*_args: Any, **_kwargs: Any) -> Any:
+        calls["routes"] += 1
+        raise AssertionError("routing must not start")
+
+    assert document["run_id"] != census.REFERENCE_RUN_ID
+    monkeypatch.setattr(census, "load_reference_artifact", lambda: original_loader(rewritten))
+    monkeypatch.setattr(census, "import_simple_route_json", forbidden_import)
+    monkeypatch.setattr(census, "_solo_reference", forbidden_route)
+
+    with pytest.raises(census.NegotiatedCensusError, match="pinned B-088 root"):
+        census.run_census(repetitions=1)
+    assert calls == {"imports": 0, "routes": 0}
+
+
+def test_internal_per_board_authority_refuses_a_same_count_candidate_membership_mutation() -> None:
+    # Bypass only the pinned-root loader to unit-test its secondary per-board defence: changing the
+    # candidate commitment while preserving routed counts must still fail the live projection.
+    document = json.loads(census.REFERENCE_ARTIFACT.read_text(encoding="utf-8"))
+    boards = document["metrics"]["configurations"]["fixed"]["boards"]
+    board = next(item for item in boards if item["outcomes"].get("routed") == 1)
+    routed_count = board["outcomes"]["routed"]
+    board["candidate_digest"] = "0" * 64
+    body = {key: value for key, value in document.items() if key != "run_id"}
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    document["run_id"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+    assert document["run_id"] != census.REFERENCE_RUN_ID
+    authority = census._reference_authority_by_board(document)
+    _manifest, samples = reference.load_corpus()
+    selected = tuple(item for item in samples if Path(item[0]).stem == board["board"])
+
+    assert board["outcomes"]["routed"] == routed_count
+    assert len(selected) == 1
+    with pytest.raises(census.NegotiatedCensusError, match="committed B-088 authority"):
+        census._preflight_primary_admission(selected, authority)
 
 
 def test_an_admission_predicate_that_disagrees_with_the_coordinator_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The independent predicate is only a cross-check if a disagreement is fatal. Here it is made
-    # to claim every conjunct holds on a board the coordinator refuses.
+    # The independent predicate is only a cross-check if a disagreement is fatal. Here it falsely
+    # refuses a board that the current coordinator admits.
     _manifest, samples = reference.load_corpus()
     name, payload = next(item for item in samples if item[0].startswith("ts18"))
     problem = import_simple_route_json(Path(name).stem, payload)
     router = AStarRouter()
     submitted = census.PRIMARY.select(census._solo_reference(problem, router))
-    monkeypatch.setattr(
-        census,
-        "_admission",
-        lambda *_args, **_kwargs: {name: True for name, _s, _d in census.ADMISSION_CONJUNCTS},
-    )
+    false_refusal = {name: True for name, _s, _d in census.ADMISSION_CONJUNCTS}
+    false_refusal["selected_layer_pad_count_between_2_and_32"] = False
+    monkeypatch.setattr(census, "_admission", lambda *_args, **_kwargs: false_refusal)
 
-    with pytest.raises(census.NegotiatedCensusError, match="does not match the independently"):
+    with pytest.raises(census.NegotiatedCensusError, match="computed unmet but the coordinator"):
         census.census_board(problem, submitted, router)
 
 
-def test_a_predicate_that_names_the_wrong_conjunct_is_refused(
+def test_a_drifted_predeclared_partition_stops_before_negotiated_measurement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Agreeing that the board was refused is not enough. If the predicate and the coordinator
-    # blame different conjuncts, the per-board attribution in the artifact is fiction, and the
-    # attribution is the part of this census that says what would change the answer.
-    _manifest, samples = reference.load_corpus()
-    name, payload = next(item for item in samples if item[0].startswith("ts18"))
-    problem = import_simple_route_json(Path(name).stem, payload)
-    router = AStarRouter()
-    submitted = census.PRIMARY.select(census._solo_reference(problem, router))
-    misattributed = {name: True for name, _s, _d in census.ADMISSION_CONJUNCTS}
-    misattributed["one_shared_world_grid"] = False
-    monkeypatch.setattr(census, "_admission", lambda *_a, **_k: misattributed)
+    drifted = {**census.PREDECLARED_PRIMARY_ADMISSION, "boards_admitted_by_the_coordinator": 15}
+    measurement_calls = 0
 
-    with pytest.raises(census.NegotiatedCensusError, match="does not match the independently"):
-        census.census_board(problem, submitted, router)
+    def forbidden_measurement(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal measurement_calls
+        measurement_calls += 1
+        raise AssertionError("negotiated measurement started before the prediction was checked")
+
+    monkeypatch.setattr(census, "PREDECLARED_PRIMARY_ADMISSION", drifted)
+    monkeypatch.setattr(census, "run_configuration", forbidden_measurement)
+
+    with pytest.raises(census.NegotiatedCensusError, match="predeclared prediction"):
+        census.run_census(repetitions=1)
+    assert measurement_calls == 0
 
 
-def test_the_predicate_and_the_coordinator_agree_on_every_committed_board() -> None:
-    # The control for the test above: the cross-check must actually be exercised by the corpus, or
-    # its failure mode would be untested and its success meaningless.
-    for configuration in _artifact()["metrics"]["configurations"].values():
-        refused = [
-            board
-            for board in configuration["boards"]
-            if board["terminal_status"] == "invalid_request"
-        ]
-        assert refused
-        for board in refused:
-            expected = census.COORDINATOR_DIAGNOSTICS[board["first_unmet_conjunct"]]
-            assert board["negotiated"]["diagnostic"] == expected
+def test_successor_configuration_is_closed_reconciled_aggregate_only(
+    successor_report: dict[str, Any],
+) -> None:
+    primary = successor_report["metrics"]["configurations"]["b088-routable"]
+
+    assert "boards" not in primary
+    assert sum(primary["blocking_stage_breakdown"].values()) == primary["boards_imported"]
+    assert sum(primary["first_unmet_conjunct_breakdown"].values()) == primary["boards_imported"]
+    assert sum(primary["terminal_status_breakdown"].values()) == primary["boards_imported"]
+    assert primary["boards_with_a_constructible_envelope"] == 16
+    assert primary["boards_admitted_by_the_coordinator"] == 16
+    physical_trigger_stages = census.PHYSICAL_TRIGGER_STAGES
+    assert primary["boards_reaching_complete_allocation_physical_clearance_trigger"] == sum(
+        primary["blocking_stage_breakdown"][stage] for stage in physical_trigger_stages
+    )
+    assert (
+        primary["boards_with_a_two_pin_repair_eligible_violating_target"]
+        == primary["blocking_stage_breakdown"][census.PHYSICAL_TRIGGER_WITH_TWO_PIN_TARGET]
+    )
+    assert (
+        primary["boards_with_a_two_pin_repair_eligible_violating_target"]
+        <= primary["boards_reaching_complete_allocation_physical_clearance_trigger"]
+    )
 
 
 def test_a_nondeterministic_configuration_replay_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls = {"n": 0}
-    honest = census.run_configuration
 
-    def drifting(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    def drifting(*args: Any, **kwargs: Any) -> census.ConfigurationMeasurement:
         calls["n"] += 1
-        result = honest(*args, **kwargs)
-        return result if calls["n"] == 1 else {**result, "nets_submitted": -1}
+        return census.ConfigurationMeasurement(
+            aggregate={"replay": calls["n"]},
+            replay_evidence=(),
+        )
 
+    monkeypatch.setattr(
+        census,
+        "_preflight_primary_admission",
+        lambda *_args, **_kwargs: {
+            "boards_offered": 20,
+            "boards_admitted_by_the_coordinator": 16,
+            "boards_unable_to_form_a_two_request_envelope": 4,
+        },
+    )
     monkeypatch.setattr(census, "run_configuration", drifting)
 
     with pytest.raises(census.NegotiatedCensusError, match="replay diverged"):
         census.run_census(repetitions=2)
+
+
+@pytest.mark.parametrize(
+    ("state", "message"),
+    [
+        (("unknown", False), "known Git revision"),
+        (("a" * 40, True), "clean Git worktree"),
+    ],
+)
+def test_write_refuses_unknown_or_dirty_git_before_measurement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    state: tuple[str, bool],
+    message: str,
+) -> None:
+    output = tmp_path / "new.json"
+    measurement_calls = 0
+
+    def forbidden_measurement(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal measurement_calls
+        measurement_calls += 1
+        raise AssertionError("measurement must not start")
+
+    monkeypatch.setattr(
+        sys, "argv", [str(Path(census.__file__)), "--write", "--output", str(output)]
+    )
+    monkeypatch.setattr(census, "_git_state", lambda: state)
+    monkeypatch.setattr(census, "build_report", forbidden_measurement)
+
+    with pytest.raises(census.NegotiatedCensusError, match=message):
+        census.main()
+    assert measurement_calls == 0
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("protected", (census.LEGACY_ARTIFACT, census.REFERENCE_ARTIFACT))
+def test_write_protects_historical_authority_targets_before_measurement(
+    protected: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    measurement_calls = 0
+
+    def forbidden_measurement(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal measurement_calls
+        measurement_calls += 1
+        raise AssertionError("measurement must not start")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [str(Path(census.__file__)), "--write", "--output", str(protected)],
+    )
+    monkeypatch.setattr(census, "build_report", forbidden_measurement)
+
+    with pytest.raises(census.NegotiatedCensusError, match="protected historical authority"):
+        census.main()
+    assert measurement_calls == 0
+
+
+def test_write_refuses_an_existing_target_without_touching_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "existing.json"
+    output.write_text("sentinel", encoding="utf-8")
+    measurement_calls = 0
+
+    def forbidden_measurement(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal measurement_calls
+        measurement_calls += 1
+        raise AssertionError("measurement must not start")
+
+    monkeypatch.setattr(
+        sys, "argv", [str(Path(census.__file__)), "--write", "--output", str(output)]
+    )
+    monkeypatch.setattr(census, "build_report", forbidden_measurement)
+
+    with pytest.raises(census.NegotiatedCensusError, match="new path"):
+        census.main()
+    assert measurement_calls == 0
+    assert output.read_text(encoding="utf-8") == "sentinel"
+
+
+@pytest.mark.parametrize(
+    ("final_state", "message"),
+    [
+        (("a" * 40, True), "clean Git worktree"),
+        (("unknown", False), "known Git revision"),
+        (("b" * 40, False), "changed during benchmark"),
+    ],
+)
+def test_write_rechecks_git_immediately_before_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    final_state: tuple[str, bool],
+    message: str,
+) -> None:
+    output = tmp_path / "new.json"
+    captured = "a" * 40
+    states = iter(((captured, False), final_state))
+
+    def cheap_report(
+        _repetitions: int,
+        _corpus: Path,
+        *,
+        source_commit: str | None,
+    ) -> dict[str, Any]:
+        assert source_commit == captured
+        return {"schema": census.REPORT_SCHEMA, "source_commit": source_commit}
+
+    monkeypatch.setattr(
+        sys, "argv", [str(Path(census.__file__)), "--write", "--output", str(output)]
+    )
+    monkeypatch.setattr(census, "_git_state", lambda: next(states))
+    monkeypatch.setattr(census, "build_report", cheap_report)
+
+    with pytest.raises(census.NegotiatedCensusError, match=message):
+        census.main()
+    assert not output.exists()
+
+
+def test_write_records_the_premeasurement_commit_and_creates_exclusively(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "new.json"
+    captured = "c" * 40
+    seen: list[str | None] = []
+
+    def cheap_report(
+        _repetitions: int,
+        _corpus: Path,
+        *,
+        source_commit: str | None,
+    ) -> dict[str, Any]:
+        seen.append(source_commit)
+        return {"schema": census.REPORT_SCHEMA, "source_commit": source_commit}
+
+    monkeypatch.setattr(
+        sys, "argv", [str(Path(census.__file__)), "--write", "--output", str(output)]
+    )
+    monkeypatch.setattr(census, "_git_state", lambda: (captured, False))
+    monkeypatch.setattr(census, "build_report", cheap_report)
+
+    assert census.main() == 0
+    assert seen == [captured]
+    assert json.loads(output.read_text(encoding="utf-8"))["source_commit"] == captured
+
+    with pytest.raises(census.NegotiatedCensusError, match="new path"):
+        census.main()
