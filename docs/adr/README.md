@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0127**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0128**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -22,7 +22,7 @@ allocated plus one. Gaps are reported as information and never fail. Keeping the
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
 
-**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, ADR-0086, or ADR-0105. Every
+**Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086. Every
 one of them is **spent, not free**. Recycling a number would silently repoint every external citation of the
 draft that reserved it at an unrelated decision, which is the exact failure the never-reuse rule
 exists to prevent.
@@ -192,7 +192,7 @@ never silently widens it.
 | [0114](0114-external-candidates-continue-to-private-kicad-drc.md) | Accepted external candidates continue to private KiCad DRC | Accepted |
 | [0115](0115-external-route-verification-is-a-versioned-read-only-mcp-boundary.md) | External route verification is a versioned read-only MCP boundary | Accepted |
 | [0116](0116-layered-fill-islands-have-a-measured-source-boundary.md) | Layered fill islands have a measured source boundary | Accepted |
-| [0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md) | Local exact repair is an opt-in verified transaction | Accepted |
+| [0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md) | Local exact repair is an opt-in verified transaction | Accepted (two-pad repair-target clause widened by 0127) |
 | [0118](0118-authoritative-signoff-stays-closed-until-a-bounded-executor-exists.md) | Keep authoritative signoff closed until a bounded executor exists | Accepted |
 | — | *0119 is a live parallel-branch claim and is not free; see **Adding an ADR** above.* | — |
 | [0119](0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md) | A sign-off claim rests on repeated agreement from a registered backend | Accepted |
@@ -202,9 +202,10 @@ never silently widens it.
 | [0123](0123-a-container-refusal-that-names-no-field-is-the-defect.md) | A container refusal that names no field is the defect, not the refusal | Accepted |
 | [0124](0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md) | An outline arc is inscribed, and an arc that cuts into the board is refused | Accepted |
 | [0125](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md) | Stray footprint copper is bounded by a box because no fill rule is written down | Accepted |
-| [0126](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md) | Negotiated routing admits bounded multi-pin nets on request-local lattices | Accepted |
+| [0126](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md) | Negotiated routing admits bounded multi-pin nets on request-local lattices | Accepted (multi-pin repair deferral satisfied by 0127) |
+| [0127](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md) | Multi-pin local repair replaces one proven responsible branch | Accepted |
 
-One hundred and twenty-five numbers allocated, one hundred and twenty records, no duplicates — and
+One hundred and twenty-seven numbers allocated, one hundred and twenty-two records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -220,7 +221,8 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Board IR and geometry** — 0005, 0011, 0012, 0013, 0017, 0018, 0026, 0051, 0070, 0076, 0077,
   0078, 0079, 0080, 0087, 0090, 0091, 0092, 0094, 0095, 0096, 0097, 0099, 0100, 0124.
 - **Routing** — 0006, 0009, 0016, 0019, 0020, 0021, 0035, 0036, 0037, 0039, 0042, 0049, 0055, 0064,
-  0066, 0068, 0070, 0072, 0073, 0075, 0081, 0089, 0093, 0101, 0103, 0104, 0106, 0108, 0126.
+  0066, 0068, 0070, 0072, 0073, 0075, 0081, 0089, 0093, 0101, 0103, 0104, 0106, 0108, 0117,
+  0126, 0127.
 - **Candidate validation and DRC** — 0004, 0007, 0008, 0038, 0050, 0052, 0053, 0060, 0075, 0109.
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0071, 0084.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0067, 0075, 0097, 0110.
@@ -352,3 +354,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0124: An outline arc is inscribed, and an arc that cuts into the board is refused](0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md)
 - [ADR-0125: Stray footprint copper is bounded by a box because no fill rule is written down](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md)
 - [ADR-0126: Negotiated routing admits bounded multi-pin nets on request-local lattices](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md)
+- [ADR-0127: Multi-pin local repair replaces one proven responsible branch](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md)

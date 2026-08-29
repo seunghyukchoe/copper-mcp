@@ -3,7 +3,7 @@
     "bound_file_sha256": {
       "scripts/benchmark_external_candidate_disposer.py": "sha256:0753c2a8dc67519253174e43e403046c268f334850de483befd0e4c9ef0963e7",
       "src/copper_mcp/benchmarks/simple_route_json.py": "sha256:fb64b59f5727d792de30d82b1e9c0b7eab606d071569a29c8c8bc3ff8db5ec66",
-      "src/copper_mcp/routing/candidate_path_validator.py": "sha256:2ec9a3e17d6dc56289a54750dc019f4a846fd58b6ec93d6effaa5248dbf0c097",
+      "src/copper_mcp/routing/candidate_path_validator.py": "sha256:8b2f5cf7ce6f4c5be1601142d85156373dff1546662a07f3e7ef1b8dbc24dfc0",
       "src/copper_mcp/routing/external_candidate_verifier.py": "sha256:7974326e7c185a01132fd86f8486c801e7f6d9bf4413594a206a8555c056a5bd"
     },
     "source_artifact_sha256": "sha256:76c99cbd66324553b82cc243898042a362b18daec90e276dc7e88cbaa64be15f",
@@ -1091,6 +1091,6 @@
     "whole-board compatibility between candidates routed independently",
     "MCP, CLI, apply, persistence, repair, or mutation authority"
   ],
-  "run_id": "sha256:19bb6ef928b8a4e9a05cfe4dfc12e57acd56c2a2b9994e8730fe8d2f624ef827",
+  "run_id": "sha256:2a947cb3e1b6bacfb470b1b501cf1a5ed51236fb00a1f0b3ffd1689922ec7171",
   "schema": "copper-mcp/benchmark/external-candidate-disposer-corpus/v1"
 }
