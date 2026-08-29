@@ -236,6 +236,17 @@ result or a general performance comparison.
 | Artifact | [`2026-08-04-live-editor-context.json`](../../benchmarks/results/mcp/2026-08-04-live-editor-context.json) |
 | Interpretation | This proves only the bounded read-only editor-context contract over a fake client: active layer and typed native selection references are deterministic and stale/context changes fail closed. It does not establish live GUI compatibility, placement/routing mutation, DRC, ERC, electrical behavior, fabrication readiness, or performance generalization. |
 
+#### B-015 — current closed editor-context contract replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:dc609644b336154dd55b93bc7b08988094ae10e91754ddd25b40b5b811e945c0` |
+| Date and commit | 2026-08-29; clean implementation commit `6ab2d4d860329141ef74958701c5f9012f8ec758`; Python 3.14.2 on macOS arm64; KiCad was not invoked |
+| Why this replay exists | The historical runner still sent `expect_snapshot_digest` after the editor-context request became a closed `board` / `expect_board_revision` contract, so current code refused the instrument before it measured anything. The repaired runner removes only that retired field, retains explicit `allow_live_ipc=True`, validates every response against the current public response model, and refuses to publish if any constructed fake IPC client is not closed exactly once. |
+| Evidence | Ten deterministic replays and one unique response digest; active `F.Cu`, selection count 2, stale board/context refusals 1/1, active-layer change updates the context digest 1/1, mutating IPC calls 0, and raw editor content returned `false`. Every stable metric is exactly equal to the original B-015 artifact; only measured latency is intentionally excluded from the regression equality. The output is self-digested and contains neither the fake board serialization nor a raw selection. |
+| Artifact | [`2026-08-29-live-editor-context-current-contract-replay.json`](../../benchmarks/results/mcp/2026-08-29-live-editor-context-current-contract-replay.json) |
+| Limits | Contract-repair replay over a deterministic fake official client only. No real editor, GUI, mutation, routing, placement, DRC, ERC, electrical, fabrication, or performance-generalization claim. No production contract changed. |
+
 ### B-016 — Source-preserving KiCad placement projection
 
 | Field | Recorded evidence |
@@ -451,6 +462,17 @@ result or a general performance comparison.
 | Metrics | Schema-valid replays 10/10; deterministic candidate ID `sha256:bbd149eb890ffd527def0c65f2bcb4269aca8423938cfaaa24743f3fe959a587`; candidate equals file-backed oracle `true`; two full-stack vias; stale-board refusal `true`; capture-race refusal `true`; IPC clients closed `true`; source unchanged `true`; KiCad/DRC/serialization/apply/real-GUI `false` |
 | Artifact | [`2026-08-05-live-layered-route-preview.json`](../../benchmarks/results/routing/2026-08-05-live-layered-route-preview.json) |
 | Interpretation | This proves deterministic observe-to-via-capable-proposal closure over a fake official IPC client, including session/source/snapshot CAS, deadline and lifecycle safety. It does not establish a running KiCad GUI session, endpoint-via legality, DRC, serializer/export, persistence, electrical behavior, fabrication readiness, or FreeRouting parity. |
+
+#### B-026 — current opaque-session contract replay
+
+| Field | Recorded evidence |
+|---|---|
+| Run ID | `sha256:d56edb83bbc20c1647118fa2070f97f122e03908eb35d6a5f4bd74a7a7e7576a` |
+| Date and commit | 2026-08-29; clean implementation commit `6ab2d4d860329141ef74958701c5f9012f8ec758`; Python 3.14.2 on macOS arm64; KiCad was not invoked |
+| Why this replay exists | The historical runner constructed a legacy `sha256:` session revision from ambient `KICAD_API_TOKEN`; the current closed request correctly rejects that wire type before CAS. The repaired runner instead obtains `pbkdf2-hmac-sha256:` from a same-process public `inspect_live_board` observation, using the fake client identity through the same `kipy` seam as production. The stale-session case changes one digest nibble while preserving the opaque type, so it reaches the CAS comparison rather than input validation. |
+| Evidence | The complete metric map is exactly equal to the prior B-026 review-remediation artifact: ten schema-valid deterministic replays; candidate `sha256:c53a6d61db99715ad46dce180fe0abfbf72235eb2678092938cbbdee27057ced`; candidate/file-oracle equality; two vias; stale board, session, and snapshot refusals; capture-race refusal; exactly-once closure for the handshake, success, refusal, and race clients; source unchanged; KiCad, DRC, serialization, apply authority, and real GUI all `false`. The output is self-digested and exposes neither configured token nor observed editor identity, board text, net names, coordinates, or source syntax. |
+| Artifact | [`2026-08-29-live-layered-route-preview-current-contract-replay.json`](../../benchmarks/results/routing/2026-08-29-live-layered-route-preview-current-contract-replay.json) |
+| Limits | Current-contract replay over a deterministic fake official client only. No real editor/session, restart test, DRC, serializer, apply, electrical, fabrication, or routing-quality generalization claim. No production contract changed. |
 
 ### B-027 — Layered candidate topology verifier
 

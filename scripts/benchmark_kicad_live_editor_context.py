@@ -74,6 +74,7 @@ class _Board:
 class _KiCad:
     def __init__(self, board: _Board) -> None:
         self.board = board
+        self.close_calls = 0
 
     def get_version(self) -> SimpleNamespace:
         return SimpleNamespace(major=10, minor=0, patch=5)
@@ -86,6 +87,9 @@ class _KiCad:
 
     def get_board(self) -> _Board:
         return self.board
+
+    def close(self) -> None:
+        self.close_calls += 1
 
 
 def _package_version(name: str) -> str | None:
@@ -129,15 +133,20 @@ def _run(repetitions: int) -> dict[str, Any]:
     # on the ambient environment.
     settings = Settings(workspace=ROOT, allow_live_ipc=True)
     board = _Board()
+    clients: list[_KiCad] = []
+
+    def client(board_to_observe: _Board) -> _KiCad:
+        created = _KiCad(board_to_observe)
+        clients.append(created)
+        return created
 
     def factory(**_: object) -> _KiCad:
-        return _KiCad(board)
+        return client(board)
 
     captured = capture_live_editor_context(settings, client_factory=factory)
     request = {
         "board": "live",
         "expect_board_revision": captured.board_digest,
-        "expect_snapshot_digest": captured.board_digest,
     }
     documents: list[dict[str, Any]] = []
     latencies: list[int] = []
@@ -182,9 +191,11 @@ def _run(repetitions: int) -> dict[str, Any]:
     changed.active_layer = 32
     changed.layer_name = "B.Cu"
     changed_result = inspect_live_editor_context_raw(
-        request, settings, client_factory=lambda **_: _KiCad(changed)
+        request, settings, client_factory=lambda **_: client(changed)
     )
     context_changed = int(changed_result.context_digest != first.context_digest)
+    if not clients or any(item.close_calls != 1 for item in clients):
+        raise RuntimeError("an editor-context fake IPC client was not closed exactly once")
     return {
         "benchmark": BENCHMARK_NAME,
         "created_at_utc": datetime.now(UTC).isoformat(),
