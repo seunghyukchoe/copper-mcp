@@ -41,6 +41,28 @@ EXPECTED_POPULATION = {
     "reference_per_net_nets_routed": 70,
 }
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
+EXPECTED_REPAIR_WORK_DEFINITION = (
+    "Inherited search and proximity fields are read from a published repaired candidate's "
+    "unchanged candidate metrics and cost. Local expansions, Board-IR projection checks, "
+    "validator checks, and repair responsibility/final physical work are separate. "
+    "Refused transactions publish no repair evidence; their consumed physical work remains "
+    "in total_physical_checks and is not fabricated into success-only fields."
+)
+EXPECTED_DIFFERENTIAL_DEFINITION = (
+    "Treatment minus control over the same immutable B-140 snapshots and request tuples. "
+    "A positive completion delta is a measured differential only; it is not a "
+    "routing-quality, electrical, DRC, fabrication, or generalisation claim."
+)
+EXPECTED_NOT_CLAIMED = [
+    "that repair was successful when repair evidence was not published",
+    "that a zero or negative differential is evidence that the repair contract is ineffective",
+    "that control and treatment answer a like-for-like quality question against B-088's "
+    "independent per-net routes",
+    "KiCad DRC, electrical correctness, signal integrity, thermal behaviour, DFM, fabrication, "
+    "apply, editor, hardware, or network behaviour",
+    "any board, net, revision, candidate, path, geometry, or private corpus identity",
+    "generalisation beyond the exact committed 20-board B-088 subset",
+]
 
 
 def _canonical_digest(value: object) -> str:
@@ -221,6 +243,113 @@ def _minimal_aggregate(population: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _synthetic_public_report() -> dict[str, Any]:
+    """Build a complete, self-resigned report without reading the committed B-141 artifact."""
+
+    population = dict(EXPECTED_POPULATION)
+    control = _minimal_aggregate(population)
+    control["outcome_breakdown"]["envelope_construction"] = 4
+    control["outcome_breakdown"]["no_path_physical_clearance"] = 16
+    control["refusal_breakdown"]["envelope_construction"] = 4
+    control["refusal_breakdown"]["no_path_physical_clearance"] = 16
+    control["repair_outcome_breakdown"]["not_applicable_envelope_refused"] = 4
+    control["repair_outcome_breakdown"]["repair_not_published"] = 16
+    control["status_breakdown"] = {"no_path": 16, "not_run": 4}
+
+    treatment = json.loads(json.dumps(control))
+    treatment["repair_enabled"] = True
+    treatment["repair_settings"] = asdict(RepairTransactionSettings())
+    treatment["outcome_breakdown"]["no_path_physical_clearance"] = 15
+    treatment["outcome_breakdown"]["completed_with_repair"] = 1
+    treatment["refusal_breakdown"]["no_path_physical_clearance"] = 15
+    treatment["repair_outcome_breakdown"]["repair_not_published"] = 15
+    treatment["repair_outcome_breakdown"]["repair_published"] = 1
+    treatment["status_breakdown"] = {"completed": 1, "no_path": 15, "not_run": 4}
+    treatment["boards_completed"] = 1
+    treatment["negotiated_nets_completed"] = 2
+    treatment["total_physical_checks"] = 1
+    treatment["repair_work"]["published_repairs"] = 1
+    treatment["repair_work"]["repair_local_expanded_states"] = 1
+
+    binding = {
+        "benchmark": "B-140",
+        "artifact": benchmark.B140_ARTIFACT.relative_to(benchmark.ROOT).as_posix(),
+        "artifact_run_id": benchmark.B140_RUN_ID,
+        "configuration": "b088-routable",
+        "boards_offered": 20,
+        "nets_submitted": 70,
+        **benchmark._current_corpus_binding(),
+        "admission_partition": {
+            "boards_admitted_by_the_coordinator": 16,
+            "boards_unable_to_form_a_two_request_envelope": 4,
+        },
+    }
+    report: dict[str, Any] = {
+        "schema": benchmark.REPORT_SCHEMA,
+        "benchmark": "B-141",
+        "date_utc": "2026-08-30",
+        "source_commit": "a" * 40,
+        "environment": benchmark._environment_projection(),
+        "population_binding": binding,
+        "configuration": benchmark._configuration(),
+        "metrics": {
+            "population": population,
+            "deterministic_replays": True,
+            "control": control,
+            "treatment": treatment,
+            "differential": {},
+            "reference_baseline": {
+                "benchmark": "B-088",
+                "artifact": benchmark.REFERENCE_ARTIFACT.relative_to(benchmark.ROOT).as_posix(),
+                "artifact_run_id": benchmark.B088_RUN_ID,
+                "grid_policy": "fixed",
+                "nets_routed": 70,
+                "nets_attempted": 117,
+            },
+        },
+        "timing": {
+            "repetitions": benchmark.BENCHMARK_REPETITIONS,
+            "mean_wall_seconds": {"control": 0.0, "treatment": 0.0},
+        },
+        "repair_work_definition": EXPECTED_REPAIR_WORK_DEFINITION,
+        "differential_definition": EXPECTED_DIFFERENTIAL_DEFINITION,
+        "not_claimed": list(EXPECTED_NOT_CLAIMED),
+    }
+    return _reconcile_differential(report)
+
+
+def _dict_paths(value: Any, path: tuple[str, ...] = ()) -> tuple[tuple[str, ...], ...]:
+    """Return every public JSON-object path, including the root."""
+
+    paths: list[tuple[str, ...]] = []
+    if isinstance(value, dict):
+        paths.append(path)
+        for key, child in value.items():
+            paths.extend(_dict_paths(child, (*path, key)))
+    elif isinstance(value, list):
+        for child in value:
+            paths.extend(_dict_paths(child, path))
+    return tuple(paths)
+
+
+def _at_path(document: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
+    value: Any = document
+    for key in path:
+        value = value[key]
+    assert isinstance(value, dict)
+    return value
+
+
+def _resign_public_report(document: dict[str, Any]) -> dict[str, Any]:
+    """Recompute nested configuration and outer report digests after a deliberate mutation."""
+
+    configuration = document.get("configuration")
+    if isinstance(configuration, dict):
+        body = {key: value for key, value in configuration.items() if key != "configuration_sha256"}
+        configuration["configuration_sha256"] = _canonical_digest(body)
+    return _retag_document(document)
+
+
 def test_population_is_exactly_twenty_boards_with_a_16_4_admission_partition(
     prepared_population: tuple[tuple[benchmark.PreparedBoard, ...], dict[str, Any]],
 ) -> None:
@@ -363,6 +492,122 @@ def test_timing_validator_rejects_drift_malformed_nonfinite_and_boolean_values(
 ) -> None:
     with pytest.raises(benchmark.NegotiatedDifferentialError, match=r"timing|repetition"):
         benchmark._validate_timing(timing, require_exact_repetitions=True)
+
+
+def test_current_public_shape_and_static_contract_are_accepted_without_the_artifact() -> None:
+    report = _synthetic_public_report()
+
+    assert report["repair_work_definition"] == EXPECTED_REPAIR_WORK_DEFINITION
+    assert report["differential_definition"] == EXPECTED_DIFFERENTIAL_DEFINITION
+    assert report["not_claimed"] == EXPECTED_NOT_CLAIMED
+    benchmark.validate_report(report)
+
+
+def test_self_resigned_extra_and_missing_keys_are_rejected_in_every_public_object() -> None:
+    original = _synthetic_public_report()
+
+    for path in _dict_paths(original):
+        extra = json.loads(json.dumps(original))
+        _at_path(extra, path)["unexpected"] = "private payload"
+        _resign_public_report(extra)
+        with pytest.raises(benchmark.NegotiatedDifferentialError):
+            benchmark.validate_report(extra, require_semantics=False)
+
+        missing = json.loads(json.dumps(original))
+        target = _at_path(missing, path)
+        removable = next(
+            key
+            for key in target
+            if key != "run_id" and (path != ("configuration",) or key != "configuration_sha256")
+        )
+        target.pop(removable)
+        _resign_public_report(missing)
+        with pytest.raises(benchmark.NegotiatedDifferentialError):
+            benchmark.validate_report(missing, require_semantics=False)
+
+
+def test_private_payload_is_rejected_in_every_public_object() -> None:
+    original = _synthetic_public_report()
+
+    for path in _dict_paths(original):
+        tampered = json.loads(json.dumps(original))
+        _at_path(tampered, path)["private_payload"] = {"board_id": "secret"}
+        _resign_public_report(tampered)
+        with pytest.raises(benchmark.NegotiatedDifferentialError):
+            benchmark.validate_report(tampered, require_semantics=False)
+
+
+def test_private_payload_is_rejected_by_commitment_construction_and_authoritative_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tampered = _synthetic_public_report()
+    tampered["private_payload"] = {"board_id": "secret"}
+    _resign_public_report(tampered)
+    rendered = json.dumps(tampered, allow_nan=False, sort_keys=True).encode()
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError):
+        benchmark.validate_report(tampered)
+    with pytest.raises(benchmark.NegotiatedDifferentialError):
+        benchmark._build_commitment_from_bytes(tampered, benchmark.DEFAULT_OUTPUT, rendered)
+
+    original_load_object = benchmark._load_object
+
+    def tampered_loader(path: Path, *, label: str) -> dict[str, Any]:
+        if Path(path).resolve() == benchmark.DEFAULT_OUTPUT.resolve():
+            return tampered
+        return original_load_object(path, label=label)
+
+    monkeypatch.setattr(benchmark, "_load_object", tampered_loader)
+    with pytest.raises(benchmark.NegotiatedDifferentialError):
+        benchmark.load_artifact(benchmark.DEFAULT_OUTPUT)
+
+
+def _replace_path(document: dict[str, Any], path: tuple[str, ...], value: Any) -> None:
+    if not path:
+        raise AssertionError("a root replacement needs a field path")
+    parent = document
+    for key in path[:-1]:
+        child = parent[key]
+        assert isinstance(child, dict)
+        parent = child
+    parent[path[-1]] = value
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    (
+        (("schema",), "copper-mcp/benchmark/other/v1"),
+        (("benchmark",), "B-140"),
+        (("date_utc",), "2026-08-31"),
+        (("repair_work_definition",), "arbitrary claim"),
+        (("differential_definition",), "arbitrary differential"),
+        (("not_claimed",), ["private_payload"]),
+        (("not_claimed",), {"private_payload": "secret"}),
+        (("environment",), []),
+        (("environment", "python_version"), []),
+        (("population_binding", "configuration"), "arbitrary-config"),
+        (("metrics", "reference_baseline", "grid_policy"), "arbitrary-grid"),
+    ),
+)
+def test_public_static_definitions_and_allowed_string_containers_cannot_be_rewritten(
+    path: tuple[str, ...], value: Any
+) -> None:
+    tampered = _synthetic_public_report()
+    _replace_path(tampered, path, value)
+    _resign_public_report(tampered)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError):
+        benchmark.validate_report(tampered, require_semantics=False)
+
+
+@pytest.mark.parametrize("field", ("os_family", "architecture"))
+def test_self_resigned_environment_identifiers_reject_board_identity(field: str) -> None:
+    tampered = _synthetic_public_report()
+    tampered["environment"][field] = "ts18_dual_reg"
+    _resign_public_report(tampered)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="environment"):
+        benchmark.validate_report(tampered, require_semantics=False)
 
 
 @pytest.mark.parametrize("repetitions", (1, 3))
@@ -1142,6 +1387,140 @@ def test_authoritative_load_requires_a_present_well_formed_commitment(
     monkeypatch.setattr(benchmark, "load_commitment", sidecar_loader)
     with pytest.raises(benchmark.NegotiatedDifferentialError, match=r"commitment|unreadable"):
         benchmark.load_artifact(EXPECTED_ARTIFACT)
+
+
+@pytest.mark.parametrize(
+    "dirty_path",
+    (
+        benchmark.SCRIPT_PATH,
+        benchmark.DEFAULT_OUTPUT.relative_to(benchmark.ROOT).as_posix(),
+        benchmark.COMMITMENT_RELATIVE_PATH,
+    ),
+)
+def test_write_refuses_dirty_runner_or_tracked_authority_before_measurement(
+    dirty_path: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "new-report.json"
+    calls = 0
+
+    def unexpected_measurement(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        raise AssertionError("measurement must not start while a tracked authority is dirty")
+
+    monkeypatch.setattr(benchmark, "_git_state", lambda: ("a" * 40, (dirty_path,)))
+    monkeypatch.setattr(benchmark, "build_report", unexpected_measurement)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "benchmark_negotiated_multipin_branch_repair.py",
+            "--write",
+            "--output",
+            str(output),
+        ],
+    )
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="unchanged source tree"):
+        benchmark.main()
+    assert calls == 0
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "allowlisted_path",
+    (
+        benchmark.DEFAULT_OUTPUT.relative_to(benchmark.ROOT).as_posix(),
+        benchmark.COMMITMENT_RELATIVE_PATH,
+    ),
+)
+def test_publishable_source_refuses_a_tracked_allowlisted_output_or_sidecar(
+    allowlisted_path: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Allowlisting a publication path does not permit a tracked deletion or modification."""
+
+    seen: list[str] = []
+    monkeypatch.setattr(benchmark, "_git_state", lambda: ("a" * 40, (allowlisted_path,)))
+
+    def tracked(path: str) -> bool:
+        seen.append(path)
+        return True
+
+    monkeypatch.setattr(benchmark, "_git_path_is_tracked", tracked)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="unchanged source tree"):
+        benchmark._require_publishable_source(
+            expected_commit="a" * 40,
+            allowed_dirty=frozenset({allowlisted_path}),
+        )
+    assert seen == [allowlisted_path]
+
+
+def test_clean_source_and_new_exclusive_output_are_accepted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "new-report.json"
+    states = iter((("a" * 40, ()), ("a" * 40, ())))
+    report = {"schema": "synthetic", "metrics": {"private": False}}
+    calls = 0
+
+    def measured(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return report
+
+    monkeypatch.setattr(benchmark, "_git_state", lambda: next(states))
+    monkeypatch.setattr(benchmark, "build_report", measured)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "benchmark_negotiated_multipin_branch_repair.py",
+            "--write",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert benchmark.main() == 0
+    assert calls == 1
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+
+
+def test_post_measurement_runner_drift_is_refused_before_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "new-report.json"
+    states = iter((("a" * 40, ()), ("a" * 40, (benchmark.SCRIPT_PATH,))))
+    calls = 0
+
+    def measured(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {"schema": "synthetic"}
+
+    monkeypatch.setattr(benchmark, "_git_state", lambda: next(states))
+    monkeypatch.setattr(benchmark, "build_report", measured)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "benchmark_negotiated_multipin_branch_repair.py",
+            "--write",
+            "--output",
+            str(output),
+        ],
+    )
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="unchanged source tree"):
+        benchmark.main()
+    assert calls == 1
+    assert not output.exists()
 
 
 def test_new_publication_target_never_overwrites_an_existing_path(tmp_path: Path) -> None:

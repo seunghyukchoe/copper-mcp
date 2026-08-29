@@ -112,6 +112,32 @@ REPAIR_OUTCOME_TAXONOMY: tuple[str, ...] = (
     "repair_published",
 )
 
+# Public prose is part of this small JSON contract, rather than an open-ended annotation field.
+# Keeping the canonical values in one place makes a self-consistent rewrite unable to smuggle in a
+# new claim, path, or identity while still passing the report self-digest.
+REPAIR_WORK_DEFINITION = (
+    "Inherited search and proximity fields are read from a published repaired candidate's "
+    "unchanged candidate metrics and cost. Local expansions, Board-IR projection checks, "
+    "validator checks, and repair responsibility/final physical work are separate. "
+    "Refused transactions publish no repair evidence; their consumed physical work remains "
+    "in total_physical_checks and is not fabricated into success-only fields."
+)
+DIFFERENTIAL_DEFINITION = (
+    "Treatment minus control over the same immutable B-140 snapshots and request tuples. "
+    "A positive completion delta is a measured differential only; it is not a "
+    "routing-quality, electrical, DRC, fabrication, or generalisation claim."
+)
+NOT_CLAIMED: tuple[str, ...] = (
+    "that repair was successful when repair evidence was not published",
+    "that a zero or negative differential is evidence that the repair contract is ineffective",
+    "that control and treatment answer a like-for-like quality question against B-088's "
+    "independent per-net routes",
+    "KiCad DRC, electrical correctness, signal integrity, thermal behaviour, DFM, fabrication, "
+    "apply, editor, hardware, or network behaviour",
+    "any board, net, revision, candidate, path, geometry, or private corpus identity",
+    "generalisation beyond the exact committed 20-board B-088 subset",
+)
+
 _B140_PRIMARY_EXPECTED: dict[str, int] = {
     "boards_offered": 20,
     "boards_imported": 20,
@@ -215,11 +241,46 @@ def _git_state() -> tuple[str, tuple[str, ...]]:
             continue
         path = line[3:]
         if " -> " in path:
-            path = path.split(" -> ", 1)[1]
-        paths.append(path)
+            old_path, new_path = path.split(" -> ", 1)
+            paths.extend((old_path, new_path))
+        else:
+            paths.append(path)
     if _GIT_COMMIT.fullmatch(commit) is None:
         return "unknown", tuple(paths) or ("<malformed-git-commit>",)
     return commit, tuple(paths)
+
+
+def _git_path_is_tracked(path: str) -> bool:
+    """Return whether a status path is tracked, including a tracked deletion."""
+
+    git = shutil.which("git")
+    if git is None:
+        raise NegotiatedDifferentialError("the source Git state could not be read")
+    candidate = Path(path)
+    try:
+        relative = (
+            candidate.resolve().relative_to(ROOT.resolve())
+            if candidate.is_absolute()
+            else candidate
+        )
+    except ValueError:
+        return False
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+            [git, "ls-files", "--error-unmatch", "--", relative.as_posix()],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise NegotiatedDifferentialError("the source Git state could not be read") from error
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    raise NegotiatedDifferentialError("the source Git state could not be read")
 
 
 def _require_publishable_source(
@@ -227,7 +288,7 @@ def _require_publishable_source(
     *,
     allowed_dirty: frozenset[str] = frozenset(),
 ) -> str:
-    """Fail closed on source drift while allowing this new untracked writer during first run."""
+    """Fail closed on source drift; only this invocation's new untracked outputs may be dirty."""
 
     commit, dirty_paths = _git_state()
     if commit == "unknown":
@@ -240,6 +301,10 @@ def _require_publishable_source(
     else:
         unexpected = tuple(path for path in dirty_paths if path not in allowed_dirty)
     if unexpected:
+        raise NegotiatedDifferentialError("artifact publication requires an unchanged source tree")
+    if not isinstance(dirty_paths, bool) and any(
+        _git_path_is_tracked(path) for path in dirty_paths if path in allowed_dirty
+    ):
         raise NegotiatedDifferentialError("artifact publication requires an unchanged source tree")
     if expected_commit is not None and commit != expected_commit:
         raise NegotiatedDifferentialError("the Git revision changed during benchmark measurement")
@@ -1100,6 +1165,33 @@ def _configuration() -> dict[str, Any]:
     return configuration
 
 
+def _environment_projection() -> dict[str, Any]:
+    """Project only bounded host-independent environment facts into the public report."""
+
+    os_family = platform.system()
+    architecture = platform.machine()
+    if (
+        type(os_family) is not str
+        or os_family not in SUPPORTED_OS_FAMILIES
+        or type(architecture) is not str
+        or architecture not in SUPPORTED_ARCHITECTURES
+    ):
+        raise NegotiatedDifferentialError("the benchmark environment is outside its closed set")
+    version = sys.version_info
+    version_values = (version.major, version.minor, version.micro)
+    if any(type(value) is not int or not 0 <= value <= 99 for value in version_values):
+        raise NegotiatedDifferentialError("the benchmark Python version is outside its closed set")
+    return {
+        "os_family": os_family,
+        "architecture": architecture,
+        "python_version": {
+            "major": version_values[0],
+            "minor": version_values[1],
+            "micro": version_values[2],
+        },
+    }
+
+
 def build_report(
     repetitions: int = 2,
     corpus: Path = b140.CORPUS,
@@ -1124,7 +1216,7 @@ def build_report(
         "benchmark": "B-141",
         "date_utc": "2026-08-30",
         "source_commit": captured_commit,
-        "environment": {"platform": platform.platform(), "python": sys.version.split()[0]},
+        "environment": _environment_projection(),
         "population_binding": {
             "benchmark": "B-140",
             "artifact": B140_ARTIFACT.relative_to(ROOT).as_posix(),
@@ -1142,30 +1234,9 @@ def build_report(
         "configuration": _configuration(),
         "metrics": metrics,
         "timing": timing,
-        "repair_work_definition": (
-            "Inherited search and proximity fields are read from a published repaired candidate's "
-            "unchanged candidate metrics and cost. Local expansions, Board-IR projection checks, "
-            "validator checks, and repair responsibility/final physical work are separate. "
-            "Refused transactions publish no repair evidence; their consumed physical work remains "
-            "in total_physical_checks and is not fabricated into success-only fields."
-        ),
-        "differential_definition": (
-            "Treatment minus control over the same immutable B-140 snapshots and request tuples. "
-            "A positive completion delta is a measured differential only; it is not a "
-            "routing-quality, "
-            "electrical, DRC, fabrication, or generalisation claim."
-        ),
-        "not_claimed": [
-            "that repair was successful when repair evidence was not published",
-            "that a zero or negative differential is evidence that the repair contract is "
-            "ineffective",
-            "that control and treatment answer a like-for-like quality question against "
-            "B-088's independent per-net routes",
-            "KiCad DRC, electrical correctness, signal integrity, thermal behaviour, DFM, "
-            "fabrication, apply, editor, hardware, or network behaviour",
-            "any board, net, revision, candidate, path, geometry, or private corpus identity",
-            "generalisation beyond the exact committed 20-board B-088 subset",
-        ],
+        "repair_work_definition": REPAIR_WORK_DEFINITION,
+        "differential_definition": DIFFERENTIAL_DEFINITION,
+        "not_claimed": list(NOT_CLAIMED),
     }
     # Loading the root after the run protects against an authority changing while measurement was
     # in progress; its pinned run ID and digest are included in configuration above.
@@ -1229,6 +1300,110 @@ _B141_POPULATION_EXPECTED: dict[str, int] = {
     "boards_unable_to_form_a_two_request_envelope": 4,
 }
 _DEFAULT_REPAIR_SETTINGS = asdict(RepairTransactionSettings())
+
+_ROOT_KEYS = frozenset(
+    {
+        "schema",
+        "benchmark",
+        "date_utc",
+        "source_commit",
+        "environment",
+        "population_binding",
+        "configuration",
+        "metrics",
+        "timing",
+        "repair_work_definition",
+        "differential_definition",
+        "not_claimed",
+        "run_id",
+    }
+)
+_METRICS_KEYS = frozenset(
+    {
+        "population",
+        "deterministic_replays",
+        "control",
+        "treatment",
+        "differential",
+        "reference_baseline",
+    }
+)
+_POPULATION_KEYS = frozenset(_B141_POPULATION_EXPECTED)
+_AGGREGATE_KEYS = frozenset(
+    {
+        *_POPULATION_KEYS,
+        "repair_enabled",
+        "repair_settings",
+        "boards_completed",
+        "negotiated_nets_completed",
+        "total_wire_length_nm",
+        "total_overflow_units",
+        "total_physical_checks",
+        "total_iterations",
+        "total_ripups",
+        "status_breakdown",
+        "outcome_breakdown",
+        "refusal_breakdown",
+        "repair_outcome_breakdown",
+        "repair_work",
+        "repair_work_accounting",
+    }
+)
+_REPAIR_SETTINGS_KEYS = frozenset(_DEFAULT_REPAIR_SETTINGS)
+_REPAIR_WORK_ACCOUNTING_KEYS = frozenset(
+    {
+        "successful_repair_evidence_only",
+        "refusal_work_in_total_physical_checks",
+        "unpublished_local_projection_and_validator_work",
+    }
+)
+_DIFFERENTIAL_KEYS = frozenset(
+    {
+        "boards_completed_delta",
+        "negotiated_nets_completed_delta",
+        "total_wire_length_nm_delta",
+        "total_overflow_units_delta",
+        "total_physical_checks_delta",
+        "positive_completion_delta",
+        "verdict",
+    }
+)
+_REFERENCE_BASELINE_KEYS = frozenset(
+    {"benchmark", "artifact", "artifact_run_id", "grid_policy", "nets_routed", "nets_attempted"}
+)
+_TIMING_KEYS = frozenset({"repetitions", "mean_wall_seconds"})
+_TIMING_MEAN_KEYS = frozenset({"control", "treatment"})
+ENVIRONMENT_KEYS = frozenset({"os_family", "architecture", "python_version"})
+PYTHON_VERSION_KEYS = frozenset({"major", "minor", "micro"})
+SUPPORTED_OS_FAMILIES = frozenset({"Darwin", "Linux", "Windows"})
+SUPPORTED_ARCHITECTURES = frozenset({"arm64", "aarch64", "x86_64", "AMD64"})
+_POPULATION_BINDING_KEYS = frozenset(
+    {
+        "benchmark",
+        "artifact",
+        "artifact_run_id",
+        "configuration",
+        "boards_offered",
+        "nets_submitted",
+        "corpus_manifest_count",
+        "corpus_manifest_sha256",
+        "admission_partition",
+    }
+)
+_ADMISSION_PARTITION_KEYS = frozenset(
+    {"boards_admitted_by_the_coordinator", "boards_unable_to_form_a_two_request_envelope"}
+)
+_AGGREGATE_TOTAL_KEYS = frozenset(
+    {
+        "boards_completed",
+        "negotiated_nets_completed",
+        "total_wire_length_nm",
+        "total_overflow_units",
+        "total_physical_checks",
+        "total_iterations",
+        "total_ripups",
+    }
+)
 
 
 def _upper_bounds() -> dict[str, dict[str, int]]:
@@ -1309,8 +1484,33 @@ def _require_nonnegative_int(value: Any, message: str) -> int:
     return value
 
 
+def _require_exact_dict(value: Any, expected_keys: frozenset[str], message: str) -> dict[str, Any]:
+    """Require a plain JSON object with the complete contract key set."""
+
+    if type(value) is not dict or set(value) != expected_keys:
+        raise NegotiatedDifferentialError(message)
+    return value
+
+
+def _validate_exact_string_list(value: Any, expected: tuple[str, ...], message: str) -> list[str]:
+    if (
+        type(value) is not list
+        or value != list(expected)
+        or any(type(item) is not str for item in value)
+    ):
+        raise NegotiatedDifferentialError(message)
+    return value
+
+
+def _validate_nonnegative_integer_object(
+    value: Any, expected_keys: frozenset[str], message: str
+) -> dict[str, int]:
+    record = _require_exact_dict(value, expected_keys, message)
+    return {key: _require_nonnegative_int(record[key], message) for key in expected_keys}
+
+
 def _validate_counter(value: Any, expected_keys: tuple[str, ...], message: str) -> dict[str, int]:
-    if not isinstance(value, dict) or set(value) != set(expected_keys):
+    if type(value) is not dict or set(value) != set(expected_keys):
         raise NegotiatedDifferentialError(message)
     result: dict[str, int] = {}
     for key in expected_keys:
@@ -1320,7 +1520,7 @@ def _validate_counter(value: Any, expected_keys: tuple[str, ...], message: str) 
 
 def _validate_repair_work(aggregate: dict[str, Any]) -> dict[str, int]:
     work = aggregate.get("repair_work")
-    if not isinstance(work, dict) or set(work) != _REPAIR_WORK_KEYS:
+    if type(work) is not dict or set(work) != _REPAIR_WORK_KEYS:
         raise NegotiatedDifferentialError("the B-141 repair work accounting is malformed")
     return {
         key: _require_nonnegative_int(work[key], "the B-141 repair work accounting is malformed")
@@ -1329,7 +1529,7 @@ def _validate_repair_work(aggregate: dict[str, Any]) -> dict[str, int]:
 
 
 def _validate_timing(timing: Any, *, require_exact_repetitions: bool) -> None:
-    if not isinstance(timing, dict) or set(timing) != {"mean_wall_seconds", "repetitions"}:
+    if type(timing) is not dict or set(timing) != _TIMING_KEYS:
         raise NegotiatedDifferentialError("the B-141 timing record is malformed")
     repetitions = timing.get("repetitions")
     if type(repetitions) is not int or repetitions < 1:
@@ -1337,7 +1537,7 @@ def _validate_timing(timing: Any, *, require_exact_repetitions: bool) -> None:
     if require_exact_repetitions and repetitions != BENCHMARK_REPETITIONS:
         raise NegotiatedDifferentialError("B-141 requires exactly two repetitions")
     means = timing.get("mean_wall_seconds")
-    if not isinstance(means, dict) or set(means) != {"control", "treatment"}:
+    if type(means) is not dict or set(means) != _TIMING_MEAN_KEYS:
         raise NegotiatedDifferentialError("the B-141 timing means are malformed")
     for value in means.values():
         if isinstance(value, bool) or not isinstance(value, int | float):
@@ -1351,13 +1551,97 @@ def _validate_timing(timing: Any, *, require_exact_repetitions: bool) -> None:
 
 
 def _validate_nonnegative_integer_tree(value: Any, message: str) -> None:
-    if not isinstance(value, dict):
+    if type(value) is not dict:
         raise NegotiatedDifferentialError(message)
     for child in value.values():
         if isinstance(child, dict):
             _validate_nonnegative_integer_tree(child, message)
         elif type(child) is not int or child < 0:
             raise NegotiatedDifferentialError(message)
+
+
+def _status_keys_for_outcomes(outcomes: dict[str, int]) -> frozenset[str]:
+    """Derive the exact sparse status shape emitted by the aggregate builder."""
+
+    statuses: set[str] = set()
+    if outcomes["envelope_construction"]:
+        statuses.add("not_run")
+    if outcomes["completed_without_repair"] or outcomes["completed_with_repair"]:
+        statuses.add("completed")
+    if outcomes["partial_budget"]:
+        statuses.add("partial")
+    if outcomes["invalid_request"]:
+        statuses.add("invalid_request")
+    if outcomes["cancelled"]:
+        statuses.add("cancelled")
+    if any(outcomes[code] for code in REFUSAL_TAXONOMY if code.startswith("no_path_")):
+        statuses.add("no_path")
+    return frozenset(statuses)
+
+
+def _validate_aggregate_shape(aggregate: Any, *, treatment: bool) -> dict[str, Any]:
+    """Validate every serialized arm object before applying its semantic bounds."""
+
+    record = _require_exact_dict(
+        aggregate,
+        _AGGREGATE_KEYS,
+        "the B-141 control/treatment aggregate is malformed",
+    )
+    for key in _POPULATION_KEYS:
+        _require_nonnegative_int(record[key], "the B-141 arm population projection is malformed")
+    if type(record["repair_enabled"]) is not bool or record["repair_enabled"] is not treatment:
+        raise NegotiatedDifferentialError("the B-141 arm repair boundary is malformed")
+    settings = record["repair_settings"]
+    if treatment:
+        _validate_nonnegative_integer_object(
+            settings, _REPAIR_SETTINGS_KEYS, "the B-141 arm repair settings are malformed"
+        )
+    elif settings is not None:
+        raise NegotiatedDifferentialError("the B-141 arm repair settings are malformed")
+    for key in _AGGREGATE_TOTAL_KEYS:
+        _require_nonnegative_int(record[key], "the B-141 arm totals are malformed")
+    outcomes = _validate_counter(
+        record["outcome_breakdown"],
+        RUN_OUTCOME_TAXONOMY,
+        "the B-141 outcome taxonomy is not closed",
+    )
+    _validate_counter(
+        record["refusal_breakdown"],
+        REFUSAL_TAXONOMY,
+        "the B-141 refusal taxonomy is not closed",
+    )
+    _validate_counter(
+        record["repair_outcome_breakdown"],
+        REPAIR_OUTCOME_TAXONOMY,
+        "the B-141 repair taxonomy is not closed",
+    )
+    statuses = record["status_breakdown"]
+    expected_status_keys = _status_keys_for_outcomes(outcomes)
+    actual_status_keys = set(statuses) if type(statuses) is dict else None
+    if type(statuses) is not dict or (
+        actual_status_keys != expected_status_keys
+        and not (
+            "completed" not in expected_status_keys
+            and actual_status_keys == expected_status_keys | {"completed"}
+            and statuses["completed"] == 0
+        )
+    ):
+        raise NegotiatedDifferentialError("the B-141 status taxonomy is malformed")
+    for value in statuses.values():
+        _require_nonnegative_int(value, "the B-141 status taxonomy is malformed")
+    _validate_repair_work(record)
+    accounting = record["repair_work_accounting"]
+    if type(accounting) is not dict or set(accounting) != _REPAIR_WORK_ACCOUNTING_KEYS:
+        raise NegotiatedDifferentialError("the B-141 repair work boundary is malformed")
+    if accounting != {
+        "refusal_work_in_total_physical_checks": True,
+        "successful_repair_evidence_only": True,
+        "unpublished_local_projection_and_validator_work": (
+            "not exposed by the closed result on refusal"
+        ),
+    }:
+        raise NegotiatedDifferentialError("the B-141 repair work boundary is malformed")
+    return record
 
 
 def _validate_configuration_shape(configuration: Any) -> None:
@@ -1390,13 +1674,13 @@ def _validate_configuration_shape(configuration: Any) -> None:
         "reference_artifact_run_id",
         "configuration_sha256",
     }
-    if not isinstance(configuration, dict) or set(configuration) != required_keys:
+    if type(configuration) is not dict or set(configuration) != required_keys:
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
     if (
-        not isinstance(configuration.get("adapter_version"), str)
-        or not isinstance(configuration.get("router_version"), str)
-        or not isinstance(configuration.get("routing_policy"), str)
-        or not isinstance(configuration.get("negotiated_routing_policy"), str)
+        type(configuration.get("adapter_version")) is not str
+        or type(configuration.get("router_version")) is not str
+        or type(configuration.get("routing_policy")) is not str
+        or type(configuration.get("negotiated_routing_policy")) is not str
         or type(configuration.get("fixed_grid_step_nm")) is not int
         or configuration["fixed_grid_step_nm"] < 0
         or type(configuration.get("seed")) is not int
@@ -1405,7 +1689,7 @@ def _validate_configuration_shape(configuration: Any) -> None:
     ):
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
     if (
-        not isinstance(configuration.get("runner_sha256"), str)
+        type(configuration.get("runner_sha256")) is not str
         or _SHA256.fullmatch(configuration["runner_sha256"]) is None
     ):
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
@@ -1418,17 +1702,19 @@ def _validate_configuration_shape(configuration: Any) -> None:
         "reference_artifact_sha256",
         "reference_artifact_run_id",
     ):
-        if (
-            not isinstance(configuration.get(key), str)
-            or _SHA256.fullmatch(configuration[key]) is None
-        ):
+        if type(configuration.get(key)) is not str or _SHA256.fullmatch(configuration[key]) is None:
             raise NegotiatedDifferentialError("the B-141 configuration is malformed")
     for key in ("b140_source_commit", "reference_source_commit"):
         if (
-            not isinstance(configuration.get(key), str)
+            type(configuration.get(key)) is not str
             or _GIT_COMMIT.fullmatch(configuration[key]) is None
         ):
             raise NegotiatedDifferentialError("the B-141 configuration is malformed")
+    if (
+        type(configuration.get("configuration_sha256")) is not str
+        or _SHA256.fullmatch(configuration["configuration_sha256"]) is None
+    ):
+        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
     nested_keys = {
         "router_limits": {
             "max_grid_nodes",
@@ -1447,10 +1733,8 @@ def _validate_configuration_shape(configuration: Any) -> None:
         "selected_layer_pad_count": {"minimum", "maximum"},
     }
     for key, expected in nested_keys.items():
-        if not isinstance(configuration.get(key), dict) or set(configuration[key]) != expected:
-            raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-        _validate_nonnegative_integer_tree(
-            configuration[key], "the B-141 configuration is malformed"
+        _validate_nonnegative_integer_object(
+            configuration[key], frozenset(expected), "the B-141 configuration is malformed"
         )
     if (
         configuration["adapter_version"] != b140.SIMPLE_ROUTE_JSON_ADAPTER_VERSION
@@ -1464,60 +1748,67 @@ def _validate_configuration_shape(configuration: Any) -> None:
         or configuration["selected_layer_pad_count"] != {"minimum": 2, "maximum": 32}
     ):
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    if configuration["control"] != {"repair_settings": None}:
+    control = _require_exact_dict(
+        configuration["control"],
+        frozenset({"repair_settings"}),
+        "the B-141 configuration is malformed",
+    )
+    if control["repair_settings"] is not None:
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
     treatment = configuration.get("treatment")
+    treatment = _require_exact_dict(
+        treatment,
+        frozenset({"repair_settings", "repair_settings_profile"}),
+        "the B-141 configuration is malformed",
+    )
     if (
-        not isinstance(treatment, dict)
-        or set(treatment) != {"repair_settings", "repair_settings_profile"}
+        type(treatment["repair_settings_profile"]) is not str
         or treatment["repair_settings_profile"] != "RepairTransactionSettings() defaults"
-        or not isinstance(treatment["repair_settings"], dict)
-        or set(treatment["repair_settings"]) != set(_DEFAULT_REPAIR_SETTINGS)
     ):
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    _validate_nonnegative_integer_tree(
-        treatment["repair_settings"], "the B-141 configuration is malformed"
+    _validate_nonnegative_integer_object(
+        treatment["repair_settings"], _REPAIR_SETTINGS_KEYS, "the B-141 configuration is malformed"
     )
     if treatment["repair_settings"] != _DEFAULT_REPAIR_SETTINGS:
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    if configuration["refusal_taxonomy"] != list(REFUSAL_TAXONOMY):
-        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    if configuration["run_outcome_taxonomy"] != list(RUN_OUTCOME_TAXONOMY):
-        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    if configuration["repair_outcome_taxonomy"] != list(REPAIR_OUTCOME_TAXONOMY):
-        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
+    _validate_exact_string_list(
+        configuration["refusal_taxonomy"], REFUSAL_TAXONOMY, "the B-141 configuration is malformed"
+    )
+    _validate_exact_string_list(
+        configuration["run_outcome_taxonomy"],
+        RUN_OUTCOME_TAXONOMY,
+        "the B-141 configuration is malformed",
+    )
+    _validate_exact_string_list(
+        configuration["repair_outcome_taxonomy"],
+        REPAIR_OUTCOME_TAXONOMY,
+        "the B-141 configuration is malformed",
+    )
     bounds = configuration.get("upper_bounds")
-    if not isinstance(bounds, dict) or set(bounds) != {
-        "population",
-        "completion_totals",
-        "repair_work",
-        "repair_work_per_published_repair",
-    }:
-        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    for key in (
-        "population",
-        "completion_totals",
-        "repair_work",
-        "repair_work_per_published_repair",
-    ):
-        _validate_nonnegative_integer_tree(bounds[key], "the B-141 configuration is malformed")
+    _require_exact_dict(
+        bounds,
+        frozenset(
+            {"population", "completion_totals", "repair_work", "repair_work_per_published_repair"}
+        ),
+        "the B-141 configuration is malformed",
+    )
+    _validate_nonnegative_integer_object(
+        bounds["population"], _POPULATION_KEYS, "the B-141 configuration is malformed"
+    )
+    _validate_nonnegative_integer_object(
+        bounds["completion_totals"],
+        frozenset(_AGGREGATE_TOTAL_KEYS),
+        "the B-141 configuration is malformed",
+    )
+    _validate_nonnegative_integer_object(
+        bounds["repair_work"], _REPAIR_WORK_KEYS, "the B-141 configuration is malformed"
+    )
+    _validate_nonnegative_integer_object(
+        bounds["repair_work_per_published_repair"],
+        _REPAIR_WORK_KEYS - {"published_repairs"},
+        "the B-141 configuration is malformed",
+    )
     if bounds != _upper_bounds():
-        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    if set(bounds["population"]) != set(_B141_POPULATION_EXPECTED):
-        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    if set(bounds["completion_totals"]) != {
-        "boards_completed",
-        "negotiated_nets_completed",
-        "total_iterations",
-        "total_ripups",
-        "total_wire_length_nm",
-        "total_overflow_units",
-        "total_physical_checks",
-    }:
-        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    if set(bounds["repair_work"]) != _REPAIR_WORK_KEYS:
-        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
-    if set(bounds["repair_work_per_published_repair"]) != _REPAIR_WORK_KEYS - {"published_repairs"}:
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
 
 
@@ -1528,8 +1819,7 @@ def _validate_aggregate(
     population: dict[str, int],
     bounds: dict[str, dict[str, int]],
 ) -> dict[str, Any]:
-    if not isinstance(aggregate, dict):
-        raise NegotiatedDifferentialError("the B-141 control/treatment aggregate is malformed")
+    aggregate = _validate_aggregate_shape(aggregate, treatment=treatment)
     try:
         projected_population = _population_projection(aggregate)
     except (KeyError, TypeError, ValueError) as error:
@@ -1664,6 +1954,125 @@ def _validate_differential(
     }
     if differential != expected:
         raise NegotiatedDifferentialError("the B-141 differential totals do not reconcile")
+
+
+def _validate_environment_shape(environment: Any) -> None:
+    record = _require_exact_dict(
+        environment, ENVIRONMENT_KEYS, "the B-141 environment record is malformed"
+    )
+    os_family = record["os_family"]
+    architecture = record["architecture"]
+    if (
+        type(os_family) is not str
+        or os_family not in SUPPORTED_OS_FAMILIES
+        or type(architecture) is not str
+        or architecture not in SUPPORTED_ARCHITECTURES
+    ):
+        raise NegotiatedDifferentialError("the B-141 environment record is malformed")
+    version = _validate_nonnegative_integer_object(
+        record["python_version"], PYTHON_VERSION_KEYS, "the B-141 environment record is malformed"
+    )
+    if any(value > 99 for value in version.values()):
+        raise NegotiatedDifferentialError("the B-141 environment record is malformed")
+
+
+def _validate_reference_baseline_shape(reference: Any) -> None:
+    record = _require_exact_dict(
+        reference, _REFERENCE_BASELINE_KEYS, "the B-141 reference baseline is malformed"
+    )
+    if (
+        type(record["benchmark"]) is not str
+        or record["benchmark"] != "B-088"
+        or type(record["artifact"]) is not str
+        or record["artifact"] != REFERENCE_ARTIFACT.relative_to(ROOT).as_posix()
+        or type(record["artifact_run_id"]) is not str
+        or _SHA256.fullmatch(record["artifact_run_id"]) is None
+        or record["artifact_run_id"] != B088_RUN_ID
+        or type(record["grid_policy"]) is not str
+        or record["grid_policy"] != "fixed"
+        or type(record["nets_routed"]) is not int
+        or record["nets_routed"] < 0
+        or type(record["nets_attempted"]) is not int
+        or record["nets_attempted"] < 0
+        or record["nets_routed"] != 70
+        or record["nets_attempted"] != 117
+    ):
+        raise NegotiatedDifferentialError("the B-141 reference baseline is malformed")
+
+
+def _validate_differential_shape(differential: Any) -> None:
+    record = _require_exact_dict(
+        differential, _DIFFERENTIAL_KEYS, "the B-141 differential is malformed"
+    )
+    for key in (
+        "boards_completed_delta",
+        "negotiated_nets_completed_delta",
+        "total_wire_length_nm_delta",
+        "total_overflow_units_delta",
+        "total_physical_checks_delta",
+    ):
+        if type(record[key]) is not int:
+            raise NegotiatedDifferentialError("the B-141 differential is malformed")
+    if (
+        type(record["positive_completion_delta"]) is not bool
+        or type(record["verdict"]) is not str
+        or record["verdict"]
+        not in {"positive_completion_delta", "zero_or_negative_completion_delta"}
+    ):
+        raise NegotiatedDifferentialError("the B-141 differential is malformed")
+
+
+def _validate_population_shape(population: Any) -> None:
+    record = _require_exact_dict(
+        population, _POPULATION_KEYS, "the B-141 population projection is malformed"
+    )
+    for value in record.values():
+        _require_nonnegative_int(value, "the B-141 population projection is malformed")
+    if record != _B141_POPULATION_EXPECTED:
+        raise NegotiatedDifferentialError("the B-141 population projection is malformed")
+
+
+def _validate_metrics_shape(metrics: Any) -> None:
+    record = _require_exact_dict(metrics, _METRICS_KEYS, "the B-141 metrics record is malformed")
+    if type(record["deterministic_replays"]) is not bool or not record["deterministic_replays"]:
+        raise NegotiatedDifferentialError("the B-141 deterministic replay claim is malformed")
+    _validate_population_shape(record["population"])
+    _validate_aggregate_shape(record["control"], treatment=False)
+    _validate_aggregate_shape(record["treatment"], treatment=True)
+    _validate_differential_shape(record["differential"])
+    _validate_reference_baseline_shape(record["reference_baseline"])
+
+
+def _validate_report_shape(document: Any) -> dict[str, Any]:
+    """Validate the complete public JSON shape before any semantic or authority checks."""
+
+    record = _require_exact_dict(document, _ROOT_KEYS, "the B-141 report keys are malformed")
+    if (
+        type(record["schema"]) is not str
+        or record["schema"] != REPORT_SCHEMA
+        or type(record["benchmark"]) is not str
+        or record["benchmark"] != "B-141"
+        or type(record["date_utc"]) is not str
+        or record["date_utc"] != "2026-08-30"
+        or type(record["source_commit"]) is not str
+        or _GIT_COMMIT.fullmatch(record["source_commit"]) is None
+        or type(record["repair_work_definition"]) is not str
+        or record["repair_work_definition"] != REPAIR_WORK_DEFINITION
+        or type(record["differential_definition"]) is not str
+        or record["differential_definition"] != DIFFERENTIAL_DEFINITION
+    ):
+        raise NegotiatedDifferentialError("the B-141 report shape is malformed")
+    _validate_environment_shape(record["environment"])
+    _validate_population_binding_shape(record["population_binding"])
+    _validate_configuration_shape(record["configuration"])
+    _validate_metrics_shape(record["metrics"])
+    _validate_timing(record["timing"], require_exact_repetitions=True)
+    _validate_exact_string_list(
+        record["not_claimed"], NOT_CLAIMED, "the B-141 report claims are malformed"
+    )
+    if type(record["run_id"]) is not str or _SHA256.fullmatch(record["run_id"]) is None:
+        raise NegotiatedDifferentialError("the B-141 report run ID is malformed")
+    return record
 
 
 _COMMITMENT_KEYS = frozenset(
@@ -1835,35 +2244,32 @@ def load_commitment(path: Path | None = None) -> dict[str, Any]:
 
 
 def _validate_population_binding_shape(population_binding: Any) -> None:
-    expected_keys = {
-        "benchmark",
-        "artifact",
-        "artifact_run_id",
-        "configuration",
-        "boards_offered",
-        "nets_submitted",
-        "corpus_manifest_count",
-        "corpus_manifest_sha256",
-        "admission_partition",
-    }
-    if not isinstance(population_binding, dict) or set(population_binding) != expected_keys:
-        raise NegotiatedDifferentialError("the B-141 population binding is malformed")
+    population_binding = _require_exact_dict(
+        population_binding, _POPULATION_BINDING_KEYS, "the B-141 population binding is malformed"
+    )
     if (
-        population_binding.get("benchmark") != "B-140"
-        or population_binding.get("artifact") != B140_ARTIFACT.relative_to(ROOT).as_posix()
-        or population_binding.get("artifact_run_id") != B140_RUN_ID
-        or population_binding.get("configuration") != "b088-routable"
-        or type(population_binding.get("boards_offered")) is not int
-        or population_binding.get("boards_offered") != 20
-        or type(population_binding.get("nets_submitted")) is not int
-        or population_binding.get("nets_submitted") != 70
-        or type(population_binding.get("corpus_manifest_count")) is not int
-        or population_binding.get("corpus_manifest_count") != CORPUS_COMMITTED_COUNT
-        or not isinstance(population_binding.get("corpus_manifest_sha256"), str)
+        type(population_binding["benchmark"]) is not str
+        or population_binding["benchmark"] != "B-140"
+        or type(population_binding["artifact"]) is not str
+        or population_binding["artifact"] != B140_ARTIFACT.relative_to(ROOT).as_posix()
+        or type(population_binding["artifact_run_id"]) is not str
+        or population_binding["artifact_run_id"] != B140_RUN_ID
+        or type(population_binding["configuration"]) is not str
+        or population_binding["configuration"] != "b088-routable"
+        or type(population_binding["boards_offered"]) is not int
+        or population_binding["boards_offered"] != 20
+        or type(population_binding["nets_submitted"]) is not int
+        or population_binding["nets_submitted"] != 70
+        or type(population_binding["corpus_manifest_count"]) is not int
+        or population_binding["corpus_manifest_count"] != CORPUS_COMMITTED_COUNT
+        or type(population_binding["corpus_manifest_sha256"]) is not str
         or _SHA256.fullmatch(population_binding["corpus_manifest_sha256"]) is None
     ):
         raise NegotiatedDifferentialError("the B-141 population binding is malformed")
     partition = population_binding.get("admission_partition")
+    partition = _validate_nonnegative_integer_object(
+        partition, _ADMISSION_PARTITION_KEYS, "the B-141 population binding is malformed"
+    )
     if partition != {
         "boards_admitted_by_the_coordinator": 16,
         "boards_unable_to_form_a_two_request_envelope": 4,
@@ -1938,21 +2344,14 @@ def validate_report(
 ) -> None:
     """Validate generic report structure/semantics; live authorities are opt-in."""
 
-    if not isinstance(document, dict) or document.get("schema") != REPORT_SCHEMA:
-        raise NegotiatedDifferentialError("the B-141 report schema is malformed")
-    if _GIT_COMMIT.fullmatch(document.get("source_commit", "")) is None:
-        raise NegotiatedDifferentialError("the B-141 source revision provenance is malformed")
-    recorded = document.get("run_id")
-    if not isinstance(recorded, str) or not _SHA256.fullmatch(recorded):
-        raise NegotiatedDifferentialError("the B-141 report run ID is malformed")
+    document = _validate_report_shape(document)
+    recorded = document["run_id"]
     body = {key: value for key, value in document.items() if key != "run_id"}
     if recorded != _digest(body):
         raise NegotiatedDifferentialError("the B-141 report fails its own self-digest")
-    configuration = document.get("configuration")
-    if not isinstance(configuration, dict):
-        raise NegotiatedDifferentialError("the B-141 configuration is malformed")
+    configuration = document["configuration"]
     _validate_configuration_shape(configuration)
-    config_digest = configuration.get("configuration_sha256")
+    config_digest = configuration["configuration_sha256"]
     without_digest = {
         key: value for key, value in configuration.items() if key != "configuration_sha256"
     }
@@ -1962,31 +2361,18 @@ def validate_report(
         raise NegotiatedDifferentialError(
             "the B-141 public report contains private identity fields"
         )
-    metrics = document.get("metrics")
-    if not isinstance(metrics, dict) or metrics.get("deterministic_replays") is not True:
-        raise NegotiatedDifferentialError("the B-141 deterministic replay claim is malformed")
-    # Repetition count and timing safety are part of the outer report contract even when a caller
-    # intentionally skips aggregate reconciliation for a lightweight source-provenance seam.
-    _validate_timing(document.get("timing"), require_exact_repetitions=True)
-    population = metrics.get("population")
-    if (
-        not isinstance(population, dict)
-        or set(population) != set(_B141_POPULATION_EXPECTED)
-        or any(type(value) is not int for value in population.values())
-        or population != _B141_POPULATION_EXPECTED
-    ):
-        raise NegotiatedDifferentialError("the B-141 population projection is malformed")
+    metrics = document["metrics"]
     if require_semantics:
-        _validate_population_binding_shape(document.get("population_binding"))
+        population = metrics["population"]
         bounds = _upper_bounds()
         control = _validate_aggregate(
-            metrics.get("control"), treatment=False, population=population, bounds=bounds
+            metrics["control"], treatment=False, population=population, bounds=bounds
         )
         treatment = _validate_aggregate(
-            metrics.get("treatment"), treatment=True, population=population, bounds=bounds
+            metrics["treatment"], treatment=True, population=population, bounds=bounds
         )
         _validate_differential(metrics, control, treatment)
-        baseline = metrics.get("reference_baseline")
+        baseline = metrics["reference_baseline"]
         if baseline != {
             "artifact": REFERENCE_ARTIFACT.relative_to(ROOT).as_posix(),
             "artifact_run_id": B088_RUN_ID,
@@ -2081,7 +2467,7 @@ def main() -> int:
     commitment_output: Path | None = None
     captured_commit: str | None = None
     runner_digest: str | None = None
-    allowed_dirty = {SCRIPT_PATH}
+    allowed_dirty: set[str] = set()
     if arguments.write:
         output = _new_output_target(arguments.output)
         try:
