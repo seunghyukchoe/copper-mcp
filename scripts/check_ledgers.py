@@ -153,12 +153,20 @@ REPLAY_SUB_ENTRIES: dict[tuple[str, str], str] = {
     ): "B-035 replayed from the implementation commit",
     (
         "docs/ledgers/benchmark-ledger.md",
+        "#### B-015 — current closed editor-context contract replay",
+    ): "B-015 replayed after the editor-context request contract became closed",
+    (
+        "docs/ledgers/benchmark-ledger.md",
         "#### B-022 — complete workspace-preservation replay",
     ): "B-022 replayed with complete workspace-preservation evidence",
     (
         "docs/ledgers/benchmark-ledger.md",
         "#### B-026 — live layered CAS and client-closure replay",
     ): "B-026 replayed for live CAS and client closure",
+    (
+        "docs/ledgers/benchmark-ledger.md",
+        "#### B-026 — current opaque-session contract replay",
+    ): "B-026 replayed after the live session revision wire contract changed",
     (
         "docs/ledgers/benchmark-ledger.md",
         "#### B-027 — layered topology verifier replay",
