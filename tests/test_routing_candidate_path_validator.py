@@ -25,11 +25,14 @@ from copper_mcp.board_ir import (
 )
 from copper_mcp.routing.astar import canonical_candidate_bytes
 from copper_mcp.routing.candidate_path_validator import (
+    EXTERNAL_PATCH_TREE_ORDERING,
     CandidatePathValidationFailure,
+    validate_candidate_patch,
     validate_candidate_path,
     validate_candidate_path_with_exact_off_grid_obstacle_fallback,
 )
 from copper_mcp.routing.contracts import (
+    BATCHED_ONE_STEINER_ORDERING,
     SINGLE_PATH_ORDERING,
     AStarSettings,
     RouteCandidate,
@@ -75,9 +78,16 @@ def _pad(identifier: str, net_id: str, point: PointNM) -> Pad:
     )
 
 
-def _snapshot(*, foreign_segment: bool = False, same_net_stub: bool = False) -> object:
+def _snapshot(
+    *,
+    foreign_segment: bool = False,
+    same_net_stub: bool = False,
+    multipin: bool = False,
+) -> object:
     left = _pad("pad:route-left", ROUTE_NET, PointNM(1_000_000, 5_000_000))
+    middle = _pad("pad:route-middle", ROUTE_NET, PointNM(5_000_000, 5_000_000))
     right = _pad("pad:route-right", ROUTE_NET, PointNM(9_000_000, 5_000_000))
+    route_pads = (left, middle, right) if multipin else (left, right)
     signal = NetClass(
         id="class:signal",
         name="Signal",
@@ -139,10 +149,10 @@ def _snapshot(*, foreign_segment: bool = False, same_net_stub: bool = False) -> 
                 origin=left.center,
                 rotation_udeg=0,
                 side=FootprintSide.FRONT,
-                pad_ids=(left.id, right.id),
+                pad_ids=tuple(pad.id for pad in route_pads),
             ),
         ),
-        pads=(left, right),
+        pads=route_pads,
         segments=segments,
     )
     return make_snapshot(content)
@@ -200,6 +210,70 @@ def _candidate(request: RouteRequest, vertices: tuple[PointNM, ...]) -> RouteCan
     )
 
 
+def _tree_candidate(
+    request: RouteRequest,
+    paths: tuple[RoutePath, ...],
+    *,
+    ordering_policy: str = BATCHED_ONE_STEINER_ORDERING,
+) -> RouteCandidate:
+    patch = RoutePatch(net_id=ROUTE_NET, layer_id=LAYER, width_nm=200_000, paths=paths)
+    cost = RouteCost(
+        length_nm=patch.length_nm,
+        bend_count=patch.bend_count,
+        bend_cost_nm=patch.bend_count * request.settings.bend_penalty_nm,
+        proximity_steps=0,
+        proximity_cost_nm=0,
+        via_cost_nm=0,
+        total_cost_nm=patch.length_nm + patch.bend_count * request.settings.bend_penalty_nm,
+    )
+    candidate = RouteCandidate(
+        candidate_id=f"sha256:{'0' * 64}",
+        base_revision=request.board_revision,
+        start_pad_id="pad:route-left",
+        end_pad_id="pad:route-right",
+        patch=patch,
+        cost=cost,
+        metrics=RouteMetrics(
+            hard_internal_violations=0,
+            unrouted_connections=0,
+            vias=0,
+            wire_length_nm=patch.length_nm,
+            expanded_states=8,
+            peak_frontier_states=4,
+            obstacle_checks=0,
+        ),
+        settings=request.settings,
+        router_version="candidate-tree-validator-test-v1",
+        policy="coordinator-derived-tree-test-v1",
+        seed=request.seed,
+        pad_count=3,
+        ordering_policy=ordering_policy,
+    )
+    return _with_candidate_identity(candidate)
+
+
+def _rebuild_tree(
+    candidate: RouteCandidate,
+    paths: tuple[RoutePath, ...],
+) -> RouteCandidate:
+    patch = replace(candidate.patch, paths=paths)
+    cost = replace(
+        candidate.cost,
+        length_nm=patch.length_nm,
+        bend_count=patch.bend_count,
+        bend_cost_nm=patch.bend_count * candidate.settings.bend_penalty_nm,
+        total_cost_nm=patch.length_nm + patch.bend_count * candidate.settings.bend_penalty_nm,
+    )
+    return _with_candidate_identity(
+        replace(
+            candidate,
+            patch=patch,
+            cost=cost,
+            metrics=replace(candidate.metrics, wire_length_nm=patch.length_nm),
+        )
+    )
+
+
 def _with_candidate_identity(candidate: RouteCandidate) -> RouteCandidate:
     unsigned = replace(candidate, candidate_id=f"sha256:{'0' * 64}")
     return replace(
@@ -217,6 +291,368 @@ def _validate(snapshot: object, request: RouteRequest, candidate: RouteCandidate
         max_path_edges=64,
         **kwargs,
     )
+
+
+def _tree_inputs() -> tuple[object, RouteRequest, RouteCandidate, RouteCandidate]:
+    snapshot = _snapshot(multipin=True)
+    request = _request(snapshot)
+    middle = PointNM(5_000_000, 5_000_000)
+    untouched = RoutePath((middle, PointNM(9_000_000, 5_000_000)))
+    original = _tree_candidate(
+        request,
+        (
+            RoutePath((PointNM(1_000_000, 5_000_000), middle)),
+            untouched,
+        ),
+    )
+    reconstructed = _rebuild_tree(
+        original,
+        (
+            RoutePath(
+                (
+                    PointNM(1_000_000, 5_000_000),
+                    PointNM(1_000_000, 4_000_000),
+                    PointNM(5_000_000, 4_000_000),
+                    middle,
+                )
+            ),
+            untouched,
+        ),
+    )
+    return snapshot, request, original, reconstructed
+
+
+def _validate_tree(
+    snapshot: object,
+    request: RouteRequest,
+    original: RouteCandidate,
+    reconstructed: RouteCandidate,
+    **kwargs: object,
+):
+    return validator_module._validate_negotiated_candidate_patch(
+        snapshot,
+        request,
+        reconstructed,
+        original,
+        selected_path_index=0,
+        max_obstacle_checks=10_000,
+        max_path_edges=64,
+        **kwargs,
+    )
+
+
+def test_public_candidate_patch_contract_remains_external_ordering_only() -> None:
+    snapshot, request, original, _ = _tree_inputs()
+    external = _with_candidate_identity(
+        replace(original, ordering_policy=EXTERNAL_PATCH_TREE_ORDERING)
+    )
+
+    accepted = validate_candidate_patch(
+        snapshot,
+        request,
+        external,
+        max_obstacle_checks=10_000,
+        max_path_edges=64,
+    )
+    internal = validate_candidate_patch(
+        snapshot,
+        request,
+        original,
+        max_obstacle_checks=10_000,
+        max_path_edges=64,
+    )
+
+    assert accepted.accepted
+    assert accepted.edge_checks == 8
+    assert internal.failure is CandidatePathValidationFailure.INVALID_CANDIDATE
+    assert internal.edge_checks == internal.obstacle_checks == 0
+
+
+def test_private_negotiated_tree_accepts_one_bound_path_replacement_repeatably() -> None:
+    snapshot, request, original, reconstructed = _tree_inputs()
+
+    results = tuple(_validate_tree(snapshot, request, original, reconstructed) for _ in range(3))
+
+    assert results == (results[0],) * 3
+    assert results[0].accepted
+    assert results[0].edge_checks == 28
+    assert reconstructed.patch.paths[1] == original.patch.paths[1]
+    assert reconstructed.patch.paths[0] != original.patch.paths[0]
+
+
+def test_private_negotiated_tree_preflights_one_shared_exact_edge_ledger(
+    monkeypatch,
+) -> None:
+    snapshot, request, original, reconstructed = _tree_inputs()
+    topology_expansions = 0
+    original_unit_edge_core = validator_module._unit_edge_core
+
+    def counted_unit_edge_core(*args: object, **kwargs: object):
+        nonlocal topology_expansions
+        topology_expansions += 1
+        return original_unit_edge_core(*args, **kwargs)
+
+    monkeypatch.setattr(validator_module, "_unit_edge_core", counted_unit_edge_core)
+    refused = validator_module._validate_negotiated_candidate_patch(
+        snapshot,
+        request,
+        reconstructed,
+        original,
+        selected_path_index=0,
+        max_obstacle_checks=10_000,
+        max_path_edges=27,
+    )
+
+    assert refused.failure is CandidatePathValidationFailure.BUDGET_EXHAUSTED
+    assert refused.edge_checks == refused.obstacle_checks == 0
+    assert topology_expansions == 0
+
+    accepted = validator_module._validate_negotiated_candidate_patch(
+        snapshot,
+        request,
+        reconstructed,
+        original,
+        selected_path_index=0,
+        max_obstacle_checks=10_000,
+        max_path_edges=28,
+    )
+
+    assert accepted.accepted
+    assert accepted.edge_checks == 28
+    assert topology_expansions == 18
+
+
+def test_private_negotiated_tree_charges_contacts_and_stops_mid_scan(monkeypatch) -> None:
+    snapshot, request, original, reconstructed = _tree_inputs()
+    contact_checks = 0
+    cancel_after_first = False
+    cancel_now = False
+    original_charge = validator_module._charge_tree_contact_predicate
+
+    def counted_charge(work: object) -> None:
+        nonlocal contact_checks, cancel_now
+        contact_checks += 1
+        original_charge(work)
+        if cancel_after_first and contact_checks == 1:
+            cancel_now = True
+
+    monkeypatch.setattr(
+        validator_module,
+        "_charge_tree_contact_predicate",
+        counted_charge,
+    )
+    accepted = _validate_tree(snapshot, request, original, reconstructed)
+
+    assert accepted.accepted
+    assert contact_checks > 0
+    assert accepted.obstacle_checks >= contact_checks
+    full_contact_checks = contact_checks
+
+    contact_checks = 0
+    cancel_after_first = True
+    cancelled = _validate_tree(
+        snapshot,
+        request,
+        original,
+        reconstructed,
+        cancelled=lambda: cancel_now,
+    )
+
+    assert cancelled.failure is CandidatePathValidationFailure.CANCELLED
+    assert cancelled.edge_checks == 18
+    assert cancelled.obstacle_checks > 0
+    assert contact_checks == 2
+    assert contact_checks < full_contact_checks
+
+
+def test_private_negotiated_tree_rejects_a_new_contact_cycle_with_an_untouched_path() -> None:
+    snapshot, request, original, _ = _tree_inputs()
+    looped = _rebuild_tree(
+        original,
+        (
+            RoutePath(
+                (
+                    PointNM(1_000_000, 5_000_000),
+                    PointNM(1_000_000, 6_000_000),
+                    PointNM(7_000_000, 6_000_000),
+                    PointNM(7_000_000, 4_000_000),
+                    PointNM(5_000_000, 4_000_000),
+                    PointNM(5_000_000, 5_000_000),
+                )
+            ),
+            original.patch.paths[1],
+        ),
+    )
+
+    result = _validate_tree(snapshot, request, original, looped)
+
+    assert result.failure is CandidatePathValidationFailure.INVALID_CANDIDATE
+    assert result.edge_checks == 22
+    assert result.obstacle_checks > 0
+
+
+def test_private_negotiated_tree_binds_all_non_derived_candidate_state() -> None:
+    snapshot, request, original, reconstructed = _tree_inputs()
+    altered_untouched = _rebuild_tree(
+        reconstructed,
+        (
+            reconstructed.patch.paths[0],
+            RoutePath(
+                (
+                    PointNM(5_000_000, 5_000_000),
+                    PointNM(5_000_000, 6_000_000),
+                    PointNM(9_000_000, 6_000_000),
+                    PointNM(9_000_000, 5_000_000),
+                )
+            ),
+        ),
+    )
+    dropped_untouched = _rebuild_tree(reconstructed, (reconstructed.patch.paths[0],))
+    mutations = (
+        _with_candidate_identity(replace(reconstructed, base_revision=f"sha256:{'e' * 64}")),
+        _with_candidate_identity(
+            replace(reconstructed, patch=replace(reconstructed.patch, net_id=FOREIGN_NET))
+        ),
+        _with_candidate_identity(
+            replace(reconstructed, patch=replace(reconstructed.patch, layer_id="layer:B.Cu"))
+        ),
+        _with_candidate_identity(
+            replace(reconstructed, patch=replace(reconstructed.patch, width_nm=300_000))
+        ),
+        _with_candidate_identity(replace(reconstructed, start_pad_id="pad:route-middle")),
+        _with_candidate_identity(replace(reconstructed, end_pad_id="pad:route-middle")),
+        _with_candidate_identity(replace(reconstructed, pad_count=4)),
+        _with_candidate_identity(
+            replace(reconstructed, settings=replace(reconstructed.settings, max_expansions=999))
+        ),
+        _with_candidate_identity(replace(reconstructed, seed=8)),
+        _with_candidate_identity(replace(reconstructed, router_version="forged-router-v1")),
+        _with_candidate_identity(replace(reconstructed, policy="forged-policy-v1")),
+        _with_candidate_identity(
+            replace(
+                reconstructed,
+                cost=replace(
+                    reconstructed.cost,
+                    proximity_steps=reconstructed.cost.proximity_steps + 1,
+                ),
+            )
+        ),
+        _with_candidate_identity(
+            replace(
+                reconstructed,
+                metrics=replace(
+                    reconstructed.metrics,
+                    expanded_states=reconstructed.metrics.expanded_states + 1,
+                ),
+            )
+        ),
+        _with_candidate_identity(
+            replace(reconstructed, ordering_policy=EXTERNAL_PATCH_TREE_ORDERING)
+        ),
+        _with_candidate_identity(replace(reconstructed, fill_binding=f"sha256:{'c' * 64}")),
+        dropped_untouched,
+        altered_untouched,
+    )
+
+    for mutation in mutations:
+        result = _validate_tree(snapshot, request, original, mutation)
+        assert result.failure is CandidatePathValidationFailure.INVALID_CANDIDATE
+        assert result.edge_checks == result.obstacle_checks == 0
+
+
+def test_private_negotiated_tree_rejects_disconnected_complete_topology() -> None:
+    snapshot, request, original, reconstructed = _tree_inputs()
+    disconnected = _rebuild_tree(
+        reconstructed,
+        (
+            RoutePath((PointNM(2_000_000, 2_000_000), PointNM(3_000_000, 2_000_000))),
+            reconstructed.patch.paths[1],
+        ),
+    )
+
+    result = _validate_tree(snapshot, request, original, disconnected)
+
+    assert result.failure is CandidatePathValidationFailure.INFEASIBLE
+    assert result.edge_checks == 18
+
+
+def test_private_negotiated_tree_refuses_forged_or_stale_identities() -> None:
+    snapshot, request, original, reconstructed = _tree_inputs()
+    forged_original = replace(original, candidate_id=f"sha256:{'f' * 64}")
+    forged_reconstructed = replace(reconstructed, candidate_id=f"sha256:{'f' * 64}")
+
+    for checked_original, checked_reconstructed in (
+        (forged_original, reconstructed),
+        (original, forged_reconstructed),
+    ):
+        forged = _validate_tree(
+            snapshot,
+            request,
+            checked_original,
+            checked_reconstructed,
+        )
+        assert forged.failure is CandidatePathValidationFailure.INVALID_CANDIDATE
+        assert forged.edge_checks == forged.obstacle_checks == 0
+
+    stale_revision = f"sha256:{'e' * 64}"
+    stale_request = replace(request, board_revision=stale_revision)
+    stale_original = _with_candidate_identity(replace(original, base_revision=stale_revision))
+    stale_reconstructed = _with_candidate_identity(
+        replace(reconstructed, base_revision=stale_revision)
+    )
+    stale = _validate_tree(
+        snapshot,
+        stale_request,
+        stale_original,
+        stale_reconstructed,
+    )
+    assert stale.failure is CandidatePathValidationFailure.STALE_REVISION
+    assert stale.edge_checks == stale.obstacle_checks == 0
+
+
+def test_private_negotiated_tree_honours_budget_and_cancellation_before_identity(
+    monkeypatch,
+) -> None:
+    snapshot, request, original, reconstructed = _tree_inputs()
+
+    def identity_must_not_run(_: RouteCandidate) -> None:
+        raise AssertionError("preflight refusals must not hash candidate trees")
+
+    monkeypatch.setattr(validator_module, "verify_candidate_id", identity_must_not_run)
+    budget = validator_module._validate_negotiated_candidate_patch(
+        snapshot,
+        request,
+        reconstructed,
+        original,
+        selected_path_index=0,
+        max_obstacle_checks=10_000,
+        max_path_edges=1,
+    )
+    cancelled = _validate_tree(
+        snapshot,
+        request,
+        original,
+        reconstructed,
+        cancelled=lambda: True,
+    )
+
+    assert budget.failure is CandidatePathValidationFailure.BUDGET_EXHAUSTED
+    assert budget.edge_checks == budget.obstacle_checks == 0
+    assert cancelled.failure is CandidatePathValidationFailure.CANCELLED
+    assert cancelled.edge_checks == cancelled.obstacle_checks == 0
+
+    for selected_path_index in (True, -1, 2):
+        invalid_index = validator_module._validate_negotiated_candidate_patch(
+            snapshot,
+            request,
+            reconstructed,
+            original,
+            selected_path_index=selected_path_index,
+            max_obstacle_checks=10_000,
+            max_path_edges=64,
+        )
+        assert invalid_index.failure is CandidatePathValidationFailure.INVALID_CANDIDATE
+        assert invalid_index.edge_checks == invalid_index.obstacle_checks == 0
 
 
 def test_candidate_path_validator_accepts_a_valid_board_ir_detour_repeatably() -> None:

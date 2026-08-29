@@ -14,24 +14,34 @@ All notable changes are documented here. The format follows
   pad connectivity, trusted endpoint binding, deterministic replay and the mandatory whole-set
   physical-clearance gate remain atomic. Absolute resource keys are still a congestion heuristic,
   so a shifted-phase crossing invisible to that ledger is caught by the physical gate rather than
-  published. Local exact repair intentionally remains two-pad-only. Its retained path now projects
-  a shifted-phase conflicting segment onto every adjacent target-lattice row or column before
-  width-and-clearance expansion, so differing request origins cannot silently disable provenance;
-  every target vertex remains strictly bound to the target's own lattice and aligned legacy
-  provenance remains byte-identical. The custom-router seam also
-  rejects and replay-compares `fill_binding`, preventing unverified fill provenance from being
-  attached to a re-hashed candidate. B-140 confirms the intended admission change on the fixed
-  B-088 population: **16 of 20** boards are admitted and all 16 reach a complete-allocation
-  physical-clearance trigger, while the other four cannot form a two-request envelope. None of
-  those 16 boards contains a violating two-pad candidate eligible for the current repair
-  transaction, so repair is never enabled and negotiated completion remains zero. The next safe
-  capability boundary is therefore a bounded multi-pin repair target, provenance and topology
-  contract, not tuning or a repair-effectiveness claim (`ADR-0126`, `D-233`, `D-234`, `R-184`,
-  `SEC-169`, `SEC-170`, `B-140`, issue #90). Reproducible mutation runs re-anchor the seven
-  historical census guards at 7/7 killed and independently kill deletion of either the
-  violating-net or two-pin target conjunct at 2/2. A separate shifted-repair projection spec kills
-  all 5/5 floor/ceiling cell, bounds, restored conflict-grid-congruence and weakened target-grid
-  regressions through both the provenance and coordinator seams.
+  published. The custom-router seam also rejects and replay-compares `fill_binding`, preventing
+  unverified fill provenance from being attached to a re-hashed candidate. B-140 confirms the
+  intended admission change on the fixed B-088 population: **16 of 20** boards are admitted and
+  all 16 reach a complete-allocation physical-clearance trigger, while the other four cannot form
+  a two-request envelope. None of those 16 boards contains a violating two-pad target, which names
+  the capability this release now adds rather than a quality result (`ADR-0126`, `D-233`, `D-234`,
+  `R-184`, `SEC-169`, `SEC-170`, `B-140`, issue #90).
+- Opt-in negotiated local repair can now replace exactly one **physically responsible branch** of
+  a 3–32-pad candidate. The coordinator preflights and charges exact path-pair responsibility work,
+  derives private capability-bound provenance from the first deterministic pair that reproduces
+  the whole-set violation, blocks every unselected target branch outside its existing attachment
+  endpoints, and preserves every unselected path and non-derived candidate field. A private gate
+  then binds inherited proximity/search accounting, preflights one exact shared edge-work ledger,
+  charges every topology/contact predicate with immediate cancellation, rejects duplicate edges,
+  new same-net contacts and cycles, validates every Board IR edge and complete connectivity, and
+  recomputes the exact grown-route final-check bound before the ordinary whole-set physical gate.
+  Failed or cancelled Board IR projection retains every consumed obstacle check in coordinator
+  accounting. Eligible two-pad
+  targets retain precedence and their prior identities. Topology, accounting, budget, validator,
+  cancellation and final-clearance refusals discard the reconstructed candidate and all repair
+  evidence atomically. No MCP, CLI, schema, persistence, job, external-document, apply, editor or
+  board-write surface changes. Synthetic 3-pad and 32-pad fixtures prove the capability; B-140
+  itself ran without repair, so #90 remains open for a predeclared repair-enabled held-out
+  differential (`ADR-0127`, `D-235`, `R-185`, `SEC-171`). The reproducible mutation harness kills
+  27/27 attempts to weaken responsibility, provenance, untouched-path/topology preservation,
+  accounting, shared edge/contact work, failed-projection accounting, original or grown-route work
+  gates, cancellation or final physical publication,
+  with zero survivors.
 - Board IR converts boards whose outline is drawn with `Edge.Cuts` **arcs** -- which is what a
   rounded corner is, and what eight of ten licence-clean public boards stopped on. A root
   `gr_arc` is now an outline edge chained with `gr_line` segments into the same single closed

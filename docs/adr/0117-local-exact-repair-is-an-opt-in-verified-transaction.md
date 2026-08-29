@@ -5,6 +5,7 @@
 - **Related:** [ADR-0055](0055-bounded-negotiated-congestion.md),
   [ADR-0064](0064-policy-bound-initial-negotiated-order.md),
   [ADR-0112](0112-external-route-candidates-enter-through-a-disposer.md),
+  [ADR-0127](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md),
   [integration gate](../research/exact-local-repair-negotiated-integration-gate.md), issue #90
 
 ## Context

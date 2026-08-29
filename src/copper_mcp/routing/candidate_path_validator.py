@@ -20,6 +20,7 @@ from copper_mcp.routing.astar import (
     _edge_is_legal,
     _ExpectedFailureError,
     _prepare,
+    _rectangles_touch,
     _WorkBudget,
     verify_candidate_id,
 )
@@ -42,6 +43,10 @@ _CANCELLATION_CADENCE: Final = 64
 _MAX_RAW_TEXT_LENGTH: Final = 512
 _MAX_RAW_INTEGER: Final = (1 << 53) - 1
 EXTERNAL_PATCH_TREE_ORDERING: Final = "external-patch-tree-v1"
+
+_LatticeNode = tuple[int, int]
+_LatticeEdge = tuple[_LatticeNode, _LatticeNode]
+_TrackCore = tuple[int, int, int, int]
 
 
 class CandidatePathValidationFailure(StrEnum):
@@ -118,6 +123,16 @@ class CandidatePathValidationResult:
         return None if self.failure is None else messages[self.failure]
 
 
+@dataclass(frozen=True, slots=True)
+class _TreeUnitTopology:
+    """One bounded unit-lattice view used only to bind a repaired tree's topology."""
+
+    nodes_by_path: tuple[frozenset[_LatticeNode], ...]
+    path_indices_by_node: dict[_LatticeNode, frozenset[int]]
+    edges_by_path: tuple[frozenset[_LatticeEdge], ...]
+    edge_cores_by_path: tuple[tuple[tuple[_LatticeEdge, _TrackCore], ...], ...]
+
+
 @dataclass(slots=True)
 class _StopChecks:
     """Coordinator-owned cooperative stop boundary with deterministic terminal precedence."""
@@ -137,6 +152,24 @@ class _StopChecks:
 
     def __call__(self) -> bool:
         return self.check() is not None
+
+
+@dataclass(slots=True)
+class _TreeEdgeWorkLedger:
+    """One private, exact work ledger shared by both tree views and final edge validation."""
+
+    limit: int
+    stop: _StopChecks
+    edge_checks: int = 0
+
+    def charge(self) -> CandidatePathValidationFailure | None:
+        stopped = self.stop.check()
+        if stopped is not None:
+            return stopped
+        if self.edge_checks >= self.limit:
+            return CandidatePathValidationFailure.BUDGET_EXHAUSTED
+        self.edge_checks += 1
+        return None
 
 
 def _callback_true(callback: CancellationCheck | None) -> bool:
@@ -702,6 +735,723 @@ def _candidate_track_cores(candidate: RouteCandidate) -> tuple[tuple[int, int, i
     return tuple(cores)
 
 
+def _candidate_patch_inputs_are_valid(
+    snapshot: object,
+    candidate: object,
+    *,
+    max_obstacle_checks: object,
+    max_path_edges: object,
+    cancelled: object,
+    deadline_check: object,
+) -> bool:
+    """Return whether the multi-path validator's public scalar boundary is well formed."""
+
+    return (
+        type(snapshot) is BoardIRSnapshot
+        and type(candidate) is RouteCandidate
+        and (cancelled is None or callable(cancelled))
+        and (deadline_check is None or callable(deadline_check))
+        and not isinstance(max_obstacle_checks, bool)
+        and isinstance(max_obstacle_checks, int)
+        and 1 <= max_obstacle_checks <= _MAX_OBSTACLE_CHECKS
+        and not isinstance(max_path_edges, bool)
+        and isinstance(max_path_edges, int)
+        and 1 <= max_path_edges <= _MAX_EDGE_CHECKS
+    )
+
+
+def _validate_candidate_patch_core(
+    snapshot: object,
+    request: object,
+    candidate: object,
+    *,
+    max_obstacle_checks: object,
+    max_path_edges: object,
+    cancelled: object = None,
+    deadline_check: object = None,
+    expected_ordering_policy: str,
+    _original_candidate: RouteCandidate | None = None,
+    _selected_path_index: int | None = None,
+    _stop: _StopChecks | None = None,
+) -> CandidatePathValidationResult:
+    """Validate a multi-path tree under one caller-selected, closed ordering contract.
+
+    Public callers pass only :data:`EXTERNAL_PATCH_TREE_ORDERING`; the private negotiated wrapper
+    passes the already identity-verified original candidate's ordering.  The geometry, Board-IR,
+    connectivity and work-budget authority below is shared exactly between the two lanes.
+    """
+
+    if not _candidate_patch_inputs_are_valid(
+        snapshot,
+        candidate,
+        max_obstacle_checks=max_obstacle_checks,
+        max_path_edges=max_path_edges,
+        cancelled=cancelled,
+        deadline_check=deadline_check,
+    ):
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_REQUEST)
+    if (_original_candidate is None) != (_selected_path_index is None):
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+    checked_snapshot = cast(BoardIRSnapshot, snapshot)
+    checked_candidate = cast(RouteCandidate, candidate)
+    checked_max_obstacle_checks = cast(int, max_obstacle_checks)
+    checked_max_path_edges = cast(int, max_path_edges)
+    stop = _stop or _StopChecks(
+        cancelled=cast(CancellationCheck | None, cancelled),
+        deadline_check=cast(CancellationCheck | None, deadline_check),
+    )
+    stopped = stop.check()
+    if stopped is not None:
+        return _result(None, 0, stopped)
+    checked_request = _canonical_request(request, stop)
+    if checked_request is None:
+        return _result(None, 0, stop.observed or CandidatePathValidationFailure.INVALID_REQUEST)
+    if (
+        checked_max_obstacle_checks > checked_request.settings.max_obstacle_checks
+        or checked_max_path_edges > checked_request.settings.max_grid_nodes
+        or checked_candidate.base_revision != checked_request.board_revision
+        or checked_candidate.patch.net_id != checked_request.net_id
+        or checked_candidate.patch.layer_id != checked_request.layer_id
+        or checked_candidate.settings != checked_request.settings
+        or checked_candidate.seed != checked_request.seed
+        or checked_candidate.pad_count <= 2
+        or checked_candidate.ordering_policy != expected_ordering_policy
+        or checked_candidate.fill_binding is not None
+        or not checked_candidate.patch.paths
+        or checked_candidate.metrics.vias != 0
+    ):
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+
+    compressed_edges = sum(len(path.vertices) - 1 for path in checked_candidate.patch.paths)
+    if compressed_edges > checked_max_path_edges:
+        return _result(None, 0, CandidatePathValidationFailure.BUDGET_EXHAUSTED)
+    tree_edge_work: _TreeEdgeWorkLedger | None = None
+    if _original_candidate is not None and _selected_path_index is not None:
+        required_tree_edge_work = _negotiated_tree_edge_work(
+            _original_candidate,
+            checked_candidate,
+            step=checked_request.settings.grid_step_nm,
+            maximum=checked_max_path_edges,
+            stop=stop,
+        )
+        if isinstance(required_tree_edge_work, CandidatePathValidationFailure):
+            return _result(None, 0, required_tree_edge_work)
+        tree_edge_work = _TreeEdgeWorkLedger(required_tree_edge_work, stop)
+    bounded_request = replace(
+        checked_request,
+        settings=replace(
+            checked_request.settings,
+            max_obstacle_checks=checked_max_obstacle_checks,
+        ),
+    )
+    work = _WorkBudget(settings=bounded_request.settings, cancelled=stop)
+    try:
+        problem = _prepare(checked_snapshot, bounded_request, work)
+    except _ExpectedFailureError as error:
+        failure = _failure_from_router(error, stop)
+        if (
+            tree_edge_work is not None
+            and error.code is RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED
+        ):
+            failure = CandidatePathValidationFailure.BUDGET_EXHAUSTED
+        return _result(work, 0, failure)
+    except Exception:
+        return _result(work, 0, CandidatePathValidationFailure.INVALID_REQUEST)
+    if (
+        checked_candidate.patch.width_nm != problem.width_nm
+        or checked_candidate.start_pad_id != problem.start_pad.id
+        or checked_candidate.end_pad_id != problem.end_pad.id
+        or checked_candidate.pad_count != problem.pad_count
+        or len(problem.components) < 2
+    ):
+        return _result(work, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+
+    step = checked_request.settings.grid_step_nm
+    origin = problem.start_pad.center
+    total_edges = 0
+    edge_checks = 0
+    try:
+        if _original_candidate is not None and _selected_path_index is not None:
+            assert tree_edge_work is not None
+            topology_failure = _reconstructed_tree_topology_failure(
+                _original_candidate,
+                checked_candidate,
+                _selected_path_index,
+                problem.components,
+                origin=origin,
+                step=step,
+                edge_work=tree_edge_work,
+                work=work,
+            )
+            edge_checks = tree_edge_work.edge_checks
+            if topology_failure is not None:
+                return _result(work, edge_checks, topology_failure)
+        for path in checked_candidate.patch.paths:
+            seen = {path.vertices[0]}
+            for point in path.vertices:
+                if (point.x - origin.x) % step != 0 or (point.y - origin.y) % step != 0:
+                    return _result(
+                        work, edge_checks, CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
+                    )
+            for start, end in pairwise(path.vertices):
+                delta_x = (end.x - start.x) // step
+                delta_y = (end.y - start.y) // step
+                if tree_edge_work is None:
+                    total_edges += abs(delta_x) + abs(delta_y)
+                    if total_edges > checked_max_path_edges:
+                        return _result(
+                            work, edge_checks, CandidatePathValidationFailure.BUDGET_EXHAUSTED
+                        )
+                unit_x = 0 if delta_x == 0 else (1 if delta_x > 0 else -1)
+                unit_y = 0 if delta_y == 0 else (1 if delta_y > 0 else -1)
+                current = start
+                for _ in range(abs(delta_x) + abs(delta_y)):
+                    if tree_edge_work is None:
+                        stopped = stop.check()
+                        if stopped is not None:
+                            return _result(work, edge_checks, stopped)
+                    else:
+                        tree_failure = tree_edge_work.charge()
+                        edge_checks = tree_edge_work.edge_checks
+                        if tree_failure is not None:
+                            return _result(work, edge_checks, tree_failure)
+                    next_point = PointNM(current.x + unit_x * step, current.y + unit_y * step)
+                    if next_point in seen:
+                        return _result(
+                            work, edge_checks, CandidatePathValidationFailure.INVALID_CANDIDATE
+                        )
+                    seen.add(next_point)
+                    if not _edge_is_legal(current, next_point, problem, work):
+                        return _result(
+                            work,
+                            edge_checks + (1 if tree_edge_work is None else 0),
+                            CandidatePathValidationFailure.OBSTACLE_VIOLATION,
+                        )
+                    if tree_edge_work is None:
+                        edge_checks += 1
+                    current = next_point
+
+        cores: list[tuple[int, int, int, int]] = []
+        component_offsets: list[int] = []
+        for component in problem.components:
+            component_offsets.append(len(cores))
+            cores.extend(component)
+        route_offset = len(cores)
+        cores.extend(_candidate_track_cores(checked_candidate))
+        roots = _component_roots(tuple(cores), work)
+        accepted_root = roots[component_offsets[0]]
+        if any(roots[offset] != accepted_root for offset in component_offsets) or any(
+            root != accepted_root for root in roots[route_offset:]
+        ):
+            return _result(work, edge_checks, CandidatePathValidationFailure.INFEASIBLE)
+    except _ExpectedFailureError as error:
+        if tree_edge_work is not None:
+            edge_checks = tree_edge_work.edge_checks
+        failure = _failure_from_router(error, stop)
+        if (
+            tree_edge_work is not None
+            and error.code is RouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED
+        ):
+            failure = CandidatePathValidationFailure.BUDGET_EXHAUSTED
+        return _result(work, edge_checks, failure)
+    except Exception:
+        return _result(work, edge_checks, CandidatePathValidationFailure.INVALID_CANDIDATE)
+    return _result(work, edge_checks, stop.check())
+
+
+def _candidate_tree_compressed_edges(
+    candidate: RouteCandidate,
+    max_path_edges: int,
+) -> int | None:
+    """Cheaply bound identity work for one internally reconstructed tree."""
+
+    try:
+        if type(candidate.patch) is not RoutePatch or type(candidate.patch.paths) is not tuple:
+            return None
+        if not candidate.patch.paths:
+            return None
+        if len(candidate.patch.paths) > max_path_edges:
+            return max_path_edges + 1
+        total = 0
+        for path in candidate.patch.paths:
+            if (
+                type(path) is not RoutePath
+                or type(path.vertices) is not tuple
+                or len(path.vertices) < 2
+            ):
+                return None
+            total += len(path.vertices) - 1
+            if total > max_path_edges:
+                return total
+        return total
+    except Exception:
+        return None
+
+
+def _tree_unit_edge_count(
+    candidate: RouteCandidate,
+    *,
+    step: int,
+    stop: _StopChecks,
+) -> int | CandidatePathValidationFailure:
+    """Return one tree's exact unit-edge population without expanding any route geometry."""
+
+    stopped = stop.check()
+    if stopped is not None:
+        return stopped
+    total = 0
+    compressed_edges = 0
+    for path in candidate.patch.paths:
+        for start, end in pairwise(path.vertices):
+            compressed_edges += 1
+            if compressed_edges % _CANCELLATION_CADENCE == 0:
+                stopped = stop.check()
+                if stopped is not None:
+                    return stopped
+            delta_x_nm = end.x - start.x
+            delta_y_nm = end.y - start.y
+            if (
+                delta_x_nm % step
+                or delta_y_nm % step
+                or (delta_x_nm != 0 and delta_y_nm != 0)
+                or (delta_x_nm == 0 and delta_y_nm == 0)
+            ):
+                return CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
+            total += (abs(delta_x_nm) + abs(delta_y_nm)) // step
+    return stop.check() or total
+
+
+def _negotiated_tree_edge_work(
+    original: RouteCandidate,
+    reconstructed: RouteCandidate,
+    *,
+    step: int,
+    maximum: int,
+    stop: _StopChecks,
+) -> int | CandidatePathValidationFailure:
+    """Preflight both topology expansions and the reconstructed Board-IR edge pass together."""
+
+    original_edges = _tree_unit_edge_count(original, step=step, stop=stop)
+    if isinstance(original_edges, CandidatePathValidationFailure):
+        return original_edges
+    reconstructed_edges = _tree_unit_edge_count(reconstructed, step=step, stop=stop)
+    if isinstance(reconstructed_edges, CandidatePathValidationFailure):
+        return reconstructed_edges
+    required = original_edges + 2 * reconstructed_edges
+    if required > maximum:
+        return CandidatePathValidationFailure.BUDGET_EXHAUSTED
+    return required
+
+
+def _unit_edge_core(
+    edge: _LatticeEdge,
+    *,
+    origin: PointNM,
+    step: int,
+    half_width_nm: int,
+) -> _TrackCore:
+    """Return the exact conservative-inside core of one canonical unit edge."""
+
+    first, second = edge
+    first_x = origin.x + first[0] * step
+    first_y = origin.y + first[1] * step
+    second_x = origin.x + second[0] * step
+    second_y = origin.y + second[1] * step
+    if first_y == second_y:
+        return (
+            min(first_x, second_x),
+            first_y - half_width_nm,
+            max(first_x, second_x),
+            first_y + half_width_nm,
+        )
+    return (
+        first_x - half_width_nm,
+        min(first_y, second_y),
+        first_x + half_width_nm,
+        max(first_y, second_y),
+    )
+
+
+def _tree_unit_topology(
+    candidate: RouteCandidate,
+    *,
+    origin: PointNM,
+    step: int,
+    edge_work: _TreeEdgeWorkLedger,
+) -> _TreeUnitTopology | CandidatePathValidationFailure:
+    """Expand and cycle-check one identity-verified tree under the shared private ledger."""
+
+    nodes_by_path: list[frozenset[_LatticeNode]] = []
+    mutable_path_indices_by_node: dict[_LatticeNode, set[int]] = {}
+    edges_by_path: list[frozenset[_LatticeEdge]] = []
+    edge_cores_by_path: list[tuple[tuple[_LatticeEdge, _TrackCore], ...]] = []
+    all_edges: set[_LatticeEdge] = set()
+    parent: dict[_LatticeNode, _LatticeNode] = {}
+
+    def find(node: _LatticeNode) -> _LatticeNode:
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    half_width_nm = candidate.patch.width_nm // 2
+    for path_index, path in enumerate(candidate.patch.paths):
+        path_nodes: set[_LatticeNode] = set()
+        path_edges: set[_LatticeEdge] = set()
+        path_edge_cores: list[tuple[_LatticeEdge, _TrackCore]] = []
+        first = path.vertices[0]
+        first_delta_x = first.x - origin.x
+        first_delta_y = first.y - origin.y
+        if first_delta_x % step or first_delta_y % step:
+            return CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
+        current_node = (first_delta_x // step, first_delta_y // step)
+        path_nodes.add(current_node)
+        mutable_path_indices_by_node.setdefault(current_node, set()).add(path_index)
+        parent.setdefault(current_node, current_node)
+        for start, end in pairwise(path.vertices):
+            delta_x_nm = end.x - start.x
+            delta_y_nm = end.y - start.y
+            if (
+                delta_x_nm % step
+                or delta_y_nm % step
+                or (delta_x_nm != 0 and delta_y_nm != 0)
+                or (delta_x_nm == 0 and delta_y_nm == 0)
+            ):
+                return CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
+            delta_x = delta_x_nm // step
+            delta_y = delta_y_nm // step
+            unit_x = 0 if delta_x == 0 else (1 if delta_x > 0 else -1)
+            unit_y = 0 if delta_y == 0 else (1 if delta_y > 0 else -1)
+            for _ in range(abs(delta_x) + abs(delta_y)):
+                stopped = edge_work.charge()
+                if stopped is not None:
+                    return stopped
+                next_node = (current_node[0] + unit_x, current_node[1] + unit_y)
+                edge = (
+                    (current_node, next_node)
+                    if current_node < next_node
+                    else (next_node, current_node)
+                )
+                if edge in all_edges or next_node in path_nodes:
+                    return CandidatePathValidationFailure.INVALID_CANDIDATE
+                parent.setdefault(next_node, next_node)
+                left, right = find(current_node), find(next_node)
+                if left == right:
+                    return CandidatePathValidationFailure.INVALID_CANDIDATE
+                parent[max(left, right)] = min(left, right)
+                path_nodes.add(next_node)
+                mutable_path_indices_by_node.setdefault(next_node, set()).add(path_index)
+                path_edges.add(edge)
+                all_edges.add(edge)
+                path_edge_cores.append(
+                    (
+                        edge,
+                        _unit_edge_core(
+                            edge,
+                            origin=origin,
+                            step=step,
+                            half_width_nm=half_width_nm,
+                        ),
+                    )
+                )
+                current_node = next_node
+        nodes_by_path.append(frozenset(path_nodes))
+        edges_by_path.append(frozenset(path_edges))
+        edge_cores_by_path.append(tuple(path_edge_cores))
+    return _TreeUnitTopology(
+        nodes_by_path=tuple(nodes_by_path),
+        path_indices_by_node={
+            node: frozenset(path_indices)
+            for node, path_indices in mutable_path_indices_by_node.items()
+        },
+        edges_by_path=tuple(edges_by_path),
+        edge_cores_by_path=tuple(edge_cores_by_path),
+    )
+
+
+def _charge_tree_contact_predicate(work: _WorkBudget) -> None:
+    """Charge one private topology-contact predicate and observe cancellation before it runs."""
+
+    work.checkpoint()
+    work.obstacle_check()
+
+
+def _path_contact_cells(
+    topology: _TreeUnitTopology,
+    selected_path_index: int,
+    work: _WorkBudget,
+) -> frozenset[tuple[int, _LatticeNode]]:
+    """Return exact centre-line contacts from the selected path to every untouched path."""
+
+    contacts: set[tuple[int, _LatticeNode]] = set()
+    for node in sorted(topology.nodes_by_path[selected_path_index]):
+        for path_index in sorted(topology.path_indices_by_node[node]):
+            _charge_tree_contact_predicate(work)
+            if path_index != selected_path_index:
+                contacts.add((path_index, node))
+    return frozenset(contacts)
+
+
+def _pad_contact_cells(
+    topology: _TreeUnitTopology,
+    selected_path_index: int,
+    components: tuple[tuple[_TrackCore, ...], ...],
+    *,
+    origin: PointNM,
+    step: int,
+    half_width_nm: int,
+    work: _WorkBudget,
+) -> frozenset[tuple[int, _LatticeNode]]:
+    """Return selected-path lattice cells whose trace core touches trusted same-net copper."""
+
+    selected_nodes = topology.nodes_by_path[selected_path_index]
+    contacts: set[tuple[int, _LatticeNode]] = set()
+    for component_index, component in enumerate(components):
+        remaining_nodes = set(selected_nodes)
+        for core in component:
+            if not remaining_nodes:
+                break
+            min_ix = -(-((core[0] - half_width_nm) - origin.x) // step)
+            max_ix = ((core[2] + half_width_nm) - origin.x) // step
+            min_iy = -(-((core[1] - half_width_nm) - origin.y) // step)
+            max_iy = ((core[3] + half_width_nm) - origin.y) // step
+            lattice_cells = max(0, max_ix - min_ix + 1) * max(0, max_iy - min_iy + 1)
+            if lattice_cells <= len(remaining_nodes):
+                candidates = (
+                    (ix, iy) for ix in range(min_ix, max_ix + 1) for iy in range(min_iy, max_iy + 1)
+                )
+                for node in candidates:
+                    _charge_tree_contact_predicate(work)
+                    if node in remaining_nodes:
+                        contacts.add((component_index, node))
+                        remaining_nodes.remove(node)
+            else:
+                for node in sorted(remaining_nodes):
+                    _charge_tree_contact_predicate(work)
+                    if min_ix <= node[0] <= max_ix and min_iy <= node[1] <= max_iy:
+                        contacts.add((component_index, node))
+                        remaining_nodes.remove(node)
+    return frozenset(contacts)
+
+
+def _reconstructed_tree_topology_failure(
+    original: RouteCandidate,
+    reconstructed: RouteCandidate,
+    selected_path_index: int,
+    components: tuple[tuple[_TrackCore, ...], ...],
+    *,
+    origin: PointNM,
+    step: int,
+    edge_work: _TreeEdgeWorkLedger,
+    work: _WorkBudget,
+) -> CandidatePathValidationFailure | None:
+    """Refuse a replacement that changes an authorized attachment or introduces a cycle."""
+
+    original_topology = _tree_unit_topology(
+        original,
+        origin=origin,
+        step=step,
+        edge_work=edge_work,
+    )
+    if isinstance(original_topology, CandidatePathValidationFailure):
+        return original_topology
+    reconstructed_topology = _tree_unit_topology(
+        reconstructed,
+        origin=origin,
+        step=step,
+        edge_work=edge_work,
+    )
+    if isinstance(reconstructed_topology, CandidatePathValidationFailure):
+        return reconstructed_topology
+    original_path_contacts = _path_contact_cells(original_topology, selected_path_index, work)
+    reconstructed_path_contacts = _path_contact_cells(
+        reconstructed_topology, selected_path_index, work
+    )
+    half_width_nm = reconstructed.patch.width_nm // 2
+    original_pad_contacts = _pad_contact_cells(
+        original_topology,
+        selected_path_index,
+        components,
+        origin=origin,
+        step=step,
+        half_width_nm=half_width_nm,
+        work=work,
+    )
+    reconstructed_pad_contacts = _pad_contact_cells(
+        reconstructed_topology,
+        selected_path_index,
+        components,
+        origin=origin,
+        step=step,
+        half_width_nm=half_width_nm,
+        work=work,
+    )
+    if not reconstructed_path_contacts <= original_path_contacts or not (
+        reconstructed_pad_contacts <= original_pad_contacts
+    ):
+        return CandidatePathValidationFailure.INVALID_CANDIDATE
+
+    selected_edges = reconstructed_topology.edge_cores_by_path[selected_path_index]
+    for path_index, untouched_edges in enumerate(reconstructed_topology.edge_cores_by_path):
+        if path_index == selected_path_index:
+            continue
+        for selected_edge, selected_core in selected_edges:
+            for untouched_edge, untouched_core in untouched_edges:
+                _charge_tree_contact_predicate(work)
+                if not _rectangles_touch(selected_core, untouched_core):
+                    continue
+                shared_nodes = frozenset(selected_edge) & frozenset(untouched_edge)
+                if not shared_nodes or not any(
+                    (path_index, node) in original_path_contacts for node in shared_nodes
+                ):
+                    return CandidatePathValidationFailure.INVALID_CANDIDATE
+
+    for selected_edge, selected_core in selected_edges:
+        for component_index, component in enumerate(components):
+            for component_core in component:
+                _charge_tree_contact_predicate(work)
+                if _rectangles_touch(selected_core, component_core) and not any(
+                    (component_index, node) in original_pad_contacts for node in selected_edge
+                ):
+                    return CandidatePathValidationFailure.INVALID_CANDIDATE
+    return edge_work.stop.check()
+
+
+def _negotiated_reconstruction_is_bound(
+    original: RouteCandidate,
+    reconstructed: RouteCandidate,
+    selected_path_index: int,
+) -> bool:
+    """Bind one path change while preserving inherited search and proximity accounting."""
+
+    try:
+        bend_cost_nm = reconstructed.patch.bend_count * reconstructed.settings.bend_penalty_nm
+        expected_cost = RouteCost(
+            length_nm=reconstructed.patch.length_nm,
+            bend_count=reconstructed.patch.bend_count,
+            bend_cost_nm=bend_cost_nm,
+            proximity_steps=original.cost.proximity_steps,
+            proximity_cost_nm=original.cost.proximity_cost_nm,
+            via_cost_nm=original.cost.via_cost_nm,
+            total_cost_nm=(
+                reconstructed.patch.length_nm
+                + bend_cost_nm
+                + original.cost.proximity_cost_nm
+                + original.cost.via_cost_nm
+            ),
+        )
+        expected_metrics = replace(
+            original.metrics,
+            wire_length_nm=reconstructed.patch.length_nm,
+        )
+        return (
+            0 <= selected_path_index < len(original.patch.paths)
+            and original.base_revision == reconstructed.base_revision
+            and original.patch.net_id == reconstructed.patch.net_id
+            and original.patch.layer_id == reconstructed.patch.layer_id
+            and original.patch.width_nm == reconstructed.patch.width_nm
+            and original.start_pad_id == reconstructed.start_pad_id
+            and original.end_pad_id == reconstructed.end_pad_id
+            and original.pad_count == reconstructed.pad_count
+            and original.settings == reconstructed.settings
+            and original.seed == reconstructed.seed
+            and original.router_version == reconstructed.router_version
+            and original.policy == reconstructed.policy
+            and original.ordering_policy == reconstructed.ordering_policy
+            and original.fill_binding == reconstructed.fill_binding
+            and reconstructed.cost == expected_cost
+            and reconstructed.metrics == expected_metrics
+            and len(original.patch.paths) == len(reconstructed.patch.paths)
+            and all(
+                original_path == reconstructed.patch.paths[index]
+                for index, original_path in enumerate(original.patch.paths)
+                if index != selected_path_index
+            )
+        )
+    except Exception:
+        return False
+
+
+def _validate_negotiated_candidate_patch(
+    snapshot: object,
+    request: object,
+    reconstructed_candidate: object,
+    original_candidate: object,
+    *,
+    selected_path_index: object,
+    max_obstacle_checks: object,
+    max_path_edges: object,
+    cancelled: object = None,
+    deadline_check: object = None,
+) -> CandidatePathValidationResult:
+    """Validate one trusted negotiated tree after exactly one path was reconstructed.
+
+    This seam is private because the original candidate is coordinator-owned authority, not another
+    caller-supplied document.  Both identities are nevertheless verified before their relationship
+    is trusted.  Every untouched path and every non-derived candidate field must remain exact; the
+    shared tree core then checks every reconstructed edge and proves that all selected-layer pads
+    and submitted paths belong to one component.
+    """
+
+    if not _candidate_patch_inputs_are_valid(
+        snapshot,
+        reconstructed_candidate,
+        max_obstacle_checks=max_obstacle_checks,
+        max_path_edges=max_path_edges,
+        cancelled=cancelled,
+        deadline_check=deadline_check,
+    ):
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_REQUEST)
+    if type(original_candidate) is not RouteCandidate or type(selected_path_index) is not int:
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+    stop = _StopChecks(
+        cancelled=cast(CancellationCheck | None, cancelled),
+        deadline_check=cast(CancellationCheck | None, deadline_check),
+    )
+    stopped = stop.check()
+    if stopped is not None:
+        return _result(None, 0, stopped)
+
+    checked_original = original_candidate
+    checked_reconstructed = cast(RouteCandidate, reconstructed_candidate)
+    assert isinstance(max_path_edges, int) and not isinstance(max_path_edges, bool)
+    original_edges = _candidate_tree_compressed_edges(checked_original, max_path_edges)
+    reconstructed_edges = _candidate_tree_compressed_edges(checked_reconstructed, max_path_edges)
+    if original_edges is None or reconstructed_edges is None:
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+    if original_edges > max_path_edges or reconstructed_edges > max_path_edges:
+        return _result(None, 0, CandidatePathValidationFailure.BUDGET_EXHAUSTED)
+    if not 0 <= selected_path_index < len(checked_original.patch.paths):
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+    try:
+        verify_candidate_id(checked_original)
+        verify_candidate_id(checked_reconstructed)
+    except Exception:
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+    stopped = stop.check()
+    if stopped is not None:
+        return _result(None, 0, stopped)
+    if not _negotiated_reconstruction_is_bound(
+        checked_original,
+        checked_reconstructed,
+        selected_path_index,
+    ):
+        return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
+    return _validate_candidate_patch_core(
+        snapshot,
+        request,
+        checked_reconstructed,
+        max_obstacle_checks=max_obstacle_checks,
+        max_path_edges=max_path_edges,
+        cancelled=cancelled,
+        deadline_check=deadline_check,
+        expected_ordering_policy=checked_original.ordering_policy,
+        _original_candidate=checked_original,
+        _selected_path_index=selected_path_index,
+        _stop=stop,
+    )
+
+
 def validate_candidate_patch(
     snapshot: object,
     request: object,
@@ -720,129 +1470,16 @@ def validate_candidate_patch(
     component containing every pad component and every submitted path.
     """
 
-    if (
-        type(snapshot) is not BoardIRSnapshot
-        or type(candidate) is not RouteCandidate
-        or (cancelled is not None and not callable(cancelled))
-        or (deadline_check is not None and not callable(deadline_check))
-        or isinstance(max_obstacle_checks, bool)
-        or not isinstance(max_obstacle_checks, int)
-        or not 1 <= max_obstacle_checks <= _MAX_OBSTACLE_CHECKS
-        or isinstance(max_path_edges, bool)
-        or not isinstance(max_path_edges, int)
-        or not 1 <= max_path_edges <= _MAX_EDGE_CHECKS
-    ):
-        return _result(None, 0, CandidatePathValidationFailure.INVALID_REQUEST)
-    stop = _StopChecks(
-        cancelled=cast(CancellationCheck | None, cancelled),
-        deadline_check=cast(CancellationCheck | None, deadline_check),
+    return _validate_candidate_patch_core(
+        snapshot,
+        request,
+        candidate,
+        max_obstacle_checks=max_obstacle_checks,
+        max_path_edges=max_path_edges,
+        cancelled=cancelled,
+        deadline_check=deadline_check,
+        expected_ordering_policy=EXTERNAL_PATCH_TREE_ORDERING,
     )
-    stopped = stop.check()
-    if stopped is not None:
-        return _result(None, 0, stopped)
-    checked_request = _canonical_request(request, stop)
-    if checked_request is None:
-        return _result(None, 0, stop.observed or CandidatePathValidationFailure.INVALID_REQUEST)
-    checked_candidate = candidate
-    if (
-        max_obstacle_checks > checked_request.settings.max_obstacle_checks
-        or max_path_edges > checked_request.settings.max_grid_nodes
-        or checked_candidate.base_revision != checked_request.board_revision
-        or checked_candidate.patch.net_id != checked_request.net_id
-        or checked_candidate.patch.layer_id != checked_request.layer_id
-        or checked_candidate.settings != checked_request.settings
-        or checked_candidate.seed != checked_request.seed
-        or checked_candidate.pad_count <= 2
-        or checked_candidate.ordering_policy != EXTERNAL_PATCH_TREE_ORDERING
-        or checked_candidate.fill_binding is not None
-        or not checked_candidate.patch.paths
-        or checked_candidate.metrics.vias != 0
-    ):
-        return _result(None, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
-
-    compressed_edges = sum(len(path.vertices) - 1 for path in checked_candidate.patch.paths)
-    if compressed_edges > max_path_edges:
-        return _result(None, 0, CandidatePathValidationFailure.BUDGET_EXHAUSTED)
-    bounded_request = replace(
-        checked_request,
-        settings=replace(checked_request.settings, max_obstacle_checks=max_obstacle_checks),
-    )
-    work = _WorkBudget(settings=bounded_request.settings, cancelled=stop)
-    try:
-        problem = _prepare(snapshot, bounded_request, work)
-    except _ExpectedFailureError as error:
-        return _result(work, 0, _failure_from_router(error, stop))
-    except Exception:
-        return _result(work, 0, CandidatePathValidationFailure.INVALID_REQUEST)
-    if (
-        checked_candidate.patch.width_nm != problem.width_nm
-        or checked_candidate.start_pad_id != problem.start_pad.id
-        or checked_candidate.end_pad_id != problem.end_pad.id
-        or checked_candidate.pad_count != problem.pad_count
-        or len(problem.components) < 2
-    ):
-        return _result(work, 0, CandidatePathValidationFailure.INVALID_CANDIDATE)
-
-    step = checked_request.settings.grid_step_nm
-    origin = problem.start_pad.center
-    total_edges = 0
-    edge_checks = 0
-    try:
-        for path in checked_candidate.patch.paths:
-            seen = {path.vertices[0]}
-            for point in path.vertices:
-                if (point.x - origin.x) % step != 0 or (point.y - origin.y) % step != 0:
-                    return _result(
-                        work, edge_checks, CandidatePathValidationFailure.UNSUPPORTED_GEOMETRY
-                    )
-            for start, end in pairwise(path.vertices):
-                delta_x = (end.x - start.x) // step
-                delta_y = (end.y - start.y) // step
-                total_edges += abs(delta_x) + abs(delta_y)
-                if total_edges > max_path_edges:
-                    return _result(
-                        work, edge_checks, CandidatePathValidationFailure.BUDGET_EXHAUSTED
-                    )
-                unit_x = 0 if delta_x == 0 else (1 if delta_x > 0 else -1)
-                unit_y = 0 if delta_y == 0 else (1 if delta_y > 0 else -1)
-                current = start
-                for _ in range(abs(delta_x) + abs(delta_y)):
-                    stopped = stop.check()
-                    if stopped is not None:
-                        return _result(work, edge_checks, stopped)
-                    next_point = PointNM(current.x + unit_x * step, current.y + unit_y * step)
-                    if next_point in seen:
-                        return _result(
-                            work, edge_checks, CandidatePathValidationFailure.INVALID_CANDIDATE
-                        )
-                    seen.add(next_point)
-                    if not _edge_is_legal(current, next_point, problem, work):
-                        return _result(
-                            work,
-                            edge_checks + 1,
-                            CandidatePathValidationFailure.OBSTACLE_VIOLATION,
-                        )
-                    edge_checks += 1
-                    current = next_point
-
-        cores: list[tuple[int, int, int, int]] = []
-        component_offsets: list[int] = []
-        for component in problem.components:
-            component_offsets.append(len(cores))
-            cores.extend(component)
-        route_offset = len(cores)
-        cores.extend(_candidate_track_cores(checked_candidate))
-        roots = _component_roots(tuple(cores), work)
-        accepted_root = roots[component_offsets[0]]
-        if any(roots[offset] != accepted_root for offset in component_offsets) or any(
-            root != accepted_root for root in roots[route_offset:]
-        ):
-            return _result(work, edge_checks, CandidatePathValidationFailure.INFEASIBLE)
-    except _ExpectedFailureError as error:
-        return _result(work, edge_checks, _failure_from_router(error, stop))
-    except Exception:
-        return _result(work, edge_checks, CandidatePathValidationFailure.INVALID_CANDIDATE)
-    return _result(work, edge_checks, stop.check())
 
 
 def validate_candidate_patch_with_exact_off_grid_obstacle_fallback(

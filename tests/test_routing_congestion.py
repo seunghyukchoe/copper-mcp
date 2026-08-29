@@ -51,6 +51,10 @@ from copper_mcp.routing import (
     negotiate_routes,
 )
 from copper_mcp.routing import policy_worker as policy_worker_module
+from copper_mcp.routing.candidate_path_validator import (
+    CandidatePathValidationFailure,
+    CandidatePathValidationResult,
+)
 from copper_mcp.routing.congestion import ISOLATED_REFERENCE_POLICY_PROFILE
 from copper_mcp.routing.physical_clearance import (
     PhysicalClearanceFailure,
@@ -67,6 +71,10 @@ from copper_mcp.routing.policy import (
     policy_input_digest,
 )
 from copper_mcp.routing.repair import RepairTransactionSettings
+from copper_mcp.routing.repair_provenance import (
+    CoordinatorTreeRepairProvenance,
+    _TreeRepairProvenanceError,
+)
 from scripts import exact_local_repair_gate_fixture as predeclared_fixture
 
 BOARD_SOURCE = f"sha256:{'c' * 64}"
@@ -199,6 +207,7 @@ def _multipin_shifted_snapshot(
     *,
     connected_horizontal: bool = False,
     horizontal_centres_override: tuple[PointNM, ...] | None = None,
+    vertical_centres_override: tuple[PointNM, ...] | None = None,
 ) -> object:
     """Build two disjoint nets whose local one-millimetre lattices have different origins."""
 
@@ -234,18 +243,22 @@ def _multipin_shifted_snapshot(
     else:
         assert len(horizontal_centres_override) == horizontal_pad_count
         horizontal_centres = horizontal_centres_override
-    vertical_centres = (
-        PointNM(25_500_000, 2_500_000),
-        PointNM(30_500_000, 2_500_000),
-        PointNM(30_500_000, 5_500_000),
-        *(
-            PointNM(
-                25_500_000 + (index % 4) * 2_000_000,
-                7_500_000 + (index // 4) * 2_000_000,
-            )
-            for index in range(max(0, vertical_pad_count - 3))
-        ),
-    )
+    if vertical_centres_override is None:
+        vertical_centres = (
+            PointNM(25_500_000, 2_500_000),
+            PointNM(30_500_000, 2_500_000),
+            PointNM(30_500_000, 5_500_000),
+            *(
+                PointNM(
+                    25_500_000 + (index % 4) * 2_000_000,
+                    7_500_000 + (index // 4) * 2_000_000,
+                )
+                for index in range(max(0, vertical_pad_count - 3))
+            ),
+        )
+    else:
+        assert len(vertical_centres_override) == vertical_pad_count
+        vertical_centres = vertical_centres_override
     horizontal_pads = tuple(
         pad(f"pad:h{index:02d}", H_NET, center)
         for index, center in enumerate(horizontal_centres[:horizontal_pad_count])
@@ -353,6 +366,59 @@ def _multipin_requests(snapshot: object) -> tuple[RouteRequest, RouteRequest]:
     return (
         RouteRequest(snapshot.snapshot_digest, H_NET, LAYER, 7, _multipin_settings()),
         RouteRequest(snapshot.snapshot_digest, V_NET, LAYER, 11, _multipin_settings()),
+    )
+
+
+def _first_branch_repair_inputs(
+    *,
+    horizontal_seed: int = 7,
+    vertical_seed: int = 11,
+    proximity_penalty_nm: int = 0,
+    max_total_physical_checks: int = 2_000_000,
+) -> tuple[object, NegotiatedRoutingRequest]:
+    snapshot = _multipin_shifted_snapshot(
+        vertical_pad_count=3,
+        horizontal_centres_override=(
+            PointNM(27_000_000, 1_000_000),
+            PointNM(27_000_000, 6_000_000),
+            PointNM(34_000_000, 6_000_000),
+        ),
+    )
+    horizontal, vertical = _multipin_requests(snapshot)
+    settings = replace(horizontal.settings, proximity_penalty_nm=proximity_penalty_nm)
+    return snapshot, NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(
+            replace(horizontal, seed=horizontal_seed, settings=settings),
+            replace(vertical, seed=vertical_seed, settings=settings),
+        ),
+        max_iterations=1,
+        max_total_physical_checks=max_total_physical_checks,
+    )
+
+
+def _last_branch_repair_inputs(
+    *, max_total_physical_checks: int = 2_000_000
+) -> tuple[object, NegotiatedRoutingRequest]:
+    snapshot = _multipin_shifted_snapshot(
+        vertical_pad_count=3,
+        horizontal_centres_override=(
+            PointNM(27_000_000, 11_000_000),
+            PointNM(27_000_000, 6_000_000),
+            PointNM(34_000_000, 6_000_000),
+        ),
+        vertical_centres_override=(
+            PointNM(30_500_000, 2_500_000),
+            PointNM(30_500_000, 8_500_000),
+            PointNM(36_500_000, 8_500_000),
+        ),
+    )
+    horizontal, vertical = _multipin_requests(snapshot)
+    return snapshot, NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(horizontal, replace(vertical, seed=4)),
+        max_iterations=1,
+        max_total_physical_checks=max_total_physical_checks,
     )
 
 
@@ -1398,17 +1464,35 @@ def test_two_pin_local_repair_runs_against_shifted_phase_multipin_conflict() -> 
     assert result.repair_evidence.local_expanded_states > 0
     assert result.repair_evidence.validator_edge_checks > 0
     assert result.repair_evidence.validator_obstacle_checks > 0
+    assert {item.patch.net_id: item.candidate_id for item in result.candidates} == {
+        H_NET: "sha256:7cf69ad3fe5061107d6d0f9becc5eb6c43003031b1118fd2f3f8a4fb2a3e3eb8",
+        V_NET: "sha256:1a1d485c65e04f98439d0c18e0e21e3ef8e45c993eca239c18dee6ffd7895d13",
+    }
+    assert result.repair_evidence.composite_digest == (
+        "sha256:a4e9a6b05dda83fd6088bcdeb2009fe76295e7bc3bfaf416f64da95dc8f252ee"
+    )
 
 
-def test_local_repair_skips_every_non_two_pin_target(monkeypatch: pytest.MonkeyPatch) -> None:
-    snapshot = _multipin_shifted_snapshot(vertical_pad_count=3)
+def test_multi_pin_local_repair_replaces_only_the_exact_responsible_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _multipin_shifted_snapshot(
+        vertical_pad_count=3,
+        horizontal_centres_override=(
+            PointNM(27_000_000, 1_000_000),
+            PointNM(27_000_000, 6_000_000),
+            PointNM(34_000_000, 6_000_000),
+        ),
+    )
+    original_snapshot_digest = snapshot.snapshot_digest
+    original_content = snapshot.content
     horizontal, vertical = _multipin_requests(snapshot)
-    candidates: list[RouteCandidate] = []
+    baseline: dict[str, RouteCandidate] = {}
     for request in (horizontal, vertical):
         result = AStarRouter().propose(snapshot, request)
         assert result.candidate is not None
         assert result.candidate.pad_count == 3
-        candidates.append(result.candidate)
+        baseline[request.net_id] = result.candidate
     envelope = NegotiatedRoutingRequest(
         board_revision=snapshot.snapshot_digest,
         requests=(horizontal, vertical),
@@ -1416,23 +1500,673 @@ def test_local_repair_skips_every_non_two_pin_target(monkeypatch: pytest.MonkeyP
     )
 
     def forbidden_provenance(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("multi-pin candidates must not enter the two-pin repair derivation")
+        raise AssertionError("a tree target must not enter the legacy two-pin derivation")
 
     monkeypatch.setattr(congestion_module, "derive_repair_provenance", forbidden_provenance)
-    repair = congestion_module._attempt_local_repair(
+    result = negotiate_routes(
         snapshot,
         envelope,
-        tuple(candidates),
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert isinstance(result, congestion_module.RepairNegotiatedRoutingResult)
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    assert result == negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+    repaired = {item.patch.net_id: item for item in result.candidates}
+    assert repaired[H_NET].patch.paths == (
+        RoutePath(
+            (
+                PointNM(27_000_000, 1_000_000),
+                PointNM(24_000_000, 1_000_000),
+                PointNM(24_000_000, 6_000_000),
+                PointNM(27_000_000, 6_000_000),
+            )
+        ),
+        baseline[H_NET].patch.paths[1],
+    )
+    assert repaired[V_NET].patch.paths == baseline[V_NET].patch.paths
+    assert repaired[H_NET].pad_count == repaired[V_NET].pad_count == 3
+    assert repaired[H_NET].ordering_policy == baseline[H_NET].ordering_policy
+    assert repaired[V_NET].ordering_policy == baseline[V_NET].ordering_policy
+    assert repaired[H_NET].settings == baseline[H_NET].settings
+    assert repaired[H_NET].seed == baseline[H_NET].seed
+    assert result.total_physical_checks == 12
+    assert result.repair_evidence is not None
+    assert result.repair_evidence.composite_digest == (
+        "sha256:b38907974fedf84c5e080d114e99bf0a758bb0f635a9da33626fa10e35516fc6"
+    )
+    assert {item.patch.net_id: item.candidate_id for item in result.candidates} == {
+        H_NET: "sha256:85d19a2cadb86dfd1e3fac844d5ec51f1edb675e6ac4380f7397ce979b808064",
+        V_NET: "sha256:046e100fe2a14faeaea9262394a9a0b8092bd110f3e27a71ed46532eb2389d64",
+    }
+    assert snapshot.snapshot_digest == original_snapshot_digest
+    assert snapshot.content == original_content
+
+
+def test_multi_pin_local_repair_selects_the_last_responsible_branch() -> None:
+    snapshot = _multipin_shifted_snapshot(
+        vertical_pad_count=3,
+        horizontal_centres_override=(
+            PointNM(27_000_000, 11_000_000),
+            PointNM(27_000_000, 6_000_000),
+            PointNM(34_000_000, 6_000_000),
+        ),
+        vertical_centres_override=(
+            PointNM(30_500_000, 2_500_000),
+            PointNM(30_500_000, 8_500_000),
+            PointNM(36_500_000, 8_500_000),
+        ),
+    )
+    horizontal, vertical = _multipin_requests(snapshot)
+    vertical = replace(vertical, seed=4)
+    requests = (horizontal, vertical)
+    baseline: dict[str, RouteCandidate] = {}
+    for request in requests:
+        proposal = AStarRouter().propose(snapshot, request)
+        assert proposal.candidate is not None
+        baseline[request.net_id] = proposal.candidate
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=requests,
+        max_iterations=1,
+    )
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert isinstance(result, congestion_module.RepairNegotiatedRoutingResult)
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    repaired = {item.patch.net_id: item for item in result.candidates}
+    assert repaired[H_NET].patch.paths == (
+        baseline[H_NET].patch.paths[0],
+        RoutePath(
+            (
+                PointNM(27_000_000, 6_000_000),
+                PointNM(27_000_000, 1_000_000),
+                PointNM(34_000_000, 1_000_000),
+                PointNM(34_000_000, 6_000_000),
+            )
+        ),
+    )
+    assert repaired[V_NET].patch.paths == baseline[V_NET].patch.paths
+    assert result.total_physical_checks == 14
+    assert result.repair_evidence is not None
+    assert result.repair_evidence.composite_digest == (
+        "sha256:6b2f01c2d548d4ad4887fc427bc4d5607eb20131212438a7ff62ef7f6d7790cd"
+    )
+    assert {item.patch.net_id: item.candidate_id for item in result.candidates} == {
+        H_NET: "sha256:97153594c2ad6f48f5ea4e18fef2521553eafa28bbb0113b8379d77ad5d49551",
+        V_NET: "sha256:63baebe6260e5dbd3c4c4198d25a4c3e80488b4695fdee2d9f39a78a4adc2543",
+    }
+
+
+def test_multi_pin_local_repair_supports_a_32_pad_target() -> None:
+    snapshot = _multipin_shifted_snapshot(
+        horizontal_pad_count=32,
+        vertical_pad_count=3,
+        vertical_centres_override=(
+            PointNM(28_500_000, 8_500_000),
+            PointNM(28_500_000, 11_500_000),
+            PointNM(35_500_000, 11_500_000),
+        ),
+    )
+    horizontal, vertical = _multipin_requests(snapshot)
+    requests = (replace(horizontal, seed=1), replace(vertical, seed=2))
+    baseline: dict[str, RouteCandidate] = {}
+    for request in requests:
+        proposal = AStarRouter().propose(snapshot, request)
+        assert proposal.candidate is not None
+        baseline[request.net_id] = proposal.candidate
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=requests,
+        max_iterations=1,
+    )
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert isinstance(result, congestion_module.RepairNegotiatedRoutingResult)
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    assert result == negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+    repaired = {item.patch.net_id: item for item in result.candidates}
+    assert repaired[H_NET].pad_count == 32
+    assert len(repaired[H_NET].patch.paths) == 31
+    assert tuple(
+        index
+        for index, path in enumerate(baseline[H_NET].patch.paths)
+        if repaired[H_NET].patch.paths[index] != path
+    ) == (14,)
+    assert repaired[H_NET].patch.paths[14] == RoutePath(
+        (
+            PointNM(27_000_000, 10_000_000),
+            PointNM(27_000_000, 7_000_000),
+            PointNM(30_000_000, 7_000_000),
+            PointNM(30_000_000, 10_000_000),
+        )
+    )
+    assert repaired[V_NET].patch.paths == baseline[V_NET].patch.paths
+    assert result.total_physical_checks == 124
+    assert result.repair_evidence is not None
+    assert result.repair_evidence.composite_digest == (
+        "sha256:4ef00e25d2039db566a993648b1e4984116a574fb407a8fa3304b67295d229b2"
+    )
+    assert {item.patch.net_id: item.candidate_id for item in result.candidates} == {
+        H_NET: "sha256:23fdd5c0b58752ee3afbf6dc459cbf5dc903bfcc39c990130ae8fd8b1a0d904c",
+        V_NET: "sha256:fa84e328df401eb948cc5572d9164629b42246d0578ff31610ac942017521f37",
+    }
+
+
+def test_multi_pin_repair_preserves_inherited_proximity_and_search_accounting() -> None:
+    snapshot, envelope = _first_branch_repair_inputs(
+        horizontal_seed=2,
+        vertical_seed=1,
+        proximity_penalty_nm=50_000,
+    )
+    baseline: dict[str, RouteCandidate] = {}
+    for request in envelope.requests:
+        proposal = AStarRouter().propose(snapshot, request)
+        assert proposal.candidate is not None
+        baseline[request.net_id] = proposal.candidate
+    assert baseline[H_NET].cost.proximity_steps == 2
+    assert baseline[H_NET].cost.proximity_cost_nm == 100_000
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert isinstance(result, congestion_module.RepairNegotiatedRoutingResult)
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    repaired = {item.patch.net_id: item for item in result.candidates}
+    target = repaired[H_NET]
+    original = baseline[H_NET]
+    assert target.patch.paths != original.patch.paths
+    bend_cost_nm = target.patch.bend_count * target.settings.bend_penalty_nm
+    assert target.cost == RouteCost(
+        length_nm=target.patch.length_nm,
+        bend_count=target.patch.bend_count,
+        bend_cost_nm=bend_cost_nm,
+        proximity_steps=original.cost.proximity_steps,
+        proximity_cost_nm=original.cost.proximity_cost_nm,
+        via_cost_nm=original.cost.via_cost_nm,
+        total_cost_nm=(
+            target.patch.length_nm
+            + bend_cost_nm
+            + original.cost.proximity_cost_nm
+            + original.cost.via_cost_nm
+        ),
+    )
+    assert target.metrics == replace(
+        original.metrics,
+        wire_length_nm=target.patch.length_nm,
+    )
+    assert result.repair_evidence is not None
+    assert result.repair_evidence.local_expanded_states != target.metrics.expanded_states
+    assert result.repair_evidence.validator_obstacle_checks != target.metrics.obstacle_checks
+
+
+def test_multi_pin_repair_refuses_grown_route_before_validator_and_final_recheck(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, envelope = _first_branch_repair_inputs(max_total_physical_checks=10)
+    original_verify = congestion_module.verify_negotiated_physical_clearance
+    complete_segment_counts: list[tuple[int, ...]] = []
+
+    def monitored_verify(
+        snapshot: object, candidates: object, **kwargs: object
+    ) -> PhysicalClearanceVerificationResult:
+        assert isinstance(candidates, tuple)
+        if not all(len(candidate.patch.paths) == 1 for candidate in candidates):
+            complete_segment_counts.append(
+                tuple(
+                    sum(len(path.vertices) - 1 for path in candidate.patch.paths)
+                    for candidate in candidates
+                )
+            )
+        return original_verify(snapshot, candidates, **kwargs)
+
+    def forbidden_validator(*_args: object, **_kwargs: object) -> CandidatePathValidationResult:
+        raise AssertionError("a grown tree without a final-check budget must not be validated")
+
+    monkeypatch.setattr(
+        congestion_module,
+        "verify_negotiated_physical_clearance",
+        monitored_verify,
+    )
+    monkeypatch.setattr(
+        congestion_module,
+        "_validate_negotiated_candidate_patch",
+        forbidden_validator,
+    )
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert result.status is NegotiatedRoutingStatus.NO_PATH
+    assert result.total_physical_checks == 4
+    assert complete_segment_counts == [(2, 2)]
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert getattr(result, "repair_evidence", None) is None
+
+
+def test_multi_pin_repair_preflights_responsibility_and_final_recheck_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, envelope = _last_branch_repair_inputs(max_total_physical_checks=10)
+    original_verify = congestion_module.verify_negotiated_physical_clearance
+
+    def monitored_verify(
+        snapshot: object, candidates: object, **kwargs: object
+    ) -> PhysicalClearanceVerificationResult:
+        assert isinstance(candidates, tuple)
+        if all(len(candidate.patch.paths) == 1 for candidate in candidates):
+            raise AssertionError("responsibility geometry must not run after a failed preflight")
+        return original_verify(snapshot, candidates, **kwargs)
+
+    monkeypatch.setattr(
+        congestion_module,
+        "verify_negotiated_physical_clearance",
+        monitored_verify,
+    )
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert result.status is NegotiatedRoutingStatus.NO_PATH
+    assert result.total_physical_checks == 3
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert getattr(result, "repair_evidence", None) is None
+
+
+def test_multi_pin_repair_accounts_one_check_tree_projection_refusal_atomically() -> None:
+    snapshot, envelope = _first_branch_repair_inputs()
+    candidates = tuple(
+        result.candidate
+        for request in envelope.requests
+        if (result := AStarRouter().propose(snapshot, request)).candidate is not None
+    )
+    assert len(candidates) == len(envelope.requests)
+    initial_expansions = 17
+    initial_obstacle_checks = 23
+
+    (
+        repaired,
+        evidence,
+        total_expansions,
+        total_obstacle_checks,
+        responsibility_checks,
+        cancelled,
+    ) = congestion_module._attempt_local_repair(
+        snapshot,
+        envelope,
+        candidates,
+        iteration=1,
+        violating_nets=(H_NET, V_NET),
+        settings=RepairTransactionSettings(max_validator_obstacle_checks=1),
+        policy_profile=None,
+        cancelled=None,
+        total_expansions=initial_expansions,
+        total_obstacle_checks=initial_obstacle_checks,
+        remaining_physical_checks=envelope.max_total_physical_checks,
+    )
+
+    assert repaired is None
+    assert evidence is None
+    assert total_expansions == initial_expansions
+    assert total_obstacle_checks == initial_obstacle_checks + 1
+    assert responsibility_checks == 2
+    assert not cancelled
+
+
+def test_multi_pin_repair_projection_cancellation_is_atomic_and_preserves_work() -> None:
+    snapshot, envelope = _first_branch_repair_inputs()
+    candidates = tuple(
+        result.candidate
+        for request in envelope.requests
+        if (result := AStarRouter().propose(snapshot, request)).candidate is not None
+    )
+    assert len(candidates) == len(envelope.requests)
+    cancellation_calls = 0
+
+    def cancelled_during_projection() -> bool:
+        nonlocal cancellation_calls
+        cancellation_calls += 1
+        return cancellation_calls >= 20
+
+    outcome = congestion_module._attempt_local_repair(
+        snapshot,
+        envelope,
+        candidates,
+        iteration=1,
+        violating_nets=(H_NET, V_NET),
+        settings=RepairTransactionSettings(),
+        policy_profile=None,
+        cancelled=cancelled_during_projection,
+        total_expansions=17,
+        total_obstacle_checks=23,
+        remaining_physical_checks=envelope.max_total_physical_checks,
+    )
+
+    assert cancellation_calls == 20
+    assert outcome[0] is None
+    assert outcome[1] is None
+    assert outcome[2] == 17
+    assert outcome[3] == 35
+    assert outcome[4] == 2
+    assert outcome[5]
+
+
+def test_tree_projection_cancellation_maps_to_cancelled_without_publication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, envelope = _first_branch_repair_inputs()
+
+    def cancelled_projection(*_args: object, **_kwargs: object) -> object:
+        raise _TreeRepairProvenanceError(3, cancelled=True)
+
+    monkeypatch.setattr(
+        congestion_module,
+        "derive_tree_repair_provenance",
+        cancelled_projection,
+    )
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert result.status is NegotiatedRoutingStatus.CANCELLED
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert result.unrouted_nets == (H_NET, V_NET)
+    assert getattr(result, "repair_evidence", None) is None
+
+
+def test_multi_pin_repair_accounts_maximum_projection_refusal_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, envelope = _first_branch_repair_inputs()
+    candidates = tuple(
+        result.candidate
+        for request in envelope.requests
+        if (result := AStarRouter().propose(snapshot, request)).candidate is not None
+    )
+    assert len(candidates) == len(envelope.requests)
+    provenance_calls = 0
+
+    def refuse_after_maximum_work(*_args: object, **_kwargs: object) -> object:
+        nonlocal provenance_calls
+        provenance_calls += 1
+        raise _TreeRepairProvenanceError(4_096, cancelled=False)
+
+    monkeypatch.setattr(
+        congestion_module,
+        "derive_tree_repair_provenance",
+        refuse_after_maximum_work,
+    )
+    outcome = congestion_module._attempt_local_repair(
+        snapshot,
+        envelope,
+        candidates,
         iteration=1,
         violating_nets=(H_NET, V_NET),
         settings=RepairTransactionSettings(),
         policy_profile=None,
         cancelled=None,
-        total_expansions=0,
-        total_obstacle_checks=0,
+        total_expansions=17,
+        total_obstacle_checks=23,
+        remaining_physical_checks=envelope.max_total_physical_checks,
     )
 
-    assert repair == (None, None, 0, 0, False)
+    assert provenance_calls == 1
+    assert outcome[0] is None
+    assert outcome[1] is None
+    assert outcome[2] == 17
+    assert outcome[3] == 23 + 4_096
+    assert outcome[4] == 2
+    assert not outcome[5]
+
+
+@pytest.mark.parametrize("tampered_field", ("cost", "metrics"))
+def test_multi_pin_repair_rejects_resigned_reconstruction_accounting_tampering(
+    monkeypatch: pytest.MonkeyPatch,
+    tampered_field: str,
+) -> None:
+    snapshot, envelope = _first_branch_repair_inputs()
+    original_builder = congestion_module._candidate_from_tree_local_repair
+
+    def tampering_builder(
+        target: RouteCandidate,
+        request: RouteRequest,
+        provenance: CoordinatorTreeRepairProvenance,
+        route: tuple[tuple[int, int], ...],
+    ) -> RouteCandidate:
+        candidate = original_builder(target, request, provenance, route)
+        if tampered_field == "cost":
+            proximity_steps = candidate.cost.proximity_steps + 1
+            proximity_cost_nm = proximity_steps * candidate.settings.proximity_penalty_nm
+            candidate = replace(
+                candidate,
+                cost=replace(
+                    candidate.cost,
+                    proximity_steps=proximity_steps,
+                    proximity_cost_nm=proximity_cost_nm,
+                    total_cost_nm=(
+                        candidate.cost.length_nm
+                        + candidate.cost.bend_cost_nm
+                        + proximity_cost_nm
+                        + candidate.cost.via_cost_nm
+                    ),
+                ),
+            )
+        else:
+            candidate = replace(
+                candidate,
+                metrics=replace(
+                    candidate.metrics,
+                    expanded_states=candidate.metrics.expanded_states + 1,
+                ),
+            )
+        return _resign(candidate)
+
+    monkeypatch.setattr(
+        congestion_module,
+        "_candidate_from_tree_local_repair",
+        tampering_builder,
+    )
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert result.status is NegotiatedRoutingStatus.NO_PATH
+    assert result.total_physical_checks == 4
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert getattr(result, "repair_evidence", None) is None
+
+
+def test_multi_pin_repair_cancellation_during_responsibility_is_atomic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, envelope = _last_branch_repair_inputs()
+    original_verify = congestion_module.verify_negotiated_physical_clearance
+
+    def cancelling_verify(
+        snapshot: object, candidates: object, **kwargs: object
+    ) -> PhysicalClearanceVerificationResult:
+        assert isinstance(candidates, tuple)
+        if all(len(candidate.patch.paths) == 1 for candidate in candidates):
+            return PhysicalClearanceVerificationResult(
+                pair_checks=1,
+                failure=PhysicalClearanceFailure.CANCELLED,
+            )
+        return original_verify(snapshot, candidates, **kwargs)
+
+    monkeypatch.setattr(
+        congestion_module,
+        "verify_negotiated_physical_clearance",
+        cancelling_verify,
+    )
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert result.status is NegotiatedRoutingStatus.CANCELLED
+    assert result.total_physical_checks == 4
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert result.unrouted_nets == (H_NET, V_NET)
+    assert getattr(result, "repair_evidence", None) is None
+
+
+def test_multi_pin_repair_requires_an_exact_responsible_path_pair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, envelope = _last_branch_repair_inputs()
+    original_verify = congestion_module.verify_negotiated_physical_clearance
+    responsibility_calls = 0
+
+    def clean_responsibility_verify(
+        snapshot: object, candidates: object, **kwargs: object
+    ) -> PhysicalClearanceVerificationResult:
+        nonlocal responsibility_calls
+        assert isinstance(candidates, tuple)
+        if all(len(candidate.patch.paths) == 1 for candidate in candidates):
+            responsibility_calls += 1
+            return PhysicalClearanceVerificationResult(pair_checks=1)
+        return original_verify(snapshot, candidates, **kwargs)
+
+    monkeypatch.setattr(
+        congestion_module,
+        "verify_negotiated_physical_clearance",
+        clean_responsibility_verify,
+    )
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert responsibility_calls == 4
+    assert result.status is NegotiatedRoutingStatus.NO_PATH
+    assert result.total_physical_checks == 7
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert getattr(result, "repair_evidence", None) is None
+
+
+def test_multi_pin_repair_discards_a_tree_validator_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, envelope = _last_branch_repair_inputs()
+    validator_calls = 0
+
+    def refusing_validator(*_args: object, **_kwargs: object) -> CandidatePathValidationResult:
+        nonlocal validator_calls
+        validator_calls += 1
+        return CandidatePathValidationResult(
+            edge_checks=1,
+            obstacle_checks=1,
+            failure=CandidatePathValidationFailure.INFEASIBLE,
+        )
+
+    monkeypatch.setattr(
+        congestion_module,
+        "_validate_negotiated_candidate_patch",
+        refusing_validator,
+    )
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert validator_calls == 1
+    assert result.status is NegotiatedRoutingStatus.NO_PATH
+    assert result.total_physical_checks == 6
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert getattr(result, "repair_evidence", None) is None
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_status"),
+    (
+        (PhysicalClearanceFailure.CLEARANCE_VIOLATION, NegotiatedRoutingStatus.NO_PATH),
+        (PhysicalClearanceFailure.CANCELLED, NegotiatedRoutingStatus.CANCELLED),
+    ),
+)
+def test_multi_pin_repair_final_physical_refusal_discards_all_repair_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: PhysicalClearanceFailure,
+    expected_status: NegotiatedRoutingStatus,
+) -> None:
+    snapshot, envelope = _last_branch_repair_inputs()
+    original_verify = congestion_module.verify_negotiated_physical_clearance
+    complete_calls = 0
+
+    def refusing_final_verify(
+        snapshot: object, candidates: object, **kwargs: object
+    ) -> PhysicalClearanceVerificationResult:
+        nonlocal complete_calls
+        assert isinstance(candidates, tuple)
+        if all(len(candidate.patch.paths) == 1 for candidate in candidates):
+            return original_verify(snapshot, candidates, **kwargs)
+        complete_calls += 1
+        if complete_calls == 2:
+            return PhysicalClearanceVerificationResult(pair_checks=1, failure=failure)
+        return original_verify(snapshot, candidates, **kwargs)
+
+    monkeypatch.setattr(
+        congestion_module,
+        "verify_negotiated_physical_clearance",
+        refusing_final_verify,
+    )
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert complete_calls == 2
+    assert result.status is expected_status
+    assert result.total_physical_checks == 7
+    assert result.candidates == ()
+    assert result.connections == ()
+    assert getattr(result, "repair_evidence", None) is None
 
 
 def test_replay_failure_discards_prior_candidate_and_connection_evidence_atomically() -> None:

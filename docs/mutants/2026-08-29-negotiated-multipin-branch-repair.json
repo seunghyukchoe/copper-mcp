@@ -1,0 +1,280 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "NBR01-responsibility-search-always-uses-first-target-path",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "                for target_path_index, target_path in enumerate(target.patch.paths):\n",
+      "replacement": "                for target_path_index, target_path in enumerate(target.patch.paths[:1]):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_local_repair_selects_the_last_responsible_branch"
+      ]
+    },
+    {
+      "id": "NBR02-clean-path-pair-is-treated-as-responsible",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "                            if (\n                                responsibility.failure\n                                is PhysicalClearanceFailure.CLEARANCE_VIOLATION\n                            ):\n",
+      "replacement": "                            if responsibility.failure is None:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_requires_an_exact_responsible_path_pair"
+      ]
+    },
+    {
+      "id": "NBR03-responsibility-binding-drops-target-path-index",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "        \"target_path_index\": target_path_index,\n",
+      "replacement": "        \"target_path_index\": 0,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_local_repair_selects_the_last_responsible_branch"
+      ]
+    },
+    {
+      "id": "NBR04-selection-integrity-drops-responsibility-digest",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "            \"responsibility_digest\": responsibility_digest,\n",
+      "replacement": "            \"responsibility_digest\": \"\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_tree_repair_path_endpoint_and_capability_tampering_cannot_build_a_request"
+      ]
+    },
+    {
+      "id": "NBR05-reconstruction-drops-every-untouched-path",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "    paths = tuple(\n        repaired_path if index == provenance.target_path_index else path\n        for index, path in enumerate(target.patch.paths)\n    )\n",
+      "replacement": "    paths = (repaired_path,)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_local_repair_supports_a_32_pad_target"
+      ]
+    },
+    {
+      "id": "NBR06-complete-tree-validator-refusal-is-ignored",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "    if validation.failure is not None:\n",
+      "replacement": "    if False and validation.failure is not None:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_discards_a_tree_validator_refusal"
+      ]
+    },
+    {
+      "id": "NBR07-final-physical-work-is-not-reserved-before-responsibility",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "            or probe_work + final_check_work > remaining_physical_checks\n",
+      "replacement": "            or probe_work > remaining_physical_checks\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_preflights_responsibility_and_final_recheck_budget"
+      ]
+    },
+    {
+      "id": "NBR08-responsibility-work-is-not-added-to-public-accounting",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "            total_physical_checks += repair_responsibility_checks\n",
+      "replacement": "            total_physical_checks += 0\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_cancellation_during_responsibility_is_atomic"
+      ]
+    },
+    {
+      "id": "NBR09-final-physical-refusal-publishes-the-repair",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "                if repaired_physical.failure is None:\n",
+      "replacement": "                if True:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_final_physical_refusal_discards_all_repair_evidence"
+      ]
+    },
+    {
+      "id": "NBR10-cumulative-conflict-projection-preflight-is-deleted",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "        _preflight_tree_conflict_projection(\n            others,\n            origin=origin,\n            step=request.settings.grid_step_nm,\n            maximum=settings.max_projection_cells,\n        )\n",
+      "replacement": "        _ = others\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_tree_conflict_projection_preflight_is_cumulative_and_precedes_enumeration"
+      ]
+    },
+    {
+      "id": "NBR11-provenance-accepts-a-forged-selection-capability",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "                and self.selection._is_coordinator_derived()\n",
+      "replacement": "                and True\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_tree_repair_path_endpoint_and_capability_tampering_cannot_build_a_request"
+      ]
+    },
+    {
+      "id": "NBR12-private-validator-ignores-untouched-path-mutation",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "            if index != selected_path_index\n",
+      "replacement": "            if False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_candidate_path_validator.py::test_private_negotiated_tree_binds_all_non_derived_candidate_state"
+      ]
+    },
+    {
+      "id": "NBR13-responsibility-cancellation-is-ignored",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "                            if responsibility.failure is PhysicalClearanceFailure.CANCELLED:\n",
+      "replacement": "                            if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_cancellation_during_responsibility_is_atomic"
+      ]
+    },
+    {
+      "id": "NBR14-responsibility-pair-work-is-free",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "    return (len(left.vertices) - 1) * (len(right.vertices) - 1)\n",
+      "replacement": "    return 0\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_preflights_responsibility_and_final_recheck_budget"
+      ]
+    },
+    {
+      "id": "NBR15-private-topology-refusal-is-ignored",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "            if topology_failure is not None:\n",
+      "replacement": "            if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_candidate_path_validator.py::test_private_negotiated_tree_rejects_a_new_contact_cycle_with_an_untouched_path"
+      ]
+    },
+    {
+      "id": "NBR16-untouched-target-paths-are-not-projected",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "        blocked = _expanded_untouched_tree_cells(\n            checked_target,\n            selected_path_index=selection.target_path_index,\n            origin=origin,\n            step=request.settings.grid_step_nm,\n            bounds=bounds,\n        )\n",
+      "replacement": "        blocked: set[tuple[int, int]] = set()\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_tree_repair_selection_and_provenance_are_deterministic_and_complete"
+      ]
+    },
+    {
+      "id": "NBR17-reconstructed-proximity-accounting-is-unbound",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "            and reconstructed.cost == expected_cost\n",
+      "replacement": "            and True\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_rejects_resigned_reconstruction_accounting_tampering[cost]"
+      ]
+    },
+    {
+      "id": "NBR18-reconstructed-search-metrics-are-unbound",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "            and reconstructed.metrics == expected_metrics\n",
+      "replacement": "            and True\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_rejects_resigned_reconstruction_accounting_tampering[metrics]"
+      ]
+    },
+    {
+      "id": "NBR19-grown-repair-skips-exact-final-work-preflight",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "        if _candidate_set_pair_check_upper_bound(reconstructed_set) > (\n            remaining_physical_checks - responsibility_checks\n        ):\n",
+      "replacement": "        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_refuses_grown_route_before_validator_and_final_recheck"
+      ]
+    },
+    {
+      "id": "NBR20-tree-proximity-accounting-is-reset",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "            proximity_steps=target.cost.proximity_steps,\n",
+      "replacement": "            proximity_steps=0,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_preserves_inherited_proximity_and_search_accounting"
+      ]
+    },
+    {
+      "id": "NBR21-tree-search-metrics-are-overwritten-by-validator-work",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "        if type(selected) is not CoordinatorTreeRepairProvenance:\n",
+      "replacement": "        if True:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_preserves_inherited_proximity_and_search_accounting"
+      ]
+    },
+    {
+      "id": "NBR22-private-tree-edge-preflight-drops-final-pass",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "    required = original_edges + 2 * reconstructed_edges\n",
+      "replacement": "    required = original_edges + reconstructed_edges\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_candidate_path_validator.py::test_private_negotiated_tree_preflights_one_shared_exact_edge_ledger"
+      ]
+    },
+    {
+      "id": "NBR23-private-tree-edge-ledger-does-not-charge",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "        self.edge_checks += 1\n",
+      "replacement": "        self.edge_checks += 0\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_candidate_path_validator.py::test_private_negotiated_tree_preflights_one_shared_exact_edge_ledger"
+      ]
+    },
+    {
+      "id": "NBR24-topology-contact-predicates-are-free",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "    work.obstacle_check()\n",
+      "replacement": "    return None\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_candidate_path_validator.py::test_private_negotiated_tree_charges_contacts_and_stops_mid_scan"
+      ]
+    },
+    {
+      "id": "NBR25-topology-contact-scan-skips-cancellation-checkpoint",
+      "file": "src/copper_mcp/routing/candidate_path_validator.py",
+      "anchor": "    work.checkpoint()\n",
+      "replacement": "    _ = work\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_candidate_path_validator.py::test_private_negotiated_tree_charges_contacts_and_stops_mid_scan"
+      ]
+    },
+    {
+      "id": "NBR26-tree-board-ir-projection-drops-cancellation-hook",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "                cancelled=cancellation_check,\n",
+      "replacement": "                cancelled=None,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_tree_board_ir_projection_refusal_preserves_consumed_work_and_cancellation"
+      ]
+    },
+    {
+      "id": "NBR27-coordinator-discards-consumed-projection-work",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "                total_obstacle_checks += refusal.obstacle_checks\n",
+      "replacement": "                total_obstacle_checks += 0\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_accounts_one_check_tree_projection_refusal_atomically",
+        "tests/test_routing_congestion.py::test_multi_pin_repair_projection_cancellation_is_atomic_and_preserves_work"
+      ]
+    }
+  ]
+}

@@ -9,9 +9,12 @@
   [ADR-0064](0064-policy-bound-initial-negotiated-order.md),
   [ADR-0073](0073-declared-negotiation-policy-slots.md),
   [ADR-0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md),
+  [ADR-0127](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md),
   [D-233](../ledgers/decision-ledger.md), [D-234](../ledgers/decision-ledger.md),
+  [D-235](../ledgers/decision-ledger.md),
   [R-184](../ledgers/risk-register.md), [SEC-169](../ledgers/security-ledger.md),
-  [SEC-170](../ledgers/security-ledger.md),
+  [R-185](../ledgers/risk-register.md), [SEC-170](../ledgers/security-ledger.md),
+  [SEC-171](../ledgers/security-ledger.md),
   [B-124](../ledgers/benchmark-ledger.md), and
   [B-140](../ledgers/benchmark-ledger.md)
 

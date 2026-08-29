@@ -748,10 +748,23 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   complete-allocation physical-clearance trigger, and the other four still cannot form a
   two-request envelope. The newly exposed boundary is one level later and exact: **0 of 16**
   admitted boards contains a violating two-pad candidate eligible for the existing repair transaction,
-  so repair remains disabled and negotiated completion remains zero. #90 therefore stays open.
-  The next agent-only slice is a bounded multi-pin repair target, window-provenance and complete
-  topology-reconstruction contract with the same atomic physical and work gates; only after that
-  seam exists can a held-out repair differential honestly be measured.
+  so repair remained disabled in B-140 and negotiated completion was zero. #90 therefore stays open.
+  Multi-pin branch-repair capability implemented (2026-08-29). ADR-0127 now derives one bounded
+  repair only after an exact path pair reproduces the violation, binds the selected branch and
+  conflicting candidate behind private capabilities, replaces exactly that branch, validates the
+  complete 3–32-pad tree against Board IR, exact inherited accounting, authorized contact cells and
+  an acyclic unit-edge graph, then recomputes grown-route work and reruns the whole-set physical gate
+  before atomic publication. Unselected target paths are unavailable to the local solver outside
+  their existing attachment endpoints. One shared exact topology-edge ledger, charged cancellable
+  contact predicates, and preserved failed-projection work close the resource-accounting gaps.
+  Three-pad first/last-branch and 32-pad fixtures plus 27/27 killed mutants close the machine
+  contract, while legacy two-pad identities remain pinned. This
+  is synthetic capability evidence, not the held-out improvement #90 requires: B-140 ran with
+  repair disabled. The next agent-only slice is a predeclared B-141 successor that replays B-140's
+  exact admitted population with repair enabled, preserves an uninstrumented control, and reports
+  completion/quality and every refusal separately. #90 closes only if that differential is
+  deterministic and positive without weakening the physical, identity or work gates; otherwise it
+  re-parks on the measured result.
 - [ ] **SI/PI/thermal/DFM surrogate hooks with authoritative signoff, parked behind #99**
   ([#91](https://github.com/seunghyukchoe/copper-mcp/issues/91)). The half of this that carries the
   safety property is the signoff, not the surrogate — any claim surfaced to a caller comes from an

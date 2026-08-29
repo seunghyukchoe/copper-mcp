@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+import copper_mcp.routing.repair_provenance as provenance_module
 from copper_mcp.board_ir import Keepout, PointNM, Ring, make_snapshot
 from copper_mcp.routing import AStarRouter, RouteCandidate, RoutePatch, RoutePath
 from copper_mcp.routing.astar import canonical_candidate_bytes
@@ -16,10 +17,18 @@ from copper_mcp.routing.repair import (
 )
 from copper_mcp.routing.repair_provenance import (
     _CAPABILITY,
+    _TREE_PROVENANCE_CAPABILITY,
+    _TREE_SELECTION_CAPABILITY,
+    CoordinatorTreeRepairProvenance,
+    CoordinatorTreeRepairSelection,
     _candidate_bounds,
+    _TreeRepairProvenanceError,
     derive_repair_provenance,
+    derive_tree_repair_provenance,
+    derive_tree_repair_selection,
 )
 from scripts import exact_local_repair_gate_fixture as fixture
+from tests.test_routing_congestion import _multipin_requests, _multipin_shifted_snapshot
 
 
 def _inputs() -> tuple[object, object, object, object]:
@@ -38,6 +47,52 @@ def _rebase_candidate(candidate: RouteCandidate, revision: str) -> RouteCandidat
         unsigned,
         candidate_id=f"sha256:{hashlib.sha256(canonical_candidate_bytes(unsigned)).hexdigest()}",
     )
+
+
+def _tree_inputs() -> tuple[object, object, RouteCandidate, RouteCandidate]:
+    snapshot = _multipin_shifted_snapshot()
+    target_request, conflict_request = _multipin_requests(snapshot)
+    router = AStarRouter()
+    target = router.propose(snapshot, target_request).candidate
+    conflict = router.propose(snapshot, conflict_request).candidate
+    assert target is not None and conflict is not None
+    assert target.pad_count == 3 and len(target.patch.paths) == 2
+    assert conflict.pad_count == 2 and len(conflict.patch.paths) == 1
+    return snapshot, target_request, target, conflict
+
+
+def _tree_selection_and_provenance() -> tuple[
+    object,
+    object,
+    RouteCandidate,
+    RouteCandidate,
+    CoordinatorTreeRepairSelection,
+    CoordinatorTreeRepairProvenance,
+]:
+    snapshot, request, target, conflict = _tree_inputs()
+    selection = derive_tree_repair_selection(
+        snapshot,
+        request,
+        target,
+        conflict,
+        envelope_digest=f"sha256:{'1' * 64}",
+        iteration=1,
+        target_path_index=0,
+        conflict_path_index=0,
+        responsibility_digest=f"sha256:{'2' * 64}",
+        responsibility_checks=1,
+    )
+    provenance = derive_tree_repair_provenance(
+        snapshot,
+        request,
+        target,
+        (conflict,),
+        selection,
+        envelope_digest=f"sha256:{'1' * 64}",
+        iteration=1,
+        settings=RepairTransactionSettings(max_projection_cells=512),
+    )
+    return snapshot, request, target, conflict, selection, provenance
 
 
 def test_shifted_phase_conflict_is_conservatively_projected_onto_target_lattice() -> None:
@@ -350,6 +405,359 @@ def test_board_ir_projection_matches_reference_router_keepout_refusal() -> None:
     )
     local = provenance.local_request(RepairTransactionSettings(max_projection_cells=256))
     assert exact_local_repair(local).status is LocalRepairStatus.NO_PATH
+
+
+def test_tree_repair_selection_and_provenance_are_deterministic_and_complete() -> None:
+    snapshot, request, target, conflict = _tree_inputs()
+    settings = RepairTransactionSettings(max_projection_cells=512)
+    selections = tuple(
+        derive_tree_repair_selection(
+            snapshot,
+            request,
+            target,
+            conflict,
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            target_path_index=0,
+            conflict_path_index=0,
+            responsibility_digest=f"sha256:{'2' * 64}",
+            responsibility_checks=1,
+        )
+        for _ in range(10)
+    )
+    selection = selections[0]
+    assert selections == (selection,) * 10
+    assert selection.digest == (
+        "sha256:4055d95d5768f0e77cacd5961fc2188bdb80e2081f7ced6b070fb5050a4cbe51"
+    )
+    assert selection.target_candidate_id == target.candidate_id
+    assert selection.target_path_count == 2
+    assert selection.target_path_index == 0
+    assert selection.target_path_start == target.patch.paths[0].vertices[0]
+    assert selection.target_path_end == target.patch.paths[0].vertices[-1]
+    assert selection.conflict_candidate_id == conflict.candidate_id
+    assert selection.conflict_path_count == 1
+    assert selection.conflict_path_index == 0
+    assert selection.responsibility_digest == f"sha256:{'2' * 64}"
+    assert selection.responsibility_checks == 1
+
+    provenances = tuple(
+        derive_tree_repair_provenance(
+            snapshot,
+            request,
+            target,
+            (conflict,),
+            selection,
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=settings,
+        )
+        for _ in range(10)
+    )
+    provenance = provenances[0]
+    assert provenances == (provenance,) * 10
+    assert provenance.digest == (
+        "sha256:ed3bc11f31713aec9c3ef11bceb71eb1c5f28e59a19c88f18c609953b6a4c92a"
+    )
+    assert provenance.selection == selection
+    assert provenance.target_candidate_id == target.candidate_id
+    assert provenance.conflicting_candidate_ids == (conflict.candidate_id,)
+    assert provenance.target_path_count == 2
+    assert provenance.target_path_index == 0
+    assert provenance.target_path_digest == selection.target_path_digest
+    assert provenance.target_path_start == selection.target_path_start
+    assert provenance.target_path_end == selection.target_path_end
+    assert provenance.responsibility_digest == selection.responsibility_digest
+    assert provenance.responsibility_checks == selection.responsibility_checks
+    local = provenance.local_request(settings)
+    assert local.start == provenance.start
+    assert local.end == provenance.end
+    assert local.blocked_cells == provenance.blocked_cells
+    assert {(-4, 0), (-3, 0), (-2, 0), (-1, 0)}.issubset(provenance.blocked_cells)
+    assert provenance.start not in provenance.blocked_cells
+    assert provenance.end not in provenance.blocked_cells
+
+
+def test_tree_repair_factories_refuse_forged_index_candidate_and_revision() -> None:
+    snapshot, request, target, conflict = _tree_inputs()
+    common = {
+        "envelope_digest": f"sha256:{'1' * 64}",
+        "iteration": 1,
+        "target_path_index": 0,
+        "conflict_path_index": 0,
+        "responsibility_digest": f"sha256:{'2' * 64}",
+        "responsibility_checks": 1,
+    }
+    for overrides in (
+        {"target_path_index": True},
+        {"target_path_index": len(target.patch.paths)},
+        {"conflict_path_index": -1},
+        {"responsibility_checks": True},
+        {"responsibility_checks": 0},
+        {"responsibility_digest": f"sha256:{'Z' * 64}"},
+    ):
+        with pytest.raises(ValueError, match="tree repair selection"):
+            derive_tree_repair_selection(
+                snapshot,
+                request,
+                target,
+                conflict,
+                **(common | overrides),
+            )
+
+    forged_target = replace(target, candidate_id=f"sha256:{'3' * 64}")
+    stale_target = _rebase_candidate(target, f"sha256:{'4' * 64}")
+    stale_request = replace(request, board_revision=f"sha256:{'5' * 64}")
+    for checked_request, checked_target in (
+        (request, forged_target),
+        (request, stale_target),
+        (stale_request, target),
+    ):
+        with pytest.raises(ValueError, match="tree repair selection"):
+            derive_tree_repair_selection(
+                snapshot,
+                checked_request,
+                checked_target,
+                conflict,
+                **common,
+            )
+
+
+def test_tree_repair_path_endpoint_and_capability_tampering_cannot_build_a_request() -> None:
+    snapshot, request, target, conflict, selection, provenance = _tree_selection_and_provenance()
+    forged_selections = (
+        replace(
+            selection,
+            target_path_index=1,
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(
+            selection,
+            target_path_digest=f"sha256:{'6' * 64}",
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(
+            selection,
+            target_path_start=PointNM(
+                selection.target_path_start.x + request.settings.grid_step_nm,
+                selection.target_path_start.y,
+            ),
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(
+            selection,
+            target_candidate_id=f"sha256:{'7' * 64}",
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(
+            selection,
+            conflict_path_index=1,
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(
+            selection,
+            conflict_path_digest=f"sha256:{'a' * 64}",
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(
+            selection,
+            conflict_candidate_id=f"sha256:{'b' * 64}",
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(
+            selection,
+            responsibility_digest=f"sha256:{'d' * 64}",
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(
+            selection,
+            responsibility_checks=2,
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(
+            selection,
+            snapshot_digest=f"sha256:{'8' * 64}",
+            _capability=_TREE_SELECTION_CAPABILITY,
+        ),
+        replace(selection, _capability=object()),
+    )
+    for forged in forged_selections:
+        with pytest.raises(ValueError, match="tree repair provenance"):
+            derive_tree_repair_provenance(
+                snapshot,
+                request,
+                target,
+                (conflict,),
+                forged,
+                envelope_digest=f"sha256:{'1' * 64}",
+                iteration=1,
+                settings=RepairTransactionSettings(max_projection_cells=512),
+            )
+        with pytest.raises(ValueError, match="coordinator-derived"):
+            replace(
+                provenance,
+                selection=forged,
+                _capability=_TREE_PROVENANCE_CAPABILITY,
+            ).local_request(RepairTransactionSettings(max_projection_cells=512))
+
+    with pytest.raises(ValueError, match="coordinator-derived"):
+        replace(provenance, _capability=object()).local_request(
+            RepairTransactionSettings(max_projection_cells=512)
+        )
+    with pytest.raises(ValueError, match="coordinator-derived"):
+        replace(
+            provenance,
+            target_candidate_id=f"sha256:{'9' * 64}",
+            _capability=_TREE_PROVENANCE_CAPABILITY,
+        ).local_request(RepairTransactionSettings(max_projection_cells=512))
+
+
+def test_tree_conflict_projection_preflight_is_cumulative_and_precedes_enumeration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, target, conflict = _tree_inputs()
+    remaining_limits: list[int] = []
+
+    def bounded_probe(
+        candidate: RouteCandidate,
+        *,
+        origin: PointNM,
+        step: int,
+        maximum: int,
+    ) -> int:
+        del candidate, origin, step
+        remaining_limits.append(maximum)
+        if maximum < 3:
+            raise ValueError("tree repair projection exceeds its cell budget")
+        return 3
+
+    monkeypatch.setattr(
+        provenance_module,
+        "_tree_projection_cell_upper_bound",
+        bounded_probe,
+    )
+    with pytest.raises(ValueError, match="cell budget"):
+        provenance_module._preflight_tree_conflict_projection(
+            (target, conflict),
+            origin=target.patch.paths[0].vertices[0],
+            step=target.settings.grid_step_nm,
+            maximum=5,
+        )
+    assert remaining_limits == [5, 2]
+
+    snapshot, request, target, conflict, selection, _ = _tree_selection_and_provenance()
+    events: list[str] = []
+
+    def refuse_preflight(*args: object, **kwargs: object) -> int:
+        del args, kwargs
+        events.append("preflight")
+        raise ValueError("tree repair projection exceeds its cell budget")
+
+    def forbidden_enumeration(*args: object, **kwargs: object) -> set[tuple[int, int]]:
+        del args, kwargs
+        events.append("enumeration")
+        return set()
+
+    monkeypatch.setattr(
+        provenance_module,
+        "_preflight_tree_conflict_projection",
+        refuse_preflight,
+    )
+    monkeypatch.setattr(provenance_module, "_expanded_conflict_cells", forbidden_enumeration)
+    with pytest.raises(ValueError, match="tree repair provenance"):
+        derive_tree_repair_provenance(
+            snapshot,
+            request,
+            target,
+            (conflict,),
+            selection,
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=RepairTransactionSettings(max_projection_cells=512),
+        )
+    assert events == ["preflight"]
+
+
+def test_tree_board_ir_projection_refusal_preserves_consumed_work_and_cancellation() -> None:
+    snapshot, request, target, conflict, selection, _ = _tree_selection_and_provenance()
+    with pytest.raises(_TreeRepairProvenanceError) as budget_refusal:
+        derive_tree_repair_provenance(
+            snapshot,
+            request,
+            target,
+            (conflict,),
+            selection,
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=RepairTransactionSettings(
+                max_projection_cells=512,
+                max_validator_obstacle_checks=1,
+            ),
+        )
+    assert budget_refusal.value.obstacle_checks == 1
+    assert not budget_refusal.value.cancelled
+    assert str(budget_refusal.value) == "tree repair provenance is invalid"
+
+    cancellation_calls = 0
+
+    def cancelled() -> bool:
+        nonlocal cancellation_calls
+        cancellation_calls += 1
+        return cancellation_calls >= 8
+
+    with pytest.raises(_TreeRepairProvenanceError) as cancellation_refusal:
+        derive_tree_repair_provenance(
+            snapshot,
+            request,
+            target,
+            (conflict,),
+            selection,
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=RepairTransactionSettings(max_projection_cells=512),
+            cancelled=cancelled,
+        )
+    assert cancellation_calls == 8
+    assert cancellation_refusal.value.obstacle_checks == 3
+    assert cancellation_refusal.value.cancelled
+    assert str(cancellation_refusal.value) == "tree repair provenance is invalid"
+
+
+def test_tree_post_projection_refusal_preserves_successfully_consumed_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, request, target, conflict, selection, _ = _tree_selection_and_provenance()
+
+    def refuse_after_projection(**_kwargs: object) -> str:
+        raise RuntimeError("do not disclose late provenance failure")
+
+    monkeypatch.setattr(provenance_module, "_tree_provenance_digest", refuse_after_projection)
+    with pytest.raises(_TreeRepairProvenanceError) as refusal:
+        derive_tree_repair_provenance(
+            snapshot,
+            request,
+            target,
+            (conflict,),
+            selection,
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=RepairTransactionSettings(max_projection_cells=512),
+        )
+
+    assert refusal.value.obstacle_checks == 3
+    assert not refusal.value.cancelled
+    assert str(refusal.value) == "tree repair provenance is invalid"
+
+
+def test_tree_projection_refusal_accounting_contract_is_closed() -> None:
+    for obstacle_checks, cancelled in (
+        (-1, False),
+        (True, False),
+        (4_097, False),
+        (0, 0),
+    ):
+        with pytest.raises(ValueError, match="refusal accounting"):
+            _TreeRepairProvenanceError(obstacle_checks, cancelled=cancelled)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("value", (0, 2, True, "1"))
