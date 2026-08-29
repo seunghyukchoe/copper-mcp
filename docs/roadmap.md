@@ -459,19 +459,30 @@ independent reasons, none of which is a re-estimate:
 - **The unit does not survive contact.** 50–80 hours is 68–109 agent runs against an observed 13
   merges in the week after `v0.7.0`. The figure was never in the same currency as the delivery rate.
 
-What replaces it is four entry criteria. **Only E3 is not agent-executable.**
+What replaces it is four entry criteria. E3 was the one that needed the operator; it is now
+satisfied, so **all four are complete**. That is a statement about the entry criteria and not a
+judgement that M3's remaining work should start — #68's park recommendation is unchanged, and E3's
+observation strengthened rather than weakened it.
 
 | | Criterion | Why it gates apply |
 |---|---|---|
 | **E1 — complete** | Legible reasons for a withheld apply token, as a closed literal set | [ADR-0120](adr/0120-withheld-apply-authority-has-a-closed-reason.md) gives all six preview surfaces one non-echoing eight-value vocabulary and enforces that every response carries exactly one of a token and a reason. |
 | **E2 — complete** | A DRC reproducibility policy ([#170](https://github.com/seunghyukchoe/copper-mcp/issues/170)) | ADR-0109 requires every published count to carry its comparability and prohibits differentials unless repeated runs agree exactly; #170 is closed. |
-| **E3** | One real-editor IPC observation, **or** a recorded park of #68 | `docs/handoff/project-state.md` records that no successful real-editor IPC oracle run has ever happened. **May need the operator** — the workstation IPC server is disabled, and enabling it is a change to the operator's machine. |
+| **E3 — complete** | One real-editor IPC observation, **or** a recorded park of #68 | **The observation exists.** The operator enabled the workstation IPC server and consented to one read-only run: B-138 records a live KiCad 10.0.5 session with the CopperTone board open, observed through CopperMCP's own transport. The result is deliberately unflattering and is the point — the **default MCP path refuses** (`KicadIpcVersionError`: connected KiCad 10.0.5 is newer than the binding's 10.0.1 API), the editor-context surface refuses with no override available, and the capability oracle skips for want of a KiCad-launched plugin environment. One session, one board, read-only. **This satisfies E3 as an observation and changes nothing about #68**, whose park recommendation stands. |
 | **E4 — complete** | Appliability re-measured on the frozen corpus | B-128 runs both production source-preservation gates at a clean commit over the frozen 18-save selection: 15 convert, route patching is structurally appliable on 5, and placement replay renders on 0. No apply or DRC runs. |
 
-The recommendation on E3, which the operator may take or decline, is to **park** #68: the mutation
-would be built on a transport this project has never successfully spoken to, and the protocol
-exposes no revision, no dirty flag and no conditional write. #68 is parked and deliberately **not
-closed**, because the decision is the operator's.
+The recommendation on #68, which the operator may take or decline, is still to **park** it — and
+B-138 makes that recommendation stronger rather than weaker, so the original wording is corrected
+rather than dropped. It used to rest on "a transport this project has never successfully spoken
+to". That is no longer true: the project has now spoken to a real editor. What the observation
+found is a better reason to park. The default MCP path **refuses a current KiCad outright**,
+because the pinned binding's API version trails the shipping editor and `check_version()` raises;
+an observation required a development flag that stamps its own result `future_api_unverified`. A
+mutation surface would be built on top of that. The protocol's original objection is also
+unchanged and was re-confirmed by measurement: it exposes no revision, no dirty flag and no
+conditional write, and the live board digest was measured to differ from the on-disk file digest
+(165,571 bytes over IPC against 166,070 committed) — the ADR-0074 gap, now observed rather than
+argued. #68 is parked and deliberately **not closed**, because the decision is the operator's.
 
 - [x] Durable routing jobs and cancellation. The bounded internal ledger, single-worker lease
   recovery, redacted candidate manifests, file-backed layered request/result persistence,

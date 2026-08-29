@@ -1,0 +1,348 @@
+{
+  "binding_findings": [
+    "kipy 0.7.1 KiCad.get_text_as_shapes accepts common_types.Text/TextBox only; Board.get_text() returns BoardText/BoardTextBox, which are not subclasses. Passing the board's own objects falls through the isinstance check into the TextBox branch and raises a CopyFrom TypeError naming the wrong type. The caller must bridge with BoardText.as_text() / BoardTextBox.as_textbox().",
+    "GetTextAsShapes carries no document or project reference, and the response carries no font, font-build, or KiCad-build identity."
+  ],
+  "commit": "7dc662142017b65ee65717061dd3d5a052988184",
+  "committed_board": {
+    "bytes": 166070,
+    "digest": "sha256:3bcd01ec4942fccabfaf1c21bdae050a31a7bf99af7ab1bcb0dbb3d0aabcfb94",
+    "path": "hardware/coppertone-buffer/coppertone-buffer.kicad_pcb"
+  },
+  "committed_board_text_strings": 0,
+  "copper_mcp_surfaces": {
+    "capture_live_editor_context_allow_future_api": {
+      "active_layer_index": 3,
+      "active_layer_name": "F.Cu",
+      "board_bytes": 165571,
+      "board_revision": "sha256:7e0ea855d98ae63f8dbb96db88c29b5963ed5609d1d9fa2567c714d4c1d6ec22",
+      "selection_count": 0,
+      "verdict": "observed"
+    },
+    "inspect_live_board_allow_future_api": {
+      "observation": {
+        "api_version": "10.0.1",
+        "board_bytes": 165571,
+        "board_digest": "sha256:7e0ea855d98ae63f8dbb96db88c29b5963ed5609d1d9fa2567c714d4c1d6ec22",
+        "compatibility": "future_api_unverified",
+        "kicad_version": "10.0.5",
+        "object_counts": {
+          "dimensions": 0,
+          "footprints": 26,
+          "groups": 0,
+          "nets": 0,
+          "pads": 55,
+          "shapes": 1,
+          "text": 4,
+          "tracks": 53,
+          "vias": 9,
+          "zones": 4
+        },
+        "read_only": true,
+        "schema_version": "0.1.0",
+        "session_revision": "pbkdf2-hmac-sha256:a973f8ae1d3632be54541d0119dc2aba8d4706697cee5600b4a9a91bbecddcc1",
+        "socket_kind": "default-local-ipc",
+        "source": "kicad-ipc-live"
+      },
+      "verdict": "observed"
+    },
+    "inspect_live_board_default": {
+      "error_type": "KicadIpcVersionError",
+      "message": "connected KiCad is newer than the installed kicad-python API",
+      "verdict": "refused"
+    },
+    "inspect_live_editor_context_default": {
+      "error_type": "KicadIpcVersionError",
+      "message": "connected KiCad is newer than the installed kicad-python API",
+      "verdict": "refused"
+    },
+    "probe_live_kicad_ipc": {
+      "result": {
+        "board_digest": null,
+        "board_ir_snapshot_digest": null,
+        "capability": "kicad_plugin_environment_absent",
+        "compatibility": null,
+        "digest_matches": null,
+        "exact_source_digest": null,
+        "read_only": true,
+        "scene_snapshot_digest": null,
+        "schema_version": "0.1.0",
+        "socket_configured": false,
+        "status": "skipped",
+        "token_configured": false
+      },
+      "verdict": "skipped"
+    }
+  },
+  "dirty_at_end": false,
+  "dirty_at_start": false,
+  "environment": {
+    "kicad_api_socket_configured": false,
+    "kicad_api_token_configured": false,
+    "kicad_reported_version": "10.0.5 (10.0.5)",
+    "kipy_version": "0.7.1",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "instrument": "live_editor_observation_and_text_to_shape_probe",
+  "not_claimed": [
+    "no board write, editor mutation, apply authority, or undo transaction",
+    "no copper text support, and no change to ADR-0095's refusal",
+    "no offline capability: every measurement here needs a live editor session",
+    "not a corpus result: one board, one session, one KiCad build, one host",
+    "no routing, DRC, placement, fabrication, or conversion result"
+  ],
+  "operation": "read_only_live_observation_and_text_shape_census",
+  "recorded_at_utc": "2026-08-28T23:09:09+00:00",
+  "run_id": "sha256:7bc4e0eea60b1231cb823aed76b9fcf5e7eeef524ad671b4524de629dfbac5f6",
+  "runner_digest": "sha256:034d44b36561d592e62284fb5e2fa9336e498bc357725f849a0624f3c20701e5",
+  "schema_version": "0.1.0",
+  "text_to_shape": {
+    "api_symbol": "kipy.kicad.KiCad.get_text_as_shapes",
+    "board_text_census": [
+      {
+        "character_count": 2,
+        "document_order": 0,
+        "extent_nm": {
+          "x_max": 4613809,
+          "x_min": 3386191,
+          "y_max": 23543259,
+          "y_min": 22363259
+        },
+        "layer_index": 40,
+        "non_ascii_characters": 0,
+        "shape_count": 4,
+        "shape_kinds": {
+          "Segment": 4
+        },
+        "stroke_widths_nm": [
+          180000
+        ],
+        "wrapper": "BoardText"
+      },
+      {
+        "character_count": 7,
+        "document_order": 1,
+        "extent_nm": {
+          "x_max": 39161428,
+          "x_min": 32933809,
+          "y_max": 2543259,
+          "y_min": 1363259
+        },
+        "layer_index": 40,
+        "non_ascii_characters": 0,
+        "shape_count": 47,
+        "shape_kinds": {
+          "Segment": 47
+        },
+        "stroke_widths_nm": [
+          180000
+        ],
+        "wrapper": "BoardText"
+      },
+      {
+        "character_count": 3,
+        "document_order": 2,
+        "extent_nm": {
+          "x_max": 49423333,
+          "x_min": 46671905,
+          "y_max": 23543259,
+          "y_min": 22363259
+        },
+        "layer_index": 40,
+        "non_ascii_characters": 0,
+        "shape_count": 27,
+        "shape_kinds": {
+          "Segment": 27
+        },
+        "stroke_widths_nm": [
+          180000
+        ],
+        "wrapper": "BoardText"
+      },
+      {
+        "character_count": 37,
+        "document_order": 3,
+        "extent_nm": {
+          "x_max": 45385714,
+          "x_min": 6671429,
+          "y_max": 29044742,
+          "y_min": 27244742
+        },
+        "layer_index": 40,
+        "non_ascii_characters": 1,
+        "shape_count": 275,
+        "shape_kinds": {
+          "Segment": 275
+        },
+        "stroke_widths_nm": [
+          200000
+        ],
+        "wrapper": "BoardText"
+      }
+    ],
+    "extents_containment": [
+      {
+        "copper_y_max_nm": 23543259,
+        "copper_y_min_nm": 22363259,
+        "extents_y_max_nm": 23900900,
+        "extents_y_min_nm": 22099100,
+        "overflow_above_nm": -264159,
+        "overflow_below_nm": -357641,
+        "probe": "ABC"
+      },
+      {
+        "copper_y_max_nm": 23924211,
+        "copper_y_min_nm": 22220401,
+        "extents_y_max_nm": 23900900,
+        "extents_y_min_nm": 22099100,
+        "overflow_above_nm": -121301,
+        "overflow_below_nm": 23311,
+        "probe": "(g)pqy"
+      },
+      {
+        "copper_y_max_nm": 23543259,
+        "copper_y_min_nm": 22085640,
+        "extents_y_max_nm": 24029233,
+        "extents_y_min_nm": 21970767,
+        "overflow_above_nm": -114873,
+        "overflow_below_nm": -485974,
+        "probe": "~{ABC}"
+      }
+    ],
+    "font_dependence": [
+      {
+        "digest": "sha256:2ac0689cece6ecf7d2c1d2c203bdb937e8b4b27ddf08fd9ddc83a26c99344e81",
+        "face": null,
+        "shape_count": 52,
+        "shape_kinds": {
+          "Segment": 52
+        },
+        "width_nm": 5037142
+      },
+      {
+        "digest": "sha256:34b596d6584499eb8c2c02010009d0dfcb42e0fb4fee2b3af63e784002bea02a",
+        "face": "Helvetica",
+        "shape_count": 4,
+        "shape_kinds": {
+          "Polygon": 4
+        },
+        "width_nm": 4481612
+      },
+      {
+        "digest": "sha256:5938af51570313b25df7bfc5addf4dc6ee1cdc7d85954e2a5d0d0e5b6fa60570",
+        "face": "NoSuchFaceXYZ",
+        "shape_count": 4,
+        "shape_kinds": {
+          "Polygon": 4
+        },
+        "width_nm": 4999163
+      },
+      {
+        "digest": "sha256:82ac4c6f98de36a0884ceda699e2d4a31820609570ae3335e0db72537045a9ce",
+        "face": "Times New Roman",
+        "shape_count": 4,
+        "shape_kinds": {
+          "Polygon": 4
+        },
+        "width_nm": 4335494
+      },
+      {
+        "digest": "sha256:e98910f4567f032be49244078c2c049f645a46796fbb5cfff38ef92eeb669f5b",
+        "face": "Courier",
+        "shape_count": 4,
+        "shape_kinds": {
+          "Polygon": 4
+        },
+        "width_nm": 3376291
+      }
+    ],
+    "glyph_widths": [
+      {
+        "codepoint": "U+006D",
+        "shape_count": 13,
+        "width_nm": 1037143
+      },
+      {
+        "codepoint": "U+2014",
+        "shape_count": 1,
+        "width_nm": 1037143
+      },
+      {
+        "codepoint": "U+0416",
+        "shape_count": 5,
+        "width_nm": 1322857
+      },
+      {
+        "codepoint": "U+6F22",
+        "shape_count": 17,
+        "width_nm": 1418095
+      }
+    ],
+    "repeated_agreement": {
+      "agrees": true,
+      "calls": 3,
+      "digests": [
+        "sha256:5806d72f63da688eec782d97616930facf7c4f19228bffa438672c580be1a06f",
+        "sha256:5806d72f63da688eec782d97616930facf7c4f19228bffa438672c580be1a06f",
+        "sha256:5806d72f63da688eec782d97616930facf7c4f19228bffa438672c580be1a06f"
+      ]
+    },
+    "response_graphic_shape_fields": [
+      "attributes",
+      "segment"
+    ],
+    "text_variable_expansion": [
+      {
+        "character_count": 15,
+        "digest": "sha256:b952e4a9ab10f241f68c65430a7161443b65fc3c38e99d461f6f11f8c3cf10b6",
+        "probe": "${CURRENT_DATE}",
+        "shape_count": 121,
+        "width_nm": 13132381
+      },
+      {
+        "character_count": 14,
+        "digest": "sha256:1d8ec0fda69b00d0caf34564dbf9cc03b4d7f5c1636d717ddcae87870b79f276",
+        "probe": "${PROJECTNAME}",
+        "shape_count": 121,
+        "width_nm": 12513333
+      },
+      {
+        "character_count": 11,
+        "digest": "sha256:849ab5fb63758bd17dca0061e3a38c59f64d0e4855caef4fca6e1134e15b60aa",
+        "probe": "${FILENAME}",
+        "shape_count": 68,
+        "width_nm": 9084761
+      },
+      {
+        "character_count": 8,
+        "digest": "sha256:bc3a8c3edc153779392edd8e59b242fd5d13762073b7330e1a2da0b2c870056c",
+        "probe": "${MYVAR}",
+        "shape_count": 67,
+        "width_nm": 6799048
+      },
+      {
+        "character_count": 14,
+        "digest": "sha256:8948e38352f80bf2bbfb2ba58564d7dffb6e917c6abdc6da950280715e2faea8",
+        "probe": "AAAAAAAAAAAAAA",
+        "shape_count": 42,
+        "width_nm": 11989524
+      },
+      {
+        "character_count": 10,
+        "digest": "sha256:e29da167229d68d42651168fefd37a25db21502baddb6f2a883a72c1fcb354d9",
+        "probe": "AAAAAAAAAA",
+        "shape_count": 30,
+        "width_nm": 8560952
+      },
+      {
+        "character_count": 8,
+        "digest": "sha256:316747a8726027fb69e8decffe741fa4fafdbf9eadfe7219bac27ff830b03107",
+        "probe": "AAAAAAAA",
+        "shape_count": 24,
+        "width_nm": 6846667
+      }
+    ],
+    "wire_command": "kiapi.common.commands.GetTextAsShapes"
+  }
+}
