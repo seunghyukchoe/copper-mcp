@@ -25,21 +25,27 @@ All notable changes are documented here. The format follows
   a 3–32-pad candidate. The coordinator preflights and charges exact path-pair responsibility work,
   derives private capability-bound provenance from the first deterministic pair that reproduces
   the whole-set violation, blocks every unselected target branch outside its existing attachment
-  endpoints, and preserves every unselected path and non-derived candidate field. A private gate
+  endpoints, and preserves every unselected path and non-derived candidate field. The conflict and
+  untouched-branch projections share the existing 4,096-cell ceiling: compressed untouched paths
+  receive a cumulative expansion-work preflight before enumeration, and each actual blocked-cell
+  insertion observes cancellation and is retained in refusal accounting. A private gate
   then binds inherited proximity/search accounting, preflights one exact shared edge-work ledger,
   charges every topology/contact predicate with immediate cancellation, rejects duplicate edges,
   new same-net contacts and cycles, validates every Board IR edge and complete connectivity, and
   recomputes the exact grown-route final-check bound before the ordinary whole-set physical gate.
   Failed or cancelled Board IR projection retains every consumed obstacle check in coordinator
-  accounting. Eligible two-pad
+  accounting, and a tree attempt reserves its worst-case projection plus validator work against
+  the global obstacle ceiling before probing. Successful tree evidence and coordinator totals also
+  include consumed untouched-branch insertion work. Eligible two-pad
   targets retain precedence and their prior identities. Topology, accounting, budget, validator,
   cancellation and final-clearance refusals discard the reconstructed candidate and all repair
   evidence atomically. No MCP, CLI, schema, persistence, job, external-document, apply, editor or
   board-write surface changes. Synthetic 3-pad and 32-pad fixtures prove the capability; B-140
   itself ran without repair, so #90 remains open for a predeclared repair-enabled held-out
-  differential (`ADR-0127`, `D-235`, `R-185`, `SEC-171`). The reproducible mutation harness kills
-  27/27 attempts to weaken responsibility, provenance, untouched-path/topology preservation,
-  accounting, shared edge/contact work, failed-projection accounting, original or grown-route work
+  differential (`ADR-0127`, `D-235`, `R-185`, `SEC-171`, `SEC-172`). The reproducible mutation harness kills
+  35/35 attempts to weaken responsibility, provenance, untouched-path/topology preservation,
+  accounting, shared edge/contact work, failed-projection accounting, global obstacle reservation,
+  exact-boundary admission, successful untouched-work accounting, original or grown-route work
   gates, cancellation or final physical publication,
   with zero survivors.
 - Board IR converts boards whose outline is drawn with `Edge.Cuts` **arcs** -- which is what a

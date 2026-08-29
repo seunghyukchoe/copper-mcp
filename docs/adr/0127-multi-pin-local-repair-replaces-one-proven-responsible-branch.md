@@ -54,9 +54,11 @@ Tree provenance uses the selected target branch's first vertex as its authoritat
 requires every target vertex to be exactly congruent with that lattice, and projects all conflicting
 candidates conservatively under one cumulative cell budget before enumerating any blocked cell.
 Every unselected target branch is also projected as unavailable same-net copper, expanded by the
-trace-width lattice radius, except for the selected branch's two already-authorized endpoints. This
-prevents the local solver from retracing an unselected edge or attaching to it at a new point. The
-local exact solver receives only the bounded window, endpoints and blocked cells.
+trace-width lattice radius, except for the selected branch's two already-authorized endpoints. Its
+compressed-segment expansion work is preflighted cumulatively against the same 4,096-cell ceiling
+before any blocked-cell enumeration; each actual insertion observes cancellation and charges the
+consumed work. This prevents the local solver from retracing an unselected edge or attaching to it
+at a new point. The local exact solver receives only the bounded window, endpoints and blocked cells.
 
 Successful local output replaces exactly the selected path. Path count, path order and every
 unselected `RoutePath` remain identical; revision, net, layer, width, pad endpoints and count,
@@ -65,9 +67,11 @@ the selected path and its derived candidate identity may change freely. Geometry
 bends, bend cost and wire length are recomputed; the rejected candidate's proximity/via accounting
 and deterministic search metrics remain inherited. Local-repair expansions and validator work are
 recorded separately in success evidence and coordinator totals, not rewritten as historical search
-metrics. Board-IR projection uses the coordinator cancellation callback, and a failed or cancelled
-projection carries its already-consumed obstacle checks through a closed internal refusal so later
-iterations cannot spend work that disappeared from the global account.
+metrics; successful tree evidence and totals include every consumed untouched-branch insertion.
+Tree attempts reserve their worst-case projection plus validator work against the global obstacle
+ceiling before probing. Board-IR projection uses the coordinator cancellation callback, and a failed or cancelled
+projection carries its already-consumed obstacle and untouched-expansion work through a closed
+internal refusal so later iterations cannot spend work that disappeared from the global account.
 
 A private negotiated-tree validator verifies both complete candidate identities, the exact
 preservation and accounting rules above, every expanded selected-layer edge against Board IR, an
@@ -113,7 +117,9 @@ non-echoing; no path, coordinate, pad, net or board content is added to a result
 
 Focused tests exercise deterministic first- and last-path responsibility, exact preservation of
 every unselected path, one accepted 3-pad target, one accepted 32-pad target with 30 of 31 paths
-unchanged, stale and forged bindings, cumulative projection preflight, untouched-target projection,
+unchanged, stale and forged bindings, cumulative conflict and untouched expansion-work projection
+preflight, many short untouched segments refusing before enumeration, mid-enumeration cancellation
+with exact consumed work, untouched-target projection,
 complete-tree connectivity and acyclicity, a re-signed new-contact loop, inherited positive
 proximity/search accounting, re-signed accounting tampering, original and grown-route final-work
 preflights, exact shared topology-edge accounting, charged mid-scan contact cancellation, preserved
@@ -124,16 +130,19 @@ composite digest and provenance digest remain pinned.
 
 The committed mutation spec
 [`2026-08-29-negotiated-multipin-branch-repair.json`](../mutants/2026-08-29-negotiated-multipin-branch-repair.json),
-SHA-256 `fc6e15174b9552629bb5f1368d0fd02dc594039e46c4557d5a493ac18579af27`,
-uses the reproducible harness on Python 3.12.13 / macOS-26.5.2-arm64-arm-64bit. Twenty-seven mutants
+SHA-256 `d300bc240fd390a15f47249178e93c1705f7bf81be99d055a105c447e98d4e6b`,
+uses the reproducible harness on Python 3.12.13 / macOS-26.5.2-arm64-arm-64bit. Thirty-five mutants
 are killed with zero survivors: first-path-only selection, clean-pair attribution, dropped
 path-index and responsibility bindings, forged selection capability, deleted or unguarded
 unselected paths, skipped untouched-target projection, ignored topology and complete-tree
 validation, unbound or reset cost/search accounting, responsibility cancellation, free
 responsibility work, omitted original or reconstructed final-work preflights and public accounting,
 bypassed final physical refusal, deleted cumulative conflict-projection preflight, undercounted or
-free shared tree-edge/contact work, skipped contact/projection cancellation, and discarded consumed
-projection work on refusal.
+free shared tree-edge/contact work, skipped contact/projection cancellation, discarded consumed
+projection work on refusal, deleted untouched expansion preflight, weakened shared projection
+ceiling, removed untouched-enumeration cancellation, dropped its consumed-work accounting,
+deleted global tree obstacle reservation, rejected exact-boundary admission, and dropped
+successful untouched-work totals or evidence.
 
 This is contract and synthetic capability evidence, not held-out routing-quality evidence. It is
 not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor or hardware evidence.

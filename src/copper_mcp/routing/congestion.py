@@ -401,7 +401,13 @@ def _repair_responsibility_digest(
 
 @dataclass(frozen=True, slots=True)
 class NegotiatedRepairEvidence:
-    """Redacted, success-only evidence for one accepted local repair transaction."""
+    """Redacted, success-only evidence for one accepted local repair transaction.
+
+    ``projection_obstacle_checks`` is the complete consumed projection-work total: Board-IR
+    obstacle checks plus every attempted untouched-branch blocked-cell insertion.  Keeping both
+    success evidence and the coordinator total on this same accounting definition prevents the
+    tree expansion pass from becoming hidden work.
+    """
 
     envelope_digest: str
     provenance_digest: str
@@ -1684,19 +1690,15 @@ def _attempt_local_repair(
 
     ``None`` means that no replacement is admissible and callers retain the ordinary rejection
     path. The penultimate integer accounts for exact path-responsibility probes; the final boolean
-    is reserved for cancellation. Neither path can publish a rejected allocation or repair
-    evidence.
+    is reserved for cancellation. A tree attempt reserves its worst-case projection and validator
+    obstacle work against the envelope before probing, and all consumed projection/validation
+    work is added only while it still fits that ceiling. Neither path can publish a rejected
+    allocation or repair evidence.
     """
 
     responsibility_checks = 0
     if _cancelled(cancelled):
         return None, None, total_expansions, total_obstacle_checks, 0, True
-    if (
-        envelope.max_total_expansions - total_expansions < settings.max_local_expansions
-        or envelope.max_total_obstacle_checks - total_obstacle_checks
-        < 2 * settings.max_validator_obstacle_checks
-    ):
-        return None, None, total_expansions, total_obstacle_checks, 0, False
     candidate_by_net = {item.patch.net_id: item for item in candidates}
     requests = {item.net_id: item for item in envelope.requests}
     two_pin_targets = tuple(
@@ -1711,7 +1713,38 @@ def _attempt_local_repair(
             key=lambda item: item.candidate_id,
         )[: settings.max_attempts]
     )
+    tree_targets: tuple[RouteCandidate, ...] = ()
+    if two_pin_targets:
+        required_obstacle_checks = 2 * settings.max_validator_obstacle_checks
+    else:
+        tree_targets = tuple(
+            sorted(
+                (
+                    candidate_by_net[net_id]
+                    for net_id in violating_nets
+                    if net_id in candidate_by_net
+                    and net_id in requests
+                    and 3 <= candidate_by_net[net_id].pad_count <= _MAX_PADS_PER_NET
+                ),
+                key=lambda item: item.candidate_id,
+            )[: settings.max_attempts]
+        )
+        # A tree provenance can consume the entire untouched/conflict projection envelope before
+        # the Board-IR projection, and a successful tree then still consumes one validator pass.
+        # Reserve the worst case before any responsibility or provenance work so the global
+        # obstacle-check total can never cross its envelope ceiling.
+        required_obstacle_checks = (
+            settings.max_projection_cells + 2 * settings.max_validator_obstacle_checks
+            if tree_targets
+            else 0
+        )
+    if (
+        envelope.max_total_expansions - total_expansions < settings.max_local_expansions
+        or envelope.max_total_obstacle_checks - total_obstacle_checks < required_obstacle_checks
+    ):
+        return None, None, total_expansions, total_obstacle_checks, 0, False
     provenances: list[CoordinatorRepairProvenance | CoordinatorTreeRepairProvenance] = []
+    tree_projection_work_by_target: dict[str, int] = {}
     if two_pin_targets:
         # Preserve the established two-pin transaction exactly whenever one is available. A
         # multi-pin candidate cannot displace its selection, identity, or evidence bytes.
@@ -1733,23 +1766,15 @@ def _attempt_local_repair(
                     iteration=iteration,
                     settings=settings,
                 )
+                if provenance.projection_obstacle_checks > (
+                    envelope.max_total_obstacle_checks - total_obstacle_checks
+                ):
+                    continue
                 total_obstacle_checks += provenance.projection_obstacle_checks
                 provenances.append(provenance)
             except ValueError:
                 continue
     else:
-        tree_targets = tuple(
-            sorted(
-                (
-                    candidate_by_net[net_id]
-                    for net_id in violating_nets
-                    if net_id in candidate_by_net
-                    and net_id in requests
-                    and 3 <= candidate_by_net[net_id].pad_count <= _MAX_PADS_PER_NET
-                ),
-                key=lambda item: item.candidate_id,
-            )[: settings.max_attempts]
-        )
         probe_work = sum(
             _path_pair_check_upper_bound(target_path, conflict_path)
             for target in tree_targets
@@ -1861,6 +1886,7 @@ def _attempt_local_repair(
                         break
                 if selection is None:
                     continue
+                untouched_work = [0]
                 tree_provenance = derive_tree_repair_provenance(
                     snapshot,
                     request,
@@ -1871,10 +1897,28 @@ def _attempt_local_repair(
                     iteration=iteration,
                     settings=settings,
                     cancelled=cancelled,
+                    consumed_work=untouched_work,
                 )
-                total_obstacle_checks += tree_provenance.projection_obstacle_checks
+                projection_work = untouched_work[0] + tree_provenance.projection_obstacle_checks
+                if projection_work > (envelope.max_total_obstacle_checks - total_obstacle_checks):
+                    continue
+                total_obstacle_checks += projection_work
+                tree_projection_work_by_target[tree_provenance.target_candidate_id] = (
+                    untouched_work[0]
+                )
                 provenances.append(tree_provenance)
             except _TreeRepairProvenanceError as refusal:
+                if refusal.obstacle_checks > (
+                    envelope.max_total_obstacle_checks - total_obstacle_checks
+                ):
+                    return (
+                        None,
+                        None,
+                        total_expansions,
+                        total_obstacle_checks,
+                        responsibility_checks,
+                        False,
+                    )
                 total_obstacle_checks += refusal.obstacle_checks
                 if refusal.cancelled:
                     return (
@@ -2008,6 +2052,15 @@ def _attempt_local_repair(
             max_path_edges=validator_path_edges,
             cancelled=cancelled,
         )
+    if validation.obstacle_checks > (envelope.max_total_obstacle_checks - total_obstacle_checks):
+        return (
+            None,
+            None,
+            total_expansions,
+            total_obstacle_checks,
+            responsibility_checks,
+            False,
+        )
     total_obstacle_checks += validation.obstacle_checks
     if validation.failure is CandidatePathValidationFailure.CANCELLED:
         return (
@@ -2052,13 +2105,18 @@ def _attempt_local_repair(
                 key=lambda item: item.patch.net_id,
             )
         )
+        selected_projection_work = selected.projection_obstacle_checks
+        if type(selected) is CoordinatorTreeRepairProvenance:
+            selected_projection_work += tree_projection_work_by_target.get(
+                selected.target_candidate_id, 0
+            )
         evidence = NegotiatedRepairEvidence(
             envelope_digest=envelope.policy_digest,
             provenance_digest=selected.digest,
             local_request_digest=local.input_digest,
             local_route_digest=local_result.route_digest,
             composite_digest=composite_digest,
-            projection_obstacle_checks=selected.projection_obstacle_checks,
+            projection_obstacle_checks=selected_projection_work,
             local_expanded_states=local_result.expanded_states,
             validator_edge_checks=validation.edge_checks,
             validator_obstacle_checks=validation.obstacle_checks,

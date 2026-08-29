@@ -49,6 +49,50 @@ def _rebase_candidate(candidate: RouteCandidate, revision: str) -> RouteCandidat
     )
 
 
+def _short_zigzag_path(origin: PointNM, step: int, segments: int) -> RoutePath:
+    """Build many compressed one-cell segments inside a four-cell window for budget tests."""
+
+    corners = (
+        PointNM(origin.x + step, origin.y),
+        PointNM(origin.x + step, origin.y + step),
+        PointNM(origin.x, origin.y + step),
+        PointNM(origin.x, origin.y),
+    )
+    vertices = [corners[0]]
+    for index in range(segments):
+        vertices.append(corners[(index + 1) % len(corners)])
+    return RoutePath(tuple(vertices))
+
+
+def _target_with_untouched_path(target: RouteCandidate, path: RoutePath) -> RouteCandidate:
+    """Re-sign one test candidate while leaving its selected path and metadata authoritative."""
+
+    patch = replace(target.patch, paths=(target.patch.paths[0], path))
+    cost = replace(
+        target.cost,
+        length_nm=patch.length_nm,
+        bend_count=patch.bend_count,
+        bend_cost_nm=patch.bend_count * target.settings.bend_penalty_nm,
+        total_cost_nm=(
+            patch.length_nm
+            + patch.bend_count * target.settings.bend_penalty_nm
+            + target.cost.proximity_cost_nm
+            + target.cost.via_cost_nm
+        ),
+    )
+    unsigned = replace(
+        target,
+        candidate_id=f"sha256:{'0' * 64}",
+        patch=patch,
+        cost=cost,
+        metrics=replace(target.metrics, wire_length_nm=patch.length_nm),
+    )
+    return replace(
+        unsigned,
+        candidate_id=f"sha256:{hashlib.sha256(canonical_candidate_bytes(unsigned)).hexdigest()}",
+    )
+
+
 def _tree_inputs() -> tuple[object, object, RouteCandidate, RouteCandidate]:
     snapshot = _multipin_shifted_snapshot()
     target_request, conflict_request = _multipin_requests(snapshot)
@@ -678,6 +722,240 @@ def test_tree_conflict_projection_preflight_is_cumulative_and_precedes_enumerati
     assert events == ["preflight"]
 
 
+def test_tree_untouched_projection_preflights_many_short_segments_before_enumeration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, request, target, conflict = _tree_inputs()
+    origin = target.patch.paths[0].vertices[0]
+    target = _target_with_untouched_path(
+        target,
+        _short_zigzag_path(origin, request.settings.grid_step_nm, 2_045),
+    )
+    selection = derive_tree_repair_selection(
+        snapshot,
+        request,
+        target,
+        conflict,
+        envelope_digest=f"sha256:{'1' * 64}",
+        iteration=1,
+        target_path_index=0,
+        conflict_path_index=0,
+        responsibility_digest=f"sha256:{'2' * 64}",
+        responsibility_checks=1,
+    )
+    events: list[str] = []
+
+    def forbidden_enumeration(*args: object, **kwargs: object) -> set[tuple[int, int]]:
+        del args, kwargs
+        events.append("enumeration")
+        return set()
+
+    monkeypatch.setattr(
+        provenance_module,
+        "_expanded_untouched_tree_cells",
+        forbidden_enumeration,
+    )
+    with pytest.raises(_TreeRepairProvenanceError) as refusal:
+        derive_tree_repair_provenance(
+            snapshot,
+            request,
+            target,
+            (conflict,),
+            selection,
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=RepairTransactionSettings(max_projection_cells=4_096),
+        )
+    assert events == []
+    assert refusal.value.obstacle_checks == 0
+    assert not refusal.value.cancelled
+    assert refusal.value.__cause__ is not None
+    assert str(refusal.value.__cause__) == "tree repair projection exceeds its cell budget"
+
+
+def test_tree_untouched_projection_cancellation_preserves_consumed_work() -> None:
+    snapshot, request, target, conflict = _tree_inputs()
+    origin = target.patch.paths[0].vertices[0]
+    target = _target_with_untouched_path(
+        target,
+        _short_zigzag_path(origin, request.settings.grid_step_nm, 64),
+    )
+    selection = derive_tree_repair_selection(
+        snapshot,
+        request,
+        target,
+        conflict,
+        envelope_digest=f"sha256:{'1' * 64}",
+        iteration=1,
+        target_path_index=0,
+        conflict_path_index=0,
+        responsibility_digest=f"sha256:{'2' * 64}",
+        responsibility_checks=1,
+    )
+    cancellation_calls = 0
+
+    def cancelled() -> bool:
+        nonlocal cancellation_calls
+        cancellation_calls += 1
+        return cancellation_calls >= 17
+
+    with pytest.raises(_TreeRepairProvenanceError) as refusal:
+        derive_tree_repair_provenance(
+            snapshot,
+            request,
+            target,
+            (conflict,),
+            selection,
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=RepairTransactionSettings(max_projection_cells=4_096),
+            cancelled=cancelled,
+        )
+    assert cancellation_calls == 17
+    assert refusal.value.obstacle_checks == 16
+    assert refusal.value.cancelled
+
+
+def test_tree_untouched_projection_observes_cancellation_inside_enumeration() -> None:
+    _, request, target, _ = _tree_inputs()
+    origin = target.patch.paths[0].vertices[0]
+    target = _target_with_untouched_path(
+        target,
+        _short_zigzag_path(origin, request.settings.grid_step_nm, 64),
+    )
+    cancellation_calls = 0
+    consumed_work = [0]
+
+    def cancelled() -> bool:
+        nonlocal cancellation_calls
+        cancellation_calls += 1
+        return cancellation_calls >= 17
+
+    with pytest.raises(provenance_module._TreeUntouchedProjectionError) as refusal:
+        provenance_module._expanded_untouched_tree_cells(
+            target,
+            selected_path_index=0,
+            origin=origin,
+            step=request.settings.grid_step_nm,
+            bounds=provenance_module.PolicyBounds(-2, -2, 5, 5),
+            maximum=128,
+            cancelled=cancelled,
+            consumed_work=consumed_work,
+        )
+    assert cancellation_calls == 17
+    assert consumed_work == [16]
+    assert refusal.value.projection_work == 16
+    assert refusal.value.cancelled
+
+
+def test_tree_untouched_projection_charges_exact_successful_work() -> None:
+    _, request, target, conflict, selection, provenance = _tree_selection_and_provenance()
+    del conflict, selection
+    consumed_work = [0]
+    blocked = provenance_module._expanded_untouched_tree_cells(
+        target,
+        selected_path_index=provenance.target_path_index,
+        origin=provenance.target_path_start,
+        step=request.settings.grid_step_nm,
+        bounds=provenance.window.bounds,
+        maximum=512,
+        consumed_work=consumed_work,
+    )
+    assert blocked
+    assert consumed_work == [5]
+
+
+def test_tree_untouched_projection_accepts_exact_budget_and_refuses_one_less(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, request, target, conflict = _tree_inputs()
+    origin = target.patch.paths[0].vertices[0]
+    target = _target_with_untouched_path(
+        target,
+        _short_zigzag_path(origin, request.settings.grid_step_nm, 200),
+    )
+    selection = derive_tree_repair_selection(
+        snapshot,
+        request,
+        target,
+        conflict,
+        envelope_digest=f"sha256:{'1' * 64}",
+        iteration=1,
+        target_path_index=0,
+        conflict_path_index=0,
+        responsibility_digest=f"sha256:{'2' * 64}",
+        responsibility_checks=1,
+    )
+    reference = derive_tree_repair_provenance(
+        snapshot,
+        request,
+        target,
+        (conflict,),
+        selection,
+        envelope_digest=f"sha256:{'1' * 64}",
+        iteration=1,
+        settings=RepairTransactionSettings(max_projection_cells=4_096),
+    )
+    conflict_work = provenance_module._preflight_tree_conflict_projection(
+        (conflict,),
+        origin=reference.grid_origin,
+        step=request.settings.grid_step_nm,
+        maximum=4_096,
+    )
+    untouched_work = provenance_module._preflight_tree_untouched_projection(
+        target,
+        selected_path_index=selection.target_path_index,
+        origin=reference.grid_origin,
+        step=request.settings.grid_step_nm,
+        bounds=reference.window.bounds,
+        maximum=4_096 - conflict_work,
+    )
+    assert untouched_work == 400
+    exact_maximum = conflict_work + untouched_work
+    assert exact_maximum == 414
+
+    exact = derive_tree_repair_provenance(
+        snapshot,
+        request,
+        target,
+        (conflict,),
+        selection,
+        envelope_digest=f"sha256:{'1' * 64}",
+        iteration=1,
+        settings=RepairTransactionSettings(max_projection_cells=exact_maximum),
+    )
+    assert exact.window == reference.window
+
+    events: list[str] = []
+
+    def forbidden_enumeration(*args: object, **kwargs: object) -> set[tuple[int, int]]:
+        del args, kwargs
+        events.append("enumeration")
+        return set()
+
+    monkeypatch.setattr(
+        provenance_module,
+        "_expanded_untouched_tree_cells",
+        forbidden_enumeration,
+    )
+    with pytest.raises(_TreeRepairProvenanceError) as refusal:
+        derive_tree_repair_provenance(
+            snapshot,
+            request,
+            target,
+            (conflict,),
+            selection,
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=RepairTransactionSettings(max_projection_cells=exact_maximum - 1),
+        )
+    assert events == []
+    assert refusal.value.obstacle_checks == 0
+    assert not refusal.value.cancelled
+    assert refusal.value.__cause__ is not None
+    assert str(refusal.value.__cause__) == "tree repair projection exceeds its cell budget"
+
+
 def test_tree_board_ir_projection_refusal_preserves_consumed_work_and_cancellation() -> None:
     snapshot, request, target, conflict, selection, _ = _tree_selection_and_provenance()
     with pytest.raises(_TreeRepairProvenanceError) as budget_refusal:
@@ -694,7 +972,9 @@ def test_tree_board_ir_projection_refusal_preserves_consumed_work_and_cancellati
                 max_validator_obstacle_checks=1,
             ),
         )
-    assert budget_refusal.value.obstacle_checks == 1
+    # Five untouched-path expansion insertions are consumed before Board IR spends one obstacle
+    # check; the closed refusal carries both counts to the coordinator.
+    assert budget_refusal.value.obstacle_checks == 6
     assert not budget_refusal.value.cancelled
     assert str(budget_refusal.value) == "tree repair provenance is invalid"
 
@@ -703,7 +983,9 @@ def test_tree_board_ir_projection_refusal_preserves_consumed_work_and_cancellati
     def cancelled() -> bool:
         nonlocal cancellation_calls
         cancellation_calls += 1
-        return cancellation_calls >= 8
+        # The untouched branch consumes five projection units first.  The threshold below then
+        # reaches Board IR, so this regression still proves its cancellation hook is propagated.
+        return cancellation_calls >= 12
 
     with pytest.raises(_TreeRepairProvenanceError) as cancellation_refusal:
         derive_tree_repair_provenance(
@@ -717,8 +999,8 @@ def test_tree_board_ir_projection_refusal_preserves_consumed_work_and_cancellati
             settings=RepairTransactionSettings(max_projection_cells=512),
             cancelled=cancelled,
         )
-    assert cancellation_calls == 8
-    assert cancellation_refusal.value.obstacle_checks == 3
+    assert cancellation_calls == 12
+    assert cancellation_refusal.value.obstacle_checks == 8
     assert cancellation_refusal.value.cancelled
     assert str(cancellation_refusal.value) == "tree repair provenance is invalid"
 
@@ -744,7 +1026,7 @@ def test_tree_post_projection_refusal_preserves_successfully_consumed_work(
             settings=RepairTransactionSettings(max_projection_cells=512),
         )
 
-    assert refusal.value.obstacle_checks == 3
+    assert refusal.value.obstacle_checks == 8
     assert not refusal.value.cancelled
     assert str(refusal.value) == "tree repair provenance is invalid"
 
@@ -753,7 +1035,7 @@ def test_tree_projection_refusal_accounting_contract_is_closed() -> None:
     for obstacle_checks, cancelled in (
         (-1, False),
         (True, False),
-        (4_097, False),
+        (8_193, False),
         (0, 0),
     ):
         with pytest.raises(ValueError, match="refusal accounting"):

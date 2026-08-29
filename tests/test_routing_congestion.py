@@ -1802,6 +1802,122 @@ def test_multi_pin_repair_preflights_responsibility_and_final_recheck_budget(
     assert getattr(result, "repair_evidence", None) is None
 
 
+def test_multi_pin_repair_reserves_global_obstacle_work_before_projection() -> None:
+    snapshot, envelope = _first_branch_repair_inputs()
+    envelope = replace(envelope, max_total_obstacle_checks=100)
+    candidates = tuple(
+        result.candidate
+        for request in envelope.requests
+        if (result := AStarRouter().propose(snapshot, request)).candidate is not None
+    )
+    assert len(candidates) == len(envelope.requests)
+
+    outcome = congestion_module._attempt_local_repair(
+        snapshot,
+        envelope,
+        candidates,
+        iteration=1,
+        violating_nets=(H_NET, V_NET),
+        settings=RepairTransactionSettings(max_validator_obstacle_checks=1),
+        policy_profile=None,
+        cancelled=None,
+        total_expansions=0,
+        total_obstacle_checks=98,
+        remaining_physical_checks=envelope.max_total_physical_checks,
+    )
+
+    assert outcome[0] is None
+    assert outcome[1] is None
+    assert outcome[3] == 98
+    assert outcome[4] == 0
+    assert not outcome[5]
+
+
+def test_multi_pin_repair_global_obstacle_reservation_accepts_exact_remaining_budget() -> None:
+    snapshot, envelope = _first_branch_repair_inputs()
+    settings = RepairTransactionSettings()
+    assert settings.max_attempts == 1
+    exact_reservation = settings.max_projection_cells + 2 * settings.max_validator_obstacle_checks
+    envelope = replace(envelope, max_total_obstacle_checks=exact_reservation)
+    candidates = tuple(
+        result.candidate
+        for request in envelope.requests
+        if (result := AStarRouter().propose(snapshot, request)).candidate is not None
+    )
+    assert len(candidates) == len(envelope.requests)
+
+    repaired, evidence, _, total_obstacle_checks, responsibility_checks, cancelled = (
+        congestion_module._attempt_local_repair(
+            snapshot,
+            envelope,
+            candidates,
+            iteration=1,
+            violating_nets=(H_NET, V_NET),
+            settings=settings,
+            policy_profile=None,
+            cancelled=None,
+            total_expansions=0,
+            total_obstacle_checks=0,
+            remaining_physical_checks=envelope.max_total_physical_checks,
+        )
+    )
+
+    assert repaired is not None
+    assert evidence is not None
+    assert total_obstacle_checks == 483
+    # Eight untouched insertions are now visible in both the global total and success evidence:
+    # 8 untouched + 258 Board IR projection + 217 candidate validation checks.
+    assert evidence.projection_obstacle_checks == 266
+    assert evidence.validator_obstacle_checks == 217
+    assert responsibility_checks == 2
+    assert not cancelled
+
+
+def test_multi_pin_repair_refuses_one_below_global_obstacle_reservation_before_projection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot, envelope = _first_branch_repair_inputs()
+    settings = RepairTransactionSettings()
+    assert settings.max_attempts == 1
+    exact_reservation = settings.max_projection_cells + 2 * settings.max_validator_obstacle_checks
+    envelope = replace(envelope, max_total_obstacle_checks=exact_reservation - 1)
+    candidates = tuple(
+        result.candidate
+        for request in envelope.requests
+        if (result := AStarRouter().propose(snapshot, request)).candidate is not None
+    )
+    assert len(candidates) == len(envelope.requests)
+
+    def forbidden_projection(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("one-below global reservation must refuse before responsibility")
+
+    monkeypatch.setattr(
+        congestion_module,
+        "verify_negotiated_physical_clearance",
+        forbidden_projection,
+    )
+    outcome = congestion_module._attempt_local_repair(
+        snapshot,
+        envelope,
+        candidates,
+        iteration=1,
+        violating_nets=(H_NET, V_NET),
+        settings=settings,
+        policy_profile=None,
+        cancelled=None,
+        total_expansions=0,
+        total_obstacle_checks=0,
+        remaining_physical_checks=envelope.max_total_physical_checks,
+    )
+
+    assert outcome[0] is None
+    assert outcome[1] is None
+    assert outcome[2] == 0
+    assert outcome[3] == 0
+    assert outcome[4] == 0
+    assert not outcome[5]
+
+
 def test_multi_pin_repair_accounts_one_check_tree_projection_refusal_atomically() -> None:
     snapshot, envelope = _first_branch_repair_inputs()
     candidates = tuple(
@@ -1837,7 +1953,9 @@ def test_multi_pin_repair_accounts_one_check_tree_projection_refusal_atomically(
     assert repaired is None
     assert evidence is None
     assert total_expansions == initial_expansions
-    assert total_obstacle_checks == initial_obstacle_checks + 1
+    # The selected tree's untouched branch consumes eight projection-work units before the
+    # one-check Board IR refusal; all nine units remain in the public accounting.
+    assert total_obstacle_checks == initial_obstacle_checks + 9
     assert responsibility_checks == 2
     assert not cancelled
 
@@ -1875,7 +1993,9 @@ def test_multi_pin_repair_projection_cancellation_is_atomic_and_preserves_work()
     assert outcome[0] is None
     assert outcome[1] is None
     assert outcome[2] == 17
-    assert outcome[3] == 35
+    # The selected tree's untouched branch consumes eight projection-work units before the
+    # cooperative cancellation boundary; those units remain in the public obstacle accounting.
+    assert outcome[3] == 31
     assert outcome[4] == 2
     assert outcome[5]
 

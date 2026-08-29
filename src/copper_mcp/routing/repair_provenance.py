@@ -40,6 +40,7 @@ _MAX_TREE_PADS = 32
 _MAX_TREE_CONFLICTS = _MAX_TREE_PADS - 1
 _MAX_RESPONSIBILITY_CHECKS = 10_000_000
 _MAX_PROJECTION_OBSTACLE_CHECKS = 4_096
+_MAX_TREE_REFUSAL_WORK = 2 * _MAX_PROJECTION_OBSTACLE_CHECKS
 
 
 class _BoardIRProjectionError(ValueError):
@@ -60,19 +61,41 @@ class _BoardIRProjectionError(ValueError):
 
 
 class _TreeRepairProvenanceError(ValueError):
-    """Closed coordinator-facing tree refusal with no candidate or geometry content."""
+    """Closed coordinator-facing tree refusal with no candidate or geometry content.
+
+    ``obstacle_checks`` is the coordinator's single consumed-work return channel.  A refusal can
+    carry both the untouched-branch projection charge and the later Board-IR charge, hence its
+    closed range is the sum of the two unchanged 4,096-unit ceilings.
+    """
 
     __slots__ = ("cancelled", "obstacle_checks")
 
     def __init__(self, obstacle_checks: int, *, cancelled: bool) -> None:
         if (
             type(obstacle_checks) is not int
-            or not 0 <= obstacle_checks <= _MAX_PROJECTION_OBSTACLE_CHECKS
+            or not 0 <= obstacle_checks <= _MAX_TREE_REFUSAL_WORK
             or type(cancelled) is not bool
         ):
             raise ValueError("tree repair refusal accounting is invalid")
         super().__init__("tree repair provenance is invalid")
         self.obstacle_checks = obstacle_checks
+        self.cancelled = cancelled
+
+
+class _TreeUntouchedProjectionError(ValueError):
+    """Closed refusal from the cancellation-aware untouched-tree projection pass."""
+
+    __slots__ = ("cancelled", "projection_work")
+
+    def __init__(self, projection_work: int, *, cancelled: bool) -> None:
+        if (
+            type(projection_work) is not int
+            or not 0 <= projection_work <= _MAX_PROJECTION_OBSTACLE_CHECKS
+            or type(cancelled) is not bool
+        ):
+            raise ValueError("untouched tree projection accounting is invalid")
+        super().__init__("tree repair untouched projection was refused")
+        self.projection_work = projection_work
         self.cancelled = cancelled
 
 
@@ -313,17 +336,25 @@ def _expanded_untouched_tree_cells(
     origin: PointNM,
     step: int,
     bounds: PolicyBounds,
+    maximum: int,
+    cancelled: CancellationCheck | None = None,
+    consumed_work: list[int] | None = None,
 ) -> set[tuple[int, int]]:
     """Block every untouched branch except the selected branch's authorized endpoints.
 
     The local solver is not allowed to treat existing same-net copper as free space: doing so can
     duplicate an untouched edge or attach at a second point and close a loop.  A square expansion
     by the trace-width lattice radius is conservative for thick traces; the private complete-tree
-    validator remains the final exact topology authority.
+    validator remains the final exact topology authority.  ``maximum`` is the remaining shared
+    projection-work ceiling after the conflict projection preflight.  Every attempted blocked-cell
+    insertion consumes one unit from it, even when the cell is already present in the set.
     """
 
+    if type(maximum) is not int or not 0 <= maximum <= _MAX_PROJECTION_OBSTACLE_CHECKS:
+        raise ValueError("tree repair projection maximum is invalid")
     radius = candidate.patch.width_nm // step
     blocked: set[tuple[int, int]] = set()
+    projection_work = 0
     for path_index, path in enumerate(candidate.patch.paths):
         if path_index == selected_path_index:
             continue
@@ -340,7 +371,29 @@ def _expanded_untouched_tree_cells(
                             max(bounds.min_y, cell_y - radius),
                             min(bounds.max_y, cell_y + radius) + 1,
                         ):
+                            if projection_work >= maximum:
+                                raise _TreeUntouchedProjectionError(
+                                    projection_work,
+                                    cancelled=False,
+                                )
+                            if cancelled is not None:
+                                try:
+                                    if bool(cancelled()):
+                                        raise _TreeUntouchedProjectionError(
+                                            projection_work,
+                                            cancelled=True,
+                                        )
+                                except _TreeUntouchedProjectionError:
+                                    raise
+                                except Exception as error:
+                                    raise _TreeUntouchedProjectionError(
+                                        projection_work,
+                                        cancelled=True,
+                                    ) from error
                             blocked.add((x, y))
+                            projection_work += 1
+                            if consumed_work is not None:
+                                consumed_work[0] = projection_work
     return blocked
 
 
@@ -931,6 +984,68 @@ def _preflight_tree_conflict_projection(
     return maximum - remaining
 
 
+def _tree_untouched_projection_work_upper_bound(
+    candidate: RouteCandidate,
+    *,
+    selected_path_index: int,
+    origin: PointNM,
+    step: int,
+    bounds: PolicyBounds,
+    maximum: int,
+) -> int:
+    """Preflight every untouched branch's repeated expansion without materializing cells.
+
+    The runtime pass charges one unit for each innermost ``set.add`` attempt.  A projected
+    centreline cell can expand to at most the full square ``(2 * radius + 1) ** 2``; multiplying
+    that square by the compressed segment's projected-cell count is therefore a safe upper bound
+    even when the square is clipped by ``bounds`` or overlaps an earlier insertion.  The arithmetic
+    is O(compressed segments), so an adversarial path cannot make the preflight enumerate its
+    window before the bound is known.
+    """
+
+    if type(maximum) is not int or not 0 <= maximum <= _MAX_PROJECTION_OBSTACLE_CHECKS:
+        raise ValueError("tree repair projection maximum is invalid")
+    _ = bounds
+    radius = candidate.patch.width_nm // step
+    expansion_area = (2 * radius + 1) ** 2
+    work = 0
+    for path_index, path in enumerate(candidate.patch.paths):
+        if path_index == selected_path_index:
+            continue
+        for start, end in pairwise(path.vertices):
+            if start == end or (start.x != end.x and start.y != end.y):
+                raise ValueError("tree repair target geometry is invalid")
+            projected_cells = len(_axis_projection(start.x, end.x, origin.x, step)) * len(
+                _axis_projection(start.y, end.y, origin.y, step)
+            )
+            work += projected_cells * expansion_area
+            if work > maximum:
+                raise ValueError("tree repair projection exceeds its cell budget")
+    return work
+
+
+def _preflight_tree_untouched_projection(
+    candidate: RouteCandidate,
+    *,
+    selected_path_index: int,
+    origin: PointNM,
+    step: int,
+    bounds: PolicyBounds,
+    maximum: int,
+) -> int:
+    """Return the cumulative untouched-tree expansion work before enumeration begins."""
+
+    # The bound deliberately remains safe when individual expansion squares are clipped.
+    return _tree_untouched_projection_work_upper_bound(
+        candidate,
+        selected_path_index=selected_path_index,
+        origin=origin,
+        step=step,
+        bounds=bounds,
+        maximum=maximum,
+    )
+
+
 def _tree_provenance_digest(
     *,
     selection_digest: str,
@@ -1079,10 +1194,12 @@ def derive_tree_repair_provenance(
     iteration: object,
     settings: object,
     cancelled: object = None,
+    consumed_work: list[int] | None = None,
 ) -> CoordinatorTreeRepairProvenance:
     """Derive a bounded local request from one capability-bound multi-pin path selection."""
 
     projection_obstacle_checks = 0
+    untouched_projection_work = [0]
     if (
         type(snapshot) is not BoardIRSnapshot
         or type(request) is not RouteRequest
@@ -1093,6 +1210,15 @@ def derive_tree_repair_provenance(
         or type(iteration) is not int
         or type(settings) is not RepairTransactionSettings
         or (cancelled is not None and not callable(cancelled))
+        or (
+            consumed_work is not None
+            and (
+                type(consumed_work) is not list
+                or len(consumed_work) != 1
+                or type(consumed_work[0]) is not int
+                or consumed_work[0] != 0
+            )
+        )
     ):
         raise _TreeRepairProvenanceError(0, cancelled=False)
     if not _SHA256.fullmatch(envelope_digest) or not 1 <= iteration <= 32:
@@ -1193,20 +1319,42 @@ def derive_tree_repair_provenance(
         projection_area = (bounds.max_x - bounds.min_x + 1) * (bounds.max_y - bounds.min_y + 1)
         if projection_area > settings.max_projection_cells:
             raise ValueError("tree repair projection exceeds its cell budget")
-        _preflight_tree_conflict_projection(
+        conflict_projection_work = _preflight_tree_conflict_projection(
             others,
             origin=origin,
             step=request.settings.grid_step_nm,
             maximum=settings.max_projection_cells,
         )
-
-        blocked = _expanded_untouched_tree_cells(
+        untouched_projection_upper_bound = _preflight_tree_untouched_projection(
             checked_target,
             selected_path_index=selection.target_path_index,
             origin=origin,
             step=request.settings.grid_step_nm,
             bounds=bounds,
+            maximum=settings.max_projection_cells - conflict_projection_work,
         )
+        untouched_projection_budget = settings.max_projection_cells - conflict_projection_work
+
+        try:
+            blocked = _expanded_untouched_tree_cells(
+                checked_target,
+                selected_path_index=selection.target_path_index,
+                origin=origin,
+                step=request.settings.grid_step_nm,
+                bounds=bounds,
+                maximum=untouched_projection_budget,
+                cancelled=cancellation_check,
+                consumed_work=untouched_projection_work,
+            )
+        except _TreeUntouchedProjectionError as error:
+            raise _TreeRepairProvenanceError(
+                error.projection_work,
+                cancelled=error.cancelled,
+            ) from error
+        if untouched_projection_work[0] > untouched_projection_upper_bound:
+            raise ValueError("tree repair projection accounting is invalid")
+        if consumed_work is not None:
+            consumed_work[0] = untouched_projection_work[0]
         blocked.discard(start)
         blocked.discard(end)
         for item in others:
@@ -1232,7 +1380,7 @@ def derive_tree_repair_provenance(
             )
         except _BoardIRProjectionError as error:
             raise _TreeRepairProvenanceError(
-                error.obstacle_checks,
+                untouched_projection_work[0] + error.obstacle_checks,
                 cancelled=error.cancelled,
             ) from error
         blocked.update(board_blocked)
@@ -1290,7 +1438,7 @@ def derive_tree_repair_provenance(
         raise
     except Exception as error:
         raise _TreeRepairProvenanceError(
-            projection_obstacle_checks,
+            untouched_projection_work[0] + projection_obstacle_checks,
             cancelled=False,
         ) from error
 

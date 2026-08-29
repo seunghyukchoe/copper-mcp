@@ -98,8 +98,8 @@
     {
       "id": "NBR10-cumulative-conflict-projection-preflight-is-deleted",
       "file": "src/copper_mcp/routing/repair_provenance.py",
-      "anchor": "        _preflight_tree_conflict_projection(\n            others,\n            origin=origin,\n            step=request.settings.grid_step_nm,\n            maximum=settings.max_projection_cells,\n        )\n",
-      "replacement": "        _ = others\n",
+      "anchor": "        conflict_projection_work = _preflight_tree_conflict_projection(\n            others,\n            origin=origin,\n            step=request.settings.grid_step_nm,\n            maximum=settings.max_projection_cells,\n        )\n",
+      "replacement": "        conflict_projection_work = 0\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_routing_repair_provenance.py::test_tree_conflict_projection_preflight_is_cumulative_and_precedes_enumeration"
@@ -158,8 +158,8 @@
     {
       "id": "NBR16-untouched-target-paths-are-not-projected",
       "file": "src/copper_mcp/routing/repair_provenance.py",
-      "anchor": "        blocked = _expanded_untouched_tree_cells(\n            checked_target,\n            selected_path_index=selection.target_path_index,\n            origin=origin,\n            step=request.settings.grid_step_nm,\n            bounds=bounds,\n        )\n",
-      "replacement": "        blocked: set[tuple[int, int]] = set()\n",
+      "anchor": "            blocked = _expanded_untouched_tree_cells(\n                checked_target,\n                selected_path_index=selection.target_path_index,\n                origin=origin,\n                step=request.settings.grid_step_nm,\n                bounds=bounds,\n                maximum=untouched_projection_budget,\n                cancelled=cancellation_check,\n                consumed_work=untouched_projection_work,\n            )\n",
+      "replacement": "            blocked: set[tuple[int, int]] = set()\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_routing_repair_provenance.py::test_tree_repair_selection_and_provenance_are_deterministic_and_complete"
@@ -258,7 +258,7 @@
     {
       "id": "NBR26-tree-board-ir-projection-drops-cancellation-hook",
       "file": "src/copper_mcp/routing/repair_provenance.py",
-      "anchor": "                cancelled=cancellation_check,\n",
+      "anchor": "                bounds=bounds,\n                settings=settings,\n                cancelled=cancellation_check,\n",
       "replacement": "                cancelled=None,\n",
       "expectation": "killed",
       "killing_tests": [
@@ -274,6 +274,86 @@
       "killing_tests": [
         "tests/test_routing_congestion.py::test_multi_pin_repair_accounts_one_check_tree_projection_refusal_atomically",
         "tests/test_routing_congestion.py::test_multi_pin_repair_projection_cancellation_is_atomic_and_preserves_work"
+      ]
+    },
+    {
+      "id": "NBR28-untouched-projection-preflight-is-deleted",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "        untouched_projection_upper_bound = _preflight_tree_untouched_projection(\n            checked_target,\n            selected_path_index=selection.target_path_index,\n            origin=origin,\n            step=request.settings.grid_step_nm,\n            bounds=bounds,\n            maximum=settings.max_projection_cells - conflict_projection_work,\n        )\n",
+      "replacement": "        untouched_projection_upper_bound = 0\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_tree_untouched_projection_preflights_many_short_segments_before_enumeration"
+      ]
+    },
+    {
+      "id": "NBR29-untouched-projection-ceiling-is-weakened",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "        untouched_projection_upper_bound = _preflight_tree_untouched_projection(\n            checked_target,\n            selected_path_index=selection.target_path_index,\n            origin=origin,\n            step=request.settings.grid_step_nm,\n            bounds=bounds,\n            maximum=settings.max_projection_cells - conflict_projection_work,\n        )\n",
+      "replacement": "        untouched_projection_upper_bound = _preflight_tree_untouched_projection(\n            checked_target,\n            selected_path_index=selection.target_path_index,\n            origin=origin,\n            step=request.settings.grid_step_nm,\n            bounds=bounds,\n            maximum=settings.max_projection_cells,\n        )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_tree_untouched_projection_preflights_many_short_segments_before_enumeration"
+      ]
+    },
+    {
+      "id": "NBR30-untouched-projection-cancellation-is-removed",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "                            if cancelled is not None:\n                                try:\n                                    if bool(cancelled()):\n                                        raise _TreeUntouchedProjectionError(\n                                            projection_work,\n                                            cancelled=True,\n                                        )\n                                except _TreeUntouchedProjectionError:\n                                    raise\n                                except Exception as error:\n                                    raise _TreeUntouchedProjectionError(\n                                        projection_work,\n                                        cancelled=True,\n                                    ) from error\n",
+      "replacement": "                            if False:\n                                try:\n                                    if bool(cancelled()):\n                                        raise _TreeUntouchedProjectionError(\n                                            projection_work,\n                                            cancelled=True,\n                                        )\n                                except _TreeUntouchedProjectionError:\n                                    raise\n                                except Exception as error:\n                                    raise _TreeUntouchedProjectionError(\n                                        projection_work,\n                                        cancelled=True,\n                                    ) from error\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_tree_untouched_projection_observes_cancellation_inside_enumeration"
+      ]
+    },
+    {
+      "id": "NBR31-untouched-projection-refusal-drops-consumed-work",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "                error.projection_work,\n                cancelled=error.cancelled,\n",
+      "replacement": "                0,\n                cancelled=error.cancelled,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_tree_untouched_projection_cancellation_preserves_consumed_work"
+      ]
+    },
+    {
+      "id": "NBR32-global-tree-obstacle-reservation-drops-untouched-work",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "        required_obstacle_checks = (\n            settings.max_projection_cells + 2 * settings.max_validator_obstacle_checks\n            if tree_targets\n            else 0\n        )\n",
+      "replacement": "        required_obstacle_checks = 2 * settings.max_validator_obstacle_checks\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_reserves_global_obstacle_work_before_projection"
+      ]
+    },
+    {
+      "id": "NBR33-global-tree-obstacle-reservation-rejects-exact-budget",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "        or envelope.max_total_obstacle_checks - total_obstacle_checks < required_obstacle_checks\n",
+      "replacement": "        or envelope.max_total_obstacle_checks - total_obstacle_checks <= required_obstacle_checks\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_global_obstacle_reservation_accepts_exact_remaining_budget"
+      ]
+    },
+    {
+      "id": "NBR34-success-tree-total-drops-untouched-work",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "                projection_work = untouched_work[0] + tree_provenance.projection_obstacle_checks\n",
+      "replacement": "                projection_work = tree_provenance.projection_obstacle_checks\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_global_obstacle_reservation_accepts_exact_remaining_budget"
+      ]
+    },
+    {
+      "id": "NBR35-success-tree-evidence-drops-untouched-work",
+      "file": "src/copper_mcp/routing/congestion.py",
+      "anchor": "        if type(selected) is CoordinatorTreeRepairProvenance:\n            selected_projection_work += tree_projection_work_by_target.get(\n                selected.target_candidate_id, 0\n            )\n",
+      "replacement": "        if False:\n            selected_projection_work += tree_projection_work_by_target.get(\n                selected.target_candidate_id, 0\n            )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_multi_pin_repair_global_obstacle_reservation_accepts_exact_remaining_budget"
       ]
     }
   ]
