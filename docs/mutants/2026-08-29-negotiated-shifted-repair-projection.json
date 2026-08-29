@@ -1,0 +1,59 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "NSR01-shifted-projection-drops-ceiling-cell",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "    return range(lower, upper + 1)\n",
+      "replacement": "    return range(lower, upper)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_shifted_phase_conflict_is_conservatively_projected_onto_target_lattice"
+      ]
+    },
+    {
+      "id": "NSR02-shifted-x-bound-drops-ceiling-coordinate",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "        max(-((-(point.x - origin.x)) // step) for point in points),\n",
+      "replacement": "        max((point.x - origin.x) // step for point in points),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_shifted_phase_conflict_is_conservatively_projected_onto_target_lattice"
+      ]
+    },
+    {
+      "id": "NSR03-shifted-y-bound-drops-ceiling-coordinate",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "        max(-((-(point.y - origin.y)) // step) for point in points),\n",
+      "replacement": "        max((point.y - origin.y) // step for point in points),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_shifted_phase_conflict_is_conservatively_projected_onto_target_lattice"
+      ]
+    },
+    {
+      "id": "NSR04-shifted-conflict-requires-target-grid-congruence",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "    lower = (min(first, second) - origin) // step\n",
+      "replacement": "    if (first - origin) % step or (second - origin) % step:\n        raise ValueError(\"candidate geometry is not on the coordinator grid\")\n    lower = (min(first, second) - origin) // step\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_congestion.py::test_two_pin_local_repair_runs_against_shifted_phase_multipin_conflict"
+      ]
+    },
+    {
+      "id": "NSR05-target-bounds-use-conservative-conflict-projection",
+      "file": "src/copper_mcp/routing/repair_provenance.py",
+      "anchor": "            _strict_candidate_bounds(target, origin, request.settings.grid_step_nm),\n",
+      "replacement": "            _candidate_bounds(target, origin, request.settings.grid_step_nm),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_repair_provenance.py::test_target_interior_vertices_remain_strictly_bound_to_its_authoritative_lattice"
+      ]
+    }
+  ]
+}

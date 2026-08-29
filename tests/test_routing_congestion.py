@@ -1347,6 +1347,59 @@ def test_shifted_lattice_crossing_has_no_exact_resource_collision_but_fails_phys
     assert physical.pair_checks == 1
 
 
+def test_two_pin_local_repair_runs_against_shifted_phase_multipin_conflict() -> None:
+    snapshot = _multipin_shifted_snapshot(
+        horizontal_centres_override=(
+            PointNM(27_000_000, 1_000_000),
+            PointNM(27_000_000, 6_000_000),
+            PointNM(34_000_000, 6_000_000),
+        ),
+    )
+    horizontal, vertical = _multipin_requests(snapshot)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(horizontal, vertical),
+        max_iterations=1,
+    )
+    baseline = tuple(
+        result.candidate
+        for request in envelope.requests
+        if (result := AStarRouter().propose(snapshot, request)).candidate is not None
+    )
+
+    assert tuple(candidate.pad_count for candidate in baseline) == (3, 2)
+    target_origin = baseline[1].patch.paths[0].vertices[0]
+    assert any(
+        (point.x - target_origin.x) % envelope.grid_step_nm
+        or (point.y - target_origin.y) % envelope.grid_step_nm
+        for path in baseline[0].patch.paths
+        for point in path.vertices
+    )
+    physical = verify_negotiated_physical_clearance(
+        snapshot,
+        baseline,
+        layer_id=LAYER,
+        max_pair_checks=1,
+    )
+    assert physical.failure is PhysicalClearanceFailure.CLEARANCE_VIOLATION
+    assert physical.violating_nets == (H_NET, V_NET)
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert isinstance(result, congestion_module.RepairNegotiatedRoutingResult)
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    assert len(result.candidates) == 2
+    assert result.repair_evidence is not None
+    assert result.repair_evidence.projection_obstacle_checks > 0
+    assert result.repair_evidence.local_expanded_states > 0
+    assert result.repair_evidence.validator_edge_checks > 0
+    assert result.repair_evidence.validator_obstacle_checks > 0
+
+
 def test_local_repair_skips_every_non_two_pin_target(monkeypatch: pytest.MonkeyPatch) -> None:
     snapshot = _multipin_shifted_snapshot(vertical_pad_count=3)
     horizontal, vertical = _multipin_requests(snapshot)

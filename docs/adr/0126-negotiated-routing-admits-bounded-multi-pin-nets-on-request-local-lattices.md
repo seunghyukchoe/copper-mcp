@@ -9,8 +9,9 @@
   [ADR-0064](0064-policy-bound-initial-negotiated-order.md),
   [ADR-0073](0073-declared-negotiation-policy-slots.md),
   [ADR-0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md),
-  [D-233](../ledgers/decision-ledger.md), [R-184](../ledgers/risk-register.md),
-  [SEC-169](../ledgers/security-ledger.md),
+  [D-233](../ledgers/decision-ledger.md), [D-234](../ledgers/decision-ledger.md),
+  [R-184](../ledgers/risk-register.md), [SEC-169](../ledgers/security-ledger.md),
+  [SEC-170](../ledgers/security-ledger.md),
   [B-124](../ledgers/benchmark-ledger.md), and
   [B-140](../ledgers/benchmark-ledger.md)
 
@@ -58,8 +59,13 @@ Widen the internal `negotiate_routes` coordinator, and only that coordinator, as
   gate before any candidate is published. A shifted-phase crossing invisible to the ledger must
   therefore retry or refuse; it may never pass on the structural ledger alone.
 - Local exact repair stays limited to a target whose request and candidate each have exactly two
-  pads. Multi-pin local repair needs its own window, provenance and topology proof and is not
-  inferred from this admission change.
+  pads. A conflicting candidate may nevertheless use a different request-local phase. Its
+  centreline is conservatively floor/ceiling projected onto adjacent target-lattice cells before
+  the existing width-and-clearance expansion, while every vertex of the target candidate itself
+  must remain exactly congruent with its authoritative request lattice. This can overblock and
+  decline a repair but cannot make off-phase copper disappear or accept an off-grid target;
+  exactly aligned provenance bytes remain unchanged. Multi-pin local repair needs its own window,
+  provenance and topology proof and is not inferred from this admission change.
 
 The public contract does not widen. No MCP, CLI, durable-job, persistence, schema, route-bundle,
 apply or live-editor surface accepts negotiated envelopes in this slice, and no board bytes are
@@ -90,7 +96,13 @@ the existing two-pad digests, and reject forged endpoint, pad-count, order and f
 atomically. Mutation-oriented fixtures make every intermediate pad contribute to demand and make
 ceiling division observable. A shifted-lattice crossing whose structural resource sets are disjoint
 is still caught by the exact physical gate, and a multi-pin conflict cannot enter the two-pin repair
-transaction.
+transaction. A half-step shifted two-pin crossing additionally proves that repair provenance blocks
+both adjacent target-lattice cells instead of rejecting the conflict as off-grid, while the aligned
+legacy provenance digest stays byte-identical. A target with aligned endpoints but an off-grid
+interior dogleg is still refused. The committed shifted-repair mutation spec kills all five attempts
+to drop the ceiling cell or either ceiling bound, restore the former conflict grid-congruence
+requirement, or weaken strict target bounds; the coordinator-path mutation is killed through the
+real coordinator seam.
 
 B-124 remains immutable evidence of the old contract. B-140 is its successor: it binds the same
 B-088 submitted set, freezes the expected admission population before measuring, runs the

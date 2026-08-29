@@ -14,7 +14,11 @@ from copper_mcp.routing.repair import (
     RepairTransactionSettings,
     exact_local_repair,
 )
-from copper_mcp.routing.repair_provenance import _CAPABILITY, derive_repair_provenance
+from copper_mcp.routing.repair_provenance import (
+    _CAPABILITY,
+    _candidate_bounds,
+    derive_repair_provenance,
+)
 from scripts import exact_local_repair_gate_fixture as fixture
 
 
@@ -34,6 +38,142 @@ def _rebase_candidate(candidate: RouteCandidate, revision: str) -> RouteCandidat
         unsigned,
         candidate_id=f"sha256:{hashlib.sha256(canonical_candidate_bytes(unsigned)).hexdigest()}",
     )
+
+
+def test_shifted_phase_conflict_is_conservatively_projected_onto_target_lattice() -> None:
+    base = fixture.build_snapshot()
+    base_request, _ = fixture.build_requests(base)
+    step = base_request.settings.grid_step_nm
+    shift = step // 2
+    shifted_pads = tuple(
+        replace(
+            item,
+            center=PointNM(item.center.x + shift, item.center.y + shift),
+        )
+        if item.net_id == fixture.VERTICAL_NET
+        else item
+        for item in base.content.pads
+    )
+    shifted_footprints = tuple(
+        replace(
+            item,
+            origin=PointNM(item.origin.x + shift, item.origin.y + shift),
+        )
+        if item.id == "footprint:v"
+        else item
+        for item in base.content.footprints
+    )
+    snapshot = make_snapshot(
+        replace(base.content, pads=shifted_pads, footprints=shifted_footprints)
+    )
+    request, conflict_request = fixture.build_requests(snapshot)
+    router = AStarRouter()
+    target = router.propose(snapshot, request).candidate
+    conflict = router.propose(snapshot, conflict_request).candidate
+    assert target is not None and conflict is not None
+    step = request.settings.grid_step_nm
+    target_path = target.patch.paths[0]
+    shifted_path = conflict.patch.paths[0]
+    assert target_path.vertices[0].y == target_path.vertices[-1].y
+    assert shifted_path.vertices[0].x == shifted_path.vertices[-1].x
+    assert (
+        min(point.x for point in target_path.vertices)
+        < shifted_path.vertices[0].x
+        < max(point.x for point in target_path.vertices)
+    )
+    assert (
+        min(point.y for point in shifted_path.vertices)
+        < target_path.vertices[0].y
+        < max(point.y for point in shifted_path.vertices)
+    )
+
+    provenance = derive_repair_provenance(
+        snapshot,
+        request,
+        target,
+        (conflict,),
+        envelope_digest=f"sha256:{'1' * 64}",
+        iteration=1,
+        settings=RepairTransactionSettings(max_projection_cells=256),
+    )
+
+    origin = target_path.vertices[0]
+    crossing_delta = shifted_path.vertices[0].x - origin.x
+    lower_crossing_cell = crossing_delta // step
+    assert crossing_delta % step
+    assert (shifted_path.vertices[0].y - origin.y) % step
+    assert _candidate_bounds(conflict, origin, step) == (4, -4, 5, 5)
+    assert {
+        (lower_crossing_cell, 0),
+        (lower_crossing_cell + 1, 0),
+    }.issubset(provenance.blocked_cells)
+    provenance.local_request(RepairTransactionSettings(max_projection_cells=256))
+    bounds = provenance.window.bounds
+    projection_area = (bounds.max_x - bounds.min_x + 1) * (bounds.max_y - bounds.min_y + 1)
+    with pytest.raises(ValueError, match="repair provenance") as budget_error:
+        derive_repair_provenance(
+            snapshot,
+            request,
+            target,
+            (conflict,),
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=RepairTransactionSettings(max_projection_cells=projection_area - 1),
+        )
+    assert budget_error.value.__cause__ is not None
+    assert str(budget_error.value.__cause__) == (
+        "repair provenance projection exceeds its cell budget"
+    )
+
+
+def test_target_interior_vertices_remain_strictly_bound_to_its_authoritative_lattice() -> None:
+    snapshot, request, target, conflict = _inputs()
+    path = target.patch.paths[0]
+    start, end = path.vertices[0], path.vertices[-1]
+    shift = request.settings.grid_step_nm // 2
+    off_grid_path = RoutePath(
+        (
+            start,
+            PointNM(start.x, start.y + shift),
+            PointNM(end.x, end.y + shift),
+            end,
+        )
+    )
+    patch = replace(target.patch, paths=(off_grid_path,))
+    bend_cost_nm = patch.bend_count * request.settings.bend_penalty_nm
+    cost = replace(
+        target.cost,
+        length_nm=patch.length_nm,
+        bend_count=patch.bend_count,
+        bend_cost_nm=bend_cost_nm,
+        total_cost_nm=(
+            patch.length_nm + bend_cost_nm + target.cost.proximity_cost_nm + target.cost.via_cost_nm
+        ),
+    )
+    unsigned = replace(
+        target,
+        candidate_id=f"sha256:{'0' * 64}",
+        patch=patch,
+        cost=cost,
+        metrics=replace(target.metrics, wire_length_nm=patch.length_nm),
+    )
+    off_grid_target = replace(
+        unsigned,
+        candidate_id=f"sha256:{hashlib.sha256(canonical_candidate_bytes(unsigned)).hexdigest()}",
+    )
+
+    with pytest.raises(ValueError, match="repair provenance is invalid") as error:
+        derive_repair_provenance(
+            snapshot,
+            request,
+            off_grid_target,
+            (conflict,),
+            envelope_digest=f"sha256:{'1' * 64}",
+            iteration=1,
+            settings=RepairTransactionSettings(max_projection_cells=256),
+        )
+    assert error.value.__cause__ is not None
+    assert str(error.value.__cause__) == "candidate geometry is not on the coordinator grid"
 
 
 def test_coordinator_provenance_is_repeatable_and_builds_only_a_bounded_local_request() -> None:
@@ -57,7 +197,9 @@ def test_coordinator_provenance_is_repeatable_and_builds_only_a_bounded_local_re
     assert provenance.target_candidate_id == target.candidate_id
     assert provenance.conflicting_candidate_ids == (conflict.candidate_id,)
     assert provenance.window.net_id == request.net_id
-    assert provenance.digest.startswith("sha256:")
+    assert provenance.digest == (
+        "sha256:7a2aedc596c54c0c00d44987a24094e3ec475636f4c8acd8c69e2cf903a5b14c"
+    )
     assert provenance.projection_obstacle_checks > 0
     local = provenance.local_request(settings)
     assert local.repair_window == provenance.window
