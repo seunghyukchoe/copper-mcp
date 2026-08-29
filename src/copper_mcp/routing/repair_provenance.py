@@ -39,10 +39,19 @@ def _cell(point: PointNM, origin: PointNM, step: int) -> tuple[int, int]:
     return (dx // step, dy // step)
 
 
-def _candidate_bounds(
+def _axis_projection(first: int, second: int, origin: int, step: int) -> range:
+    """Cover one physical interval with every adjacent coordinator-lattice coordinate."""
+
+    lower = (min(first, second) - origin) // step
+    upper_delta = max(first, second) - origin
+    upper = -((-upper_delta) // step)
+    return range(lower, upper + 1)
+
+
+def _strict_candidate_bounds(
     candidate: RouteCandidate, origin: PointNM, step: int
 ) -> tuple[int, int, int, int]:
-    """Return a path's lattice bounds without enumerating a single unit cell."""
+    """Return bounds only when every target vertex belongs to its authoritative lattice."""
 
     cells = tuple(
         _cell(point, origin, step) for path in candidate.patch.paths for point in path.vertices
@@ -57,20 +66,45 @@ def _candidate_bounds(
     )
 
 
+def _candidate_bounds(
+    candidate: RouteCandidate, origin: PointNM, step: int
+) -> tuple[int, int, int, int]:
+    """Return conservative lattice bounds without enumerating a single unit cell.
+
+    Conflicting candidates may use the same step on a different request-local phase.  Floor/ceiling
+    coverage keeps their geometry inside the target lattice window; aligned legacy geometry maps
+    to the same exact cells as before.
+    """
+
+    points = tuple(point for path in candidate.patch.paths for point in path.vertices)
+    if not points:
+        raise ValueError("candidate geometry is empty")
+    return (
+        min((point.x - origin.x) // step for point in points),
+        min((point.y - origin.y) // step for point in points),
+        max(-((-(point.x - origin.x)) // step) for point in points),
+        max(-((-(point.y - origin.y)) // step) for point in points),
+    )
+
+
 def _candidate_cells(candidate: RouteCandidate, origin: PointNM, step: int) -> set[tuple[int, int]]:
+    """Conservatively cover candidate segments on the target request's lattice.
+
+    A shifted-phase segment is assigned to both adjacent rows or columns.  This can refuse an
+    otherwise searchable window, but it prevents foreign-phase copper from disappearing merely
+    because its vertices are not congruent with the target origin.
+    """
+
     cells: set[tuple[int, int]] = set()
     for path in candidate.patch.paths:
         for start, end in pairwise(path.vertices):
-            left, right = _cell(start, origin, step), _cell(end, origin, step)
-            dx, dy = right[0] - left[0], right[1] - left[1]
-            if (dx and dy) or (not dx and not dy):
+            if start.x != end.x and start.y != end.y:
                 raise ValueError("candidate geometry is not orthogonal")
-            distance = abs(dx) + abs(dy)
-            unit = (0 if dx == 0 else dx // distance, 0 if dy == 0 else dy // distance)
-            cells.update(
-                (left[0] + unit[0] * index, left[1] + unit[1] * index)
-                for index in range(distance + 1)
-            )
+            if start == end:
+                raise ValueError("candidate geometry is not orthogonal")
+            xs = _axis_projection(start.x, end.x, origin.x, step)
+            ys = _axis_projection(start.y, end.y, origin.y, step)
+            cells.update((x, y) for x in xs for y in ys)
     return cells
 
 
@@ -372,7 +406,7 @@ def derive_repair_provenance(
         for item in others:
             verify_candidate_id(item)
         all_bounds = (
-            _candidate_bounds(target, origin, request.settings.grid_step_nm),
+            _strict_candidate_bounds(target, origin, request.settings.grid_step_nm),
             *(_candidate_bounds(item, origin, request.settings.grid_step_nm) for item in others),
         )
         exclusion_radius = max(

@@ -22,6 +22,7 @@ from copper_mcp.board_ir import (
     PadShape,
     PointNM,
     Ring,
+    Segment,
     SourceInfo,
     make_content,
     make_snapshot,
@@ -65,6 +66,7 @@ from copper_mcp.routing.policy import (
     RoutingPolicyInput,
     policy_input_digest,
 )
+from copper_mcp.routing.repair import RepairTransactionSettings
 from scripts import exact_local_repair_gate_fixture as predeclared_fixture
 
 BOARD_SOURCE = f"sha256:{'c' * 64}"
@@ -191,6 +193,169 @@ def _requests(snapshot: object) -> tuple[RouteRequest, RouteRequest]:
     )
 
 
+def _multipin_shifted_snapshot(
+    horizontal_pad_count: int = 3,
+    vertical_pad_count: int = 2,
+    *,
+    connected_horizontal: bool = False,
+    horizontal_centres_override: tuple[PointNM, ...] | None = None,
+) -> object:
+    """Build two disjoint nets whose local one-millimetre lattices have different origins."""
+
+    def pad(identifier: str, net_id: str, center: PointNM) -> Pad:
+        return Pad(
+            id=identifier,
+            net_id=net_id,
+            center=center,
+            rotation_udeg=0,
+            shape=PadShape.RECT,
+            kind=PadKind.SMD,
+            size_x_nm=400_000,
+            size_y_nm=400_000,
+            roundrect_radius_nm=None,
+            drill_x_nm=None,
+            drill_y_nm=None,
+            layer_ids=(LAYER,),
+        )
+
+    if horizontal_centres_override is None:
+        horizontal_centres = (
+            PointNM(2_000_000, 10_000_000),
+            PointNM(6_000_000, 10_000_000),
+            PointNM(6_000_000, 13_000_000),
+            *(
+                PointNM(
+                    9_000_000 + (index % 8) * 3_000_000,
+                    10_000_000 + (index // 8) * 3_000_000,
+                )
+                for index in range(max(0, horizontal_pad_count - 3))
+            ),
+        )
+    else:
+        assert len(horizontal_centres_override) == horizontal_pad_count
+        horizontal_centres = horizontal_centres_override
+    vertical_centres = (
+        PointNM(25_500_000, 2_500_000),
+        PointNM(30_500_000, 2_500_000),
+        PointNM(30_500_000, 5_500_000),
+        *(
+            PointNM(
+                25_500_000 + (index % 4) * 2_000_000,
+                7_500_000 + (index // 4) * 2_000_000,
+            )
+            for index in range(max(0, vertical_pad_count - 3))
+        ),
+    )
+    horizontal_pads = tuple(
+        pad(f"pad:h{index:02d}", H_NET, center)
+        for index, center in enumerate(horizontal_centres[:horizontal_pad_count])
+    )
+    vertical_pads = tuple(
+        pad(f"pad:v{index:02d}", V_NET, center)
+        for index, center in enumerate(vertical_centres[:vertical_pad_count])
+    )
+    pads = horizontal_pads + vertical_pads
+    net_class = NetClass(
+        id="class:signal",
+        name="Signal",
+        clearance_nm=100_000,
+        track_width_nm=200_000,
+        via_diameter_nm=600_000,
+        via_drill_nm=300_000,
+    )
+    segments: tuple[Segment, ...] = ()
+    if connected_horizontal:
+        assert horizontal_pad_count == 3
+        segments = (
+            Segment(
+                id="segment:h01",
+                net_id=H_NET,
+                layer_id=LAYER,
+                start=horizontal_pads[0].center,
+                end=horizontal_pads[1].center,
+                width_nm=net_class.track_width_nm,
+            ),
+            Segment(
+                id="segment:h12",
+                net_id=H_NET,
+                layer_id=LAYER,
+                start=horizontal_pads[1].center,
+                end=horizontal_pads[2].center,
+                width_nm=net_class.track_width_nm,
+            ),
+        )
+    content = make_content(
+        source=SourceInfo(
+            format="test",
+            revision=BOARD_SOURCE,
+            format_version="1",
+            generator="negotiated-multipin-test",
+        ),
+        outline=(
+            OutlineContour(
+                id="contour:board",
+                outer=Ring(
+                    (
+                        PointNM(0, 0),
+                        PointNM(40_000_000, 0),
+                        PointNM(40_000_000, 25_000_000),
+                        PointNM(0, 25_000_000),
+                    )
+                ),
+            ),
+        ),
+        copper_layers=(Layer(id=LAYER, name="F.Cu", index=0, kind="signal"),),
+        nets=(Net(id=H_NET, name="HORIZONTAL"), Net(id=V_NET, name="VERTICAL")),
+        constraints=ConstraintSet(
+            net_classes=(net_class,),
+            assignments=(
+                NetClassAssignment(net_id=H_NET, net_class_id=net_class.id),
+                NetClassAssignment(net_id=V_NET, net_class_id=net_class.id),
+            ),
+        ),
+        footprints=(
+            Footprint(
+                id="footprint:h",
+                origin=horizontal_pads[0].center,
+                rotation_udeg=0,
+                side=FootprintSide.FRONT,
+                pad_ids=tuple(item.id for item in horizontal_pads),
+            ),
+            Footprint(
+                id="footprint:v",
+                origin=vertical_pads[0].center,
+                rotation_udeg=0,
+                side=FootprintSide.FRONT,
+                pad_ids=tuple(item.id for item in vertical_pads),
+            ),
+        ),
+        pads=pads,
+        segments=segments,
+    )
+    return make_snapshot(content)
+
+
+def _multipin_settings() -> AStarSettings:
+    return AStarSettings(
+        grid_step_nm=1_000_000,
+        bend_penalty_nm=500_000,
+        proximity_penalty_nm=0,
+        max_grid_nodes=4_096,
+        max_expansions=100_000,
+        max_obstacles=128,
+        max_net_objects=1_024,
+        max_obstacle_checks=500_000,
+    )
+
+
+def _multipin_requests(snapshot: object) -> tuple[RouteRequest, RouteRequest]:
+    assert hasattr(snapshot, "snapshot_digest")
+    return (
+        RouteRequest(snapshot.snapshot_digest, H_NET, LAYER, 7, _multipin_settings()),
+        RouteRequest(snapshot.snapshot_digest, V_NET, LAYER, 11, _multipin_settings()),
+    )
+
+
 def test_predeclared_repair_gate_helper_is_semantically_equivalent_to_original_builder() -> None:
     original = _crossing_snapshot()
     fixture = predeclared_fixture.build_snapshot()
@@ -301,6 +466,247 @@ def test_negotiated_crossing_replay_removes_baseline_lattice_overflow() -> None:
     )
     assert result.candidates == tuple(sorted(result.candidates, key=lambda item: item.patch.net_id))
     assert result == negotiate_routes(snapshot, envelope)
+
+
+def test_legacy_two_pin_policy_and_candidate_identities_remain_exact() -> None:
+    snapshot = _crossing_snapshot()
+    horizontal, vertical = _requests(snapshot)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(vertical, horizontal),
+        max_iterations=4,
+    )
+
+    result = negotiate_routes(snapshot, envelope)
+
+    assert snapshot.snapshot_digest == (
+        "sha256:9ad048f6f439a7e71be4c1f115d8a205f00c92f0853e0c140725906c1acdb245"
+    )
+    assert envelope.policy_digest == (
+        "sha256:0581cf0a36595f9a4bc3877ef69e21b106e19e2450a25b8f99bd50311924baeb"
+    )
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    assert {item.patch.net_id: item.candidate_id for item in result.candidates} == {
+        H_NET: "sha256:9a6af627be11bd6c9938f4f0c9b3e00918ff63323af6ecaf088ffe9775b8142e",
+        V_NET: "sha256:04d23efc8616af3e06f97966d27f35660ab10c176d0512734495422c6959b2ff",
+    }
+    assert all(
+        candidate.candidate_id
+        == f"sha256:{hashlib.sha256(canonical_candidate_bytes(candidate)).hexdigest()}"
+        for candidate in result.candidates
+    )
+
+
+@pytest.mark.parametrize("pad_count", (2, 32))
+def test_negotiated_pad_census_routes_both_boundary_counts(pad_count: int) -> None:
+    snapshot = _multipin_shifted_snapshot(pad_count)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_multipin_requests(snapshot),
+        max_iterations=1,
+    )
+
+    assert congestion_module._validate_snapshot_requests(snapshot, envelope) is None
+    result = negotiate_routes(snapshot, envelope)
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    assert {item.patch.net_id: item.pad_count for item in result.candidates} == {
+        H_NET: pad_count,
+        V_NET: 2,
+    }
+
+
+@pytest.mark.parametrize("pad_count", (1, 33))
+def test_negotiated_pad_census_refuses_outside_bounds_before_router(
+    pad_count: int,
+) -> None:
+    snapshot = _multipin_shifted_snapshot(pad_count)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_multipin_requests(snapshot),
+    )
+
+    class RouterSpy:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def propose(self, *_args: object, **_kwargs: object) -> RouteResult:
+            self.calls += 1
+            return RouteResult(diagnostic=RouteDiagnostic(RouteFailureCode.NO_PATH, "must not run"))
+
+    router = RouterSpy()
+    result = negotiate_routes(snapshot, envelope, router=router)
+
+    assert router.calls == 0
+    assert result.status is NegotiatedRoutingStatus.INVALID_REQUEST
+    assert result.diagnostic == "each negotiated net must expose 2 to 32 pads on the selected layer"
+
+
+def test_negotiated_multipin_routes_complete_on_request_local_shifted_lattices() -> None:
+    snapshot = _multipin_shifted_snapshot()
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=_multipin_requests(snapshot),
+        max_iterations=2,
+    )
+
+    result = negotiate_routes(snapshot, envelope)
+    replay = negotiate_routes(snapshot, envelope)
+
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    assert result == replay
+    assert result.connections == ()
+    candidates = {item.patch.net_id: item for item in result.candidates}
+    assert candidates[H_NET].pad_count == 3
+    assert candidates[H_NET].start_pad_id == "pad:h00"
+    assert candidates[H_NET].end_pad_id == "pad:h02"
+    assert candidates[H_NET].ordering_policy != "single-path"
+    assert candidates[V_NET].pad_count == 2
+    assert (25_500_000 - 2_000_000) % envelope.grid_step_nm != 0
+
+
+def test_negotiated_multipin_connected_evidence_binds_all_selected_layer_pads() -> None:
+    snapshot = _multipin_shifted_snapshot(connected_horizontal=True)
+    horizontal, vertical = _multipin_requests(snapshot)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(horizontal, vertical),
+        max_iterations=1,
+    )
+
+    direct = AStarRouter().propose(snapshot, horizontal)
+    assert direct.connected is not None
+    assert congestion_module._connection_is_bound(direct.connected, snapshot, horizontal)
+    result = negotiate_routes(snapshot, envelope)
+
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    assert len(result.candidates) == 1
+    assert result.candidates[0].patch.net_id == V_NET
+    assert result.connections == (direct.connected,)
+    assert result.connections[0].start_pad_id == "pad:h00"
+    assert result.connections[0].end_pad_id == "pad:h02"
+    assert result.connections[0].pad_count == 3
+    assert result.connections[0].attachment_segments == 2
+    assert result.connections[0].component_objects == 5
+
+
+def test_negotiated_multipin_custom_router_cannot_forge_set_binding_or_order() -> None:
+    snapshot = _multipin_shifted_snapshot()
+    horizontal, vertical = _multipin_requests(snapshot)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(horizontal, vertical),
+        max_iterations=1,
+    )
+    reference = AStarRouter().propose(snapshot, horizontal)
+    assert reference.candidate is not None
+    candidate = reference.candidate
+    assert candidate.ordering_policy != COMPONENT_MST_ORDERING
+    forged_fill_binding = _resign(replace(candidate, fill_binding=f"sha256:{'f' * 64}"))
+    forged = (
+        _resign(replace(candidate, end_pad_id="pad:h01")),
+        _resign(replace(candidate, pad_count=4)),
+        _resign(replace(candidate, ordering_policy=COMPONENT_MST_ORDERING)),
+        forged_fill_binding,
+    )
+    assert forged_fill_binding.candidate_id == (
+        f"sha256:{hashlib.sha256(canonical_candidate_bytes(forged_fill_binding)).hexdigest()}"
+    )
+    assert not congestion_module._candidate_is_bound(forged_fill_binding, snapshot, horizontal)
+    assert not congestion_module._results_are_semantically_equal(
+        RouteResult(candidate=forged_fill_binding),
+        reference,
+    )
+
+    class ForgedMultipinRouter:
+        def __init__(self, value: RouteCandidate) -> None:
+            self.value = value
+            self.reference = AStarRouter()
+
+        def propose(
+            self, router_snapshot: object, request: RouteRequest, **kwargs: object
+        ) -> RouteResult:
+            if request.net_id == H_NET:
+                return RouteResult(candidate=self.value)
+            return self.reference.propose(router_snapshot, request, **kwargs)
+
+    for value in forged:
+        _assert_unbound_router_result(
+            negotiate_routes(snapshot, envelope, router=ForgedMultipinRouter(value))
+        )
+
+
+def test_negotiated_multipin_honours_coordinator_budget_and_cancellation() -> None:
+    snapshot = _multipin_shifted_snapshot()
+    requests = _multipin_requests(snapshot)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=requests,
+        max_iterations=1,
+        max_total_expansions=1,
+    )
+
+    budgeted = negotiate_routes(snapshot, envelope)
+    cancelled = negotiate_routes(
+        snapshot,
+        replace(envelope, max_total_expansions=100_000),
+        cancelled=lambda: True,
+    )
+
+    assert budgeted.status is NegotiatedRoutingStatus.NO_PATH
+    assert budgeted.candidates == ()
+    assert budgeted.connections == ()
+    assert budgeted.unrouted_nets == (H_NET, V_NET)
+    assert cancelled.status is NegotiatedRoutingStatus.CANCELLED
+    assert cancelled.iterations == 0
+    assert cancelled.candidates == ()
+
+
+def test_multipin_bounding_box_demand_is_deterministic_and_preserves_two_pin_values() -> None:
+    # The first and last pad IDs are intentionally close.  Only the middle ID exposes the true
+    # envelope (both minimum x and maximum y), and its 16.9-cell span requires ceiling division.
+    points_by_pad_id = (
+        PointNM(10_000_000, 10_000_000),
+        PointNM(2_200_000, 18_600_000),
+        PointNM(10_500_000, 10_250_000),
+    )
+    assert congestion_module._pad_demand_cells(points_by_pad_id, 1_000_000) == 17
+    assert congestion_module._pad_demand_cells(tuple(reversed(points_by_pad_id)), 1_000_000) == 17
+    assert (
+        congestion_module._pad_demand_cells(
+            (PointNM(2_000_000, 5_000_000), PointNM(10_000_000, 5_000_000)),
+            1_000_000,
+        )
+        == 8
+    )
+
+    snapshot = _multipin_shifted_snapshot(
+        horizontal_centres_override=points_by_pad_id,
+    )
+    horizontal, vertical = _multipin_requests(snapshot)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(horizontal, vertical),
+    )
+    pads = congestion_module._request_pads(snapshot, horizontal)
+    assert pads is not None
+    assert tuple(item.id for item in pads) == ("pad:h00", "pad:h01", "pad:h02")
+    assert (
+        abs(pads[0].center.x - pads[-1].center.x) + abs(pads[0].center.y - pads[-1].center.y)
+        == 750_000
+    )
+    assert pads[1].center.x == min(item.center.x for item in pads)
+    assert pads[1].center.y == max(item.center.y for item in pads)
+    raw_span_nm = (
+        max(item.center.x for item in pads)
+        - min(item.center.x for item in pads)
+        + max(item.center.y for item in pads)
+        - min(item.center.y for item in pads)
+    )
+    assert raw_span_nm == 16_900_000
+    assert raw_span_nm % envelope.grid_step_nm != 0
+    assert congestion_module._net_demand_cells(snapshot, envelope) == {H_NET: 17, V_NET: 5}
+    policy_input = congestion_module._derive_policy_input(snapshot, envelope)
+    assert [item.demand_cells for item in policy_input.nets] == [17, 5]
 
 
 def test_negotiated_request_rejects_mixed_lattice_and_duplicate_nets() -> None:
@@ -904,6 +1310,129 @@ def test_negotiated_acceptance_rejects_zero_overflow_physical_clearance_violatio
     assert result.failure is PhysicalClearanceFailure.CLEARANCE_VIOLATION
     assert result.pair_checks == 1
     assert result.diagnostic == "negotiated candidates violate pairwise physical clearance"
+
+
+def test_shifted_lattice_crossing_has_no_exact_resource_collision_but_fails_physical_gate() -> None:
+    snapshot = _physical_clearance_snapshot()
+    horizontal = _physical_candidate(
+        snapshot,
+        H_NET,
+        (RoutePath((PointNM(1_000_000, 3_000_000), PointNM(9_000_000, 3_000_000))),),
+    )
+    shifted_vertical = _physical_candidate(
+        snapshot,
+        V_NET,
+        (RoutePath((PointNM(1_050_000, 1_000_000), PointNM(1_050_000, 5_000_000))),),
+    )
+    assert congestion_module._candidate_resources(horizontal, 100_000).isdisjoint(
+        congestion_module._candidate_resources(shifted_vertical, 100_000)
+    )
+
+    ledger = CongestionLedger(
+        grid_step_nm=100_000,
+        present_penalty_nm=0,
+        history_penalty_nm=0,
+    )
+    ledger.add_candidate(horizontal)
+    ledger.add_candidate(shifted_vertical)
+    assert ledger.overflow_resources() == ()
+
+    physical = verify_negotiated_physical_clearance(
+        snapshot,
+        (horizontal, shifted_vertical),
+        layer_id=LAYER,
+        max_pair_checks=1,
+    )
+    assert physical.failure is PhysicalClearanceFailure.CLEARANCE_VIOLATION
+    assert physical.pair_checks == 1
+
+
+def test_two_pin_local_repair_runs_against_shifted_phase_multipin_conflict() -> None:
+    snapshot = _multipin_shifted_snapshot(
+        horizontal_centres_override=(
+            PointNM(27_000_000, 1_000_000),
+            PointNM(27_000_000, 6_000_000),
+            PointNM(34_000_000, 6_000_000),
+        ),
+    )
+    horizontal, vertical = _multipin_requests(snapshot)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(horizontal, vertical),
+        max_iterations=1,
+    )
+    baseline = tuple(
+        result.candidate
+        for request in envelope.requests
+        if (result := AStarRouter().propose(snapshot, request)).candidate is not None
+    )
+
+    assert tuple(candidate.pad_count for candidate in baseline) == (3, 2)
+    target_origin = baseline[1].patch.paths[0].vertices[0]
+    assert any(
+        (point.x - target_origin.x) % envelope.grid_step_nm
+        or (point.y - target_origin.y) % envelope.grid_step_nm
+        for path in baseline[0].patch.paths
+        for point in path.vertices
+    )
+    physical = verify_negotiated_physical_clearance(
+        snapshot,
+        baseline,
+        layer_id=LAYER,
+        max_pair_checks=1,
+    )
+    assert physical.failure is PhysicalClearanceFailure.CLEARANCE_VIOLATION
+    assert physical.violating_nets == (H_NET, V_NET)
+
+    result = negotiate_routes(
+        snapshot,
+        envelope,
+        repair_settings=RepairTransactionSettings(),
+    )
+
+    assert isinstance(result, congestion_module.RepairNegotiatedRoutingResult)
+    assert result.status is NegotiatedRoutingStatus.COMPLETED
+    assert len(result.candidates) == 2
+    assert result.repair_evidence is not None
+    assert result.repair_evidence.projection_obstacle_checks > 0
+    assert result.repair_evidence.local_expanded_states > 0
+    assert result.repair_evidence.validator_edge_checks > 0
+    assert result.repair_evidence.validator_obstacle_checks > 0
+
+
+def test_local_repair_skips_every_non_two_pin_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    snapshot = _multipin_shifted_snapshot(vertical_pad_count=3)
+    horizontal, vertical = _multipin_requests(snapshot)
+    candidates: list[RouteCandidate] = []
+    for request in (horizontal, vertical):
+        result = AStarRouter().propose(snapshot, request)
+        assert result.candidate is not None
+        assert result.candidate.pad_count == 3
+        candidates.append(result.candidate)
+    envelope = NegotiatedRoutingRequest(
+        board_revision=snapshot.snapshot_digest,
+        requests=(horizontal, vertical),
+        max_iterations=1,
+    )
+
+    def forbidden_provenance(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("multi-pin candidates must not enter the two-pin repair derivation")
+
+    monkeypatch.setattr(congestion_module, "derive_repair_provenance", forbidden_provenance)
+    repair = congestion_module._attempt_local_repair(
+        snapshot,
+        envelope,
+        tuple(candidates),
+        iteration=1,
+        violating_nets=(H_NET, V_NET),
+        settings=RepairTransactionSettings(),
+        policy_profile=None,
+        cancelled=None,
+        total_expansions=0,
+        total_obstacle_checks=0,
+    )
+
+    assert repair == (None, None, 0, 0, False)
 
 
 def test_replay_failure_discards_prior_candidate_and_connection_evidence_atomically() -> None:

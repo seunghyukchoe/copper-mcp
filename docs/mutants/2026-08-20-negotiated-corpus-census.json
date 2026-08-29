@@ -38,21 +38,21 @@
     {
       "id": "NCC04-b088-baseline-drift-check-removed",
       "file": "scripts/benchmark_negotiated_corpus_census.py",
-      "anchor": "        if expected is None or routed_here != expected:\n            raise NegotiatedCensusError(\n",
-      "replacement": "        if expected is None and False:\n            raise NegotiatedCensusError(\n",
+      "anchor": "    if expected is None or _current_reference_authority(problem, submitted) != expected:\n        raise NegotiatedCensusError(\n",
+      "replacement": "    if expected is None and False:\n        raise NegotiatedCensusError(\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_corpus_census.py::test_a_submitted_set_that_drifts_from_the_recorded_baseline_is_refused"
+        "tests/test_benchmark_negotiated_corpus_census.py::test_internal_per_board_authority_refuses_a_same_count_candidate_membership_mutation"
       ]
     },
     {
       "id": "NCC05-observer-effect-control-removed",
       "file": "scripts/benchmark_negotiated_corpus_census.py",
-      "anchor": "    if instrumented != control:\n        raise NegotiatedCensusError(\n",
-      "replacement": "    if instrumented != control and False:\n        raise NegotiatedCensusError(\n",
+      "anchor": "    if instrumented_result != control_result:\n        raise NegotiatedCensusError(\n",
+      "replacement": "    if instrumented_result != control_result and False:\n        raise NegotiatedCensusError(\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_corpus_census.py::test_an_observer_that_perturbs_the_published_result_is_refused"
+        "tests/test_benchmark_negotiated_corpus_census.py::test_parity_refuses_a_change_to_a_semantic_field_omitted_from_the_projection"
       ]
     },
     {
@@ -62,7 +62,7 @@
       "replacement": "        if expected is None and False:\n            raise NegotiatedCensusError(\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_corpus_census.py::test_an_admission_predicate_that_disagrees_with_the_coordinator_is_refused"
+        "tests/test_benchmark_negotiated_corpus_census.py::test_a_coordinator_refusal_without_an_unmet_conjunct_is_refused"
       ]
     },
     {
@@ -72,7 +72,7 @@
       "replacement": "        if expected is None or False:\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_corpus_census.py::test_a_predicate_that_names_the_wrong_conjunct_is_refused"
+        "tests/test_benchmark_negotiated_corpus_census.py::test_a_coordinator_refusal_with_the_wrong_diagnostic_is_refused"
       ]
     }
   ]
