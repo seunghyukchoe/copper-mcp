@@ -1,21 +1,24 @@
 """Historical and successor guards for the negotiated whole-corpus census.
 
 B-124 is immutable evidence for the former two-pin, shared-world-origin contract.  It is verified
-as history and is never compared with current code.  The successor census has no committed artifact
-yet: its report is built in memory under the new 2-to-32-pad, request-local-origin contract.
+as history and is never compared with current code.  The successor artifact is separately pinned
+evidence, while one module-scoped in-memory report checks that its metrics still match the current
+2-to-32-pad, request-local-origin contract without comparing machine timing.
 
-So the file is organised around five questions.
+So the file is organised around six questions.
 
 1. Does B-124 retain its exact self-digest, source commit, and historical 0-of-20 result?
-2. Does the successor freeze and enforce 16 admitted / four envelope-ineligible boards before
-   measurement, without predicting a routing outcome?
-3. Does the pass-through recorder actually record, and actually change nothing?  Answered on the
+2. Does the successor artifact retain its exact identity, source, predecessor, runner, measured
+   headline, aggregate reconciliation, and redaction contract?
+3. Does a fresh successor run freeze and enforce 16 admitted / four envelope-ineligible boards
+   before measurement, without predicting a routing outcome, and reproduce the artifact metrics?
+4. Does the pass-through recorder actually record, and actually change nothing?  Answered on the
    committed two-net KiCad crossing fixture, where the coordinator genuinely reaches its
    physical-clearance gate without relying on a successor corpus outcome.
-4. Does every rung of the blocking-stage ladder distinguish the complete-allocation physical
+5. Does every rung of the blocking-stage ladder distinguish the complete-allocation physical
    trigger from the presence of a selectable two-pin violating target?  Answered with constructed
    gate observations rather than predeclaring either corpus outcome.
-5. Do the harness's own refusals fire?  A drifted B-088 baseline, a disagreeing admission
+6. Do the harness's own refusals fire?  A drifted B-088 baseline, a disagreeing admission
    predicate, and an observer that perturbs the result must each raise rather than be recorded.
 """
 
@@ -48,6 +51,32 @@ from scripts import benchmark_simple_route_json_corpus as reference
 from tests.test_routing_congestion import _multipin_requests, _multipin_shifted_snapshot
 
 LEGACY_ARTIFACT = census.LEGACY_ARTIFACT
+SUCCESSOR_ARTIFACT = census.DEFAULT_OUTPUT
+SUCCESSOR_SOURCE_COMMIT = "30692df496e0dc250d3b09bae5ad9b7b11a3d827"
+SUCCESSOR_RUN_ID = "sha256:ef3724e6a58ba94df8a7e392a4e407029fb2720844fc5adcc4654cac8bbc3a31"
+SUCCESSOR_RUNNER_SHA256 = "sha256:eb4339e5e2264c62a1971958af6a6d5d037d5e5703a3609561c7f5f607279774"
+REFERENCE_RUNNER_SHA256 = "sha256:8fb5d05fb60a75b66e4720b3aa3ba9e0b28dbd8c3377ac159a239adbc4795fed"
+FORBIDDEN_PUBLIC_KEYS = frozenset(
+    {
+        "_negotiated_result",
+        "board",
+        "board_revision",
+        "boards",
+        "candidate",
+        "candidate_id",
+        "candidate_ids",
+        "coordinates",
+        "document_sha256",
+        "geometry",
+        "negotiated",
+        "paths",
+        "segments",
+        "submitted_net_ids",
+        "two_pin_repair_eligible_violating_targets",
+        "unrouted_nets",
+        "vertices",
+    }
+)
 
 
 def _legacy_artifact() -> dict[str, Any]:
@@ -56,9 +85,27 @@ def _legacy_artifact() -> dict[str, Any]:
     return document
 
 
+def _successor_artifact() -> dict[str, Any]:
+    document = json.loads(SUCCESSOR_ARTIFACT.read_text(encoding="utf-8"))
+    assert isinstance(document, dict)
+    return document
+
+
+def _file_sha256(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _nested_keys(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        return set(value) | {item for child in value.values() for item in _nested_keys(child)}
+    if isinstance(value, list):
+        return {item for child in value for item in _nested_keys(child)}
+    return set()
+
+
 @pytest.fixture(scope="module")
 def successor_report() -> dict[str, Any]:
-    """Measure once in memory; the not-yet-created successor artifact is never opened or written."""
+    """Measure once in memory; every current-contract assertion reuses this exact report."""
 
     return census.build_report(repetitions=1)
 
@@ -142,6 +189,129 @@ def test_successor_paths_schema_and_prediction_are_disjoint_from_b124() -> None:
         "complete_allocation_physical_clearance_trigger_without_two_pin_repair_eligible_target",
         "complete_allocation_physical_clearance_trigger_with_two_pin_repair_eligible_target",
     )
+
+
+def test_successor_artifact_has_exact_identity_and_authorities() -> None:
+    report = _successor_artifact()
+    body = {key: value for key, value in report.items() if key != "run_id"}
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+    assert SUCCESSOR_ARTIFACT == (
+        census.ROOT
+        / "benchmarks/results/routing/2026-08-29-negotiated-multipin-corpus-census-v1.json"
+    )
+    assert report["schema"] == census.REPORT_SCHEMA
+    assert report["source_commit"] == SUCCESSOR_SOURCE_COMMIT
+    assert report["run_id"] == SUCCESSOR_RUN_ID
+    assert report["run_id"] == "sha256:" + hashlib.sha256(canonical).hexdigest()
+    assert report["historical_predecessor"] == {
+        "benchmark": "B-124",
+        "artifact": "benchmarks/results/routing/2026-08-20-negotiated-corpus-census-v1.json",
+        "relationship": (
+            "immutable evidence for the former exactly-two-pad, shared-world-origin contract; "
+            "never replayed as current behavior"
+        ),
+    }
+    assert report["metrics"]["reference_baseline"] == {
+        "benchmark": "B-088",
+        "artifact": "benchmarks/results/routing/2026-08-06-simple-route-json-corpus-v1.json",
+        "artifact_run_id": census.REFERENCE_RUN_ID,
+        "grid_policy": "fixed",
+        "nets_routed": 70,
+        "nets_attempted": 117,
+    }
+    assert report["predeclared_prediction"] == census.PREDECLARED_PRIMARY_ADMISSION
+    assert report["configuration"]["runner_sha256"] == SUCCESSOR_RUNNER_SHA256
+    assert report["configuration"]["reference_runner_sha256"] == REFERENCE_RUNNER_SHA256
+    assert SUCCESSOR_RUNNER_SHA256 == _file_sha256(census.ROOT / census.SCRIPT_PATH)
+    assert REFERENCE_RUNNER_SHA256 == _file_sha256(census.ROOT / census.REFERENCE_RUNNER_PATH)
+
+
+def test_successor_artifact_has_exact_reconciled_redacted_measurement() -> None:
+    report = _successor_artifact()
+    metrics = report["metrics"]
+    headline = metrics["headline"]
+    configurations = metrics["configurations"]
+    primary = configurations["b088-routable"]
+    control = configurations["two-pad-control"]
+    aggregate_keys = {
+        "blocking_stage_breakdown",
+        "boards_admitted_by_the_coordinator",
+        "boards_imported",
+        "boards_offered",
+        "boards_reaching_complete_allocation_physical_clearance_trigger",
+        "boards_with_a_constructible_envelope",
+        "boards_with_a_two_pin_repair_eligible_violating_target",
+        "configuration",
+        "first_unmet_conjunct_breakdown",
+        "negotiated_nets_completed",
+        "nets_submitted",
+        "physical_gate_calls",
+        "reference_per_net_nets_routed",
+        "submitted_nets_the_reference_routed",
+        "terminal_status_breakdown",
+    }
+
+    assert headline == {
+        "boards_offered": 20,
+        "boards_admitted_by_the_coordinator": 16,
+        "boards_unable_to_form_a_two_request_envelope": 4,
+        "boards_reaching_complete_allocation_physical_clearance_trigger": 16,
+        "boards_with_a_two_pin_repair_eligible_violating_target": 0,
+        "negotiated_nets_completed": 0,
+        "reference_per_net_nets_routed": 70,
+        "physical_gate_calls": 128,
+        "two_pad_nets_offered": 36,
+        "two_pad_nets_the_reference_routed": 0,
+    }
+    assert metrics["premeasurement_admission_check"] == {
+        "boards_offered": 20,
+        "boards_admitted_by_the_coordinator": 16,
+        "boards_unable_to_form_a_two_request_envelope": 4,
+    }
+    for measurement in configurations.values():
+        assert set(measurement) == aggregate_keys
+        assert sum(measurement["blocking_stage_breakdown"].values()) == 20
+        assert sum(measurement["first_unmet_conjunct_breakdown"].values()) == 20
+        assert sum(measurement["terminal_status_breakdown"].values()) == 20
+        assert measurement["boards_reaching_complete_allocation_physical_clearance_trigger"] == sum(
+            measurement["blocking_stage_breakdown"][stage]
+            for stage in census.PHYSICAL_TRIGGER_STAGES
+        )
+        assert (
+            measurement["boards_with_a_two_pin_repair_eligible_violating_target"]
+            == (
+                measurement["blocking_stage_breakdown"][census.PHYSICAL_TRIGGER_WITH_TWO_PIN_TARGET]
+            )
+        )
+    for field in (
+        "boards_offered",
+        "boards_admitted_by_the_coordinator",
+        "boards_reaching_complete_allocation_physical_clearance_trigger",
+        "boards_with_a_two_pin_repair_eligible_violating_target",
+        "negotiated_nets_completed",
+        "reference_per_net_nets_routed",
+        "physical_gate_calls",
+    ):
+        assert headline[field] == primary[field]
+    assert (
+        headline["boards_unable_to_form_a_two_request_envelope"]
+        == primary["first_unmet_conjunct_breakdown"]["at_least_two_requests"]
+    )
+    assert headline["two_pad_nets_offered"] == control["nets_submitted"]
+    assert (
+        headline["two_pad_nets_the_reference_routed"]
+        == control["submitted_nets_the_reference_routed"]
+    )
+    assert _nested_keys(report).isdisjoint(FORBIDDEN_PUBLIC_KEYS)
+
+
+def test_successor_artifact_metrics_match_one_fresh_report(
+    successor_report: dict[str, Any],
+) -> None:
+    # Timing and the self-digest are run-specific. The closed deterministic metrics are the
+    # compatibility surface, and the module-scoped fixture ensures this comparison routes once.
+    assert _successor_artifact()["metrics"] == successor_report["metrics"]
 
 
 def test_current_admission_vocabulary_pins_2_and_32_without_a_shared_origin() -> None:
@@ -247,34 +417,7 @@ def test_successor_report_matches_only_the_predeclared_admission(
 def test_successor_report_contains_no_candidate_or_geometry_payload(
     successor_report: dict[str, Any],
 ) -> None:
-    forbidden_keys = {
-        "_negotiated_result",
-        "board",
-        "board_revision",
-        "boards",
-        "candidate",
-        "candidate_id",
-        "candidate_ids",
-        "coordinates",
-        "document_sha256",
-        "geometry",
-        "negotiated",
-        "paths",
-        "segments",
-        "submitted_net_ids",
-        "two_pin_repair_eligible_violating_targets",
-        "unrouted_nets",
-        "vertices",
-    }
-
-    def keys(value: Any) -> set[str]:
-        if isinstance(value, dict):
-            return set(value) | {item for child in value.values() for item in keys(child)}
-        if isinstance(value, list):
-            return {item for child in value for item in keys(child)}
-        return set()
-
-    assert keys(successor_report).isdisjoint(forbidden_keys)
+    assert _nested_keys(successor_report).isdisjoint(FORBIDDEN_PUBLIC_KEYS)
 
 
 def test_hostile_per_board_identifiers_and_values_remain_private(

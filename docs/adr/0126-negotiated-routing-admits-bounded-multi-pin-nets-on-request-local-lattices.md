@@ -10,8 +10,9 @@
   [ADR-0073](0073-declared-negotiation-policy-slots.md),
   [ADR-0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md),
   [D-233](../ledgers/decision-ledger.md), [R-184](../ledgers/risk-register.md),
-  [SEC-169](../ledgers/security-ledger.md), and
-  [B-124](../ledgers/benchmark-ledger.md)
+  [SEC-169](../ledgers/security-ledger.md),
+  [B-124](../ledgers/benchmark-ledger.md), and
+  [B-140](../ledgers/benchmark-ledger.md)
 
 ## Context
 
@@ -91,19 +92,23 @@ ceiling division observable. A shifted-lattice crossing whose structural resourc
 is still caught by the exact physical gate, and a multi-pin conflict cannot enter the two-pin repair
 transaction.
 
-B-124 remains immutable evidence of the old contract. A successor census must bind the same B-088
-submitted set, freeze the expected admission population before measuring, run the production
-coordinator without repair, prove deterministic replay and uninstrumented parity, and publish only
-aggregate redacted results from a clean commit. Until that artifact lands, this ADR claims contract
-coverage, not corpus completion or route-quality improvement. Even after it lands, issue #90 remains
-open unless local repair actually fires and improves a held-out case under the existing physical
-and work gates.
+B-124 remains immutable evidence of the old contract. B-140 is its successor: it binds the same
+B-088 submitted set, freezes the expected admission population before measuring, runs the
+production coordinator without repair, proves deterministic replay and uninstrumented parity, and
+publishes only aggregate redacted results from a clean commit. The predicted admission change is
+confirmed: 16 of 20 boards are admitted and the other four cannot form a two-request envelope.
+Every admitted board reaches the complete-allocation physical-clearance trigger, but none contains
+a violating two-pad candidate eligible for the current local-repair transaction; negotiated
+completion remains zero. This is contract and boundary evidence, not route-quality improvement.
+Issue #90 remains open because repair never ran and no held-out case improved.
 
 That successor must report two post-admission signals separately. A complete allocation that reaches
 the physical-clearance trigger is not yet a usable input to the present repair transaction: the
 violating candidate tuple must also contain a two-pad target, because multi-pin targets are excluded
 above. Conflating those counts would make the new admission capability look like repair evidence it
-is not.
+is not. B-140 reports them as 16 and 0 respectively. The next machine slice must define a bounded
+multi-pin repair target, window provenance and complete-topology reconstruction before the local
+transaction can soundly act on the population this slice now admits.
 
 No KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication or hardware conclusion follows from
 this decision.

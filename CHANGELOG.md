@@ -16,7 +16,14 @@ All notable changes are documented here. The format follows
   so a shifted-phase crossing invisible to that ledger is caught by the physical gate rather than
   published. Local exact repair intentionally remains two-pad-only. The custom-router seam also
   rejects and replay-compares `fill_binding`, preventing unverified fill provenance from being
-  attached to a re-hashed candidate (`ADR-0126`, `D-233`, `R-184`, `SEC-169`, issue #90).
+  attached to a re-hashed candidate. B-140 confirms the intended admission change on the fixed
+  B-088 population: **16 of 20** boards are admitted and all 16 reach a complete-allocation
+  physical-clearance trigger, while the other four cannot form a two-request envelope. None of
+  those 16 boards contains a violating two-pad candidate eligible for the current repair
+  transaction, so repair is never enabled and negotiated completion remains zero. The next safe
+  capability boundary is therefore a bounded multi-pin repair target, provenance and topology
+  contract, not tuning or a repair-effectiveness claim (`ADR-0126`, `D-233`, `R-184`, `SEC-169`,
+  `B-140`, issue #90).
 - Board IR converts boards whose outline is drawn with `Edge.Cuts` **arcs** -- which is what a
   rounded corner is, and what eight of ten licence-clean public boards stopped on. A root
   `gr_arc` is now an outline edge chained with `gr_line` segments into the same single closed

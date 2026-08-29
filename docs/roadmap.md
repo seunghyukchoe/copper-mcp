@@ -741,6 +741,17 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   rather than assumed: a negotiated slice that admits multi-pin nets, or a redistributable corpus
   whose two-pad nets share one world grid at a common step. Neither was attempted here, and B-124
   supports no claim about local repair, because repair never ran.
+  Admission boundary implemented and re-measured (2026-08-29). ADR-0126 widens only the internal
+  coordinator to 2–32 selected-layer pads per net and request-local lattice origins, retaining the
+  mandatory whole-set physical gate and the exact legacy two-pin identities. B-140 confirms the
+  predeclared admission result: **16 of 20** fixed-corpus boards are now admitted, all 16 reach a
+  complete-allocation physical-clearance trigger, and the other four still cannot form a
+  two-request envelope. The newly exposed boundary is one level later and exact: **0 of 16**
+  admitted boards contains a violating two-pad candidate eligible for the existing repair transaction,
+  so repair remains disabled and negotiated completion remains zero. #90 therefore stays open.
+  The next agent-only slice is a bounded multi-pin repair target, window-provenance and complete
+  topology-reconstruction contract with the same atomic physical and work gates; only after that
+  seam exists can a held-out repair differential honestly be measured.
 - [ ] **SI/PI/thermal/DFM surrogate hooks with authoritative signoff, parked behind #99**
   ([#91](https://github.com/seunghyukchoe/copper-mcp/issues/91)). The half of this that carries the
   safety property is the signoff, not the surrogate — any claim surfaced to a caller comes from an
