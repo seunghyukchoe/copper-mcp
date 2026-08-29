@@ -8,6 +8,29 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- B-141 now records the first repair-enabled differential for the multi-pin branch-repair
+  capability on the exact B-140/B-088 population. The control keeps `repair_settings: null`; the
+  treatment uses the default bounded repair profile; both arms run twice and replay
+  deterministically. All **20** boards are imported/offered, **16** form a constructible envelope,
+  **4** refuse envelope construction, and the same **70** reference-routed nets are submitted to
+  both arms. The control completes **0 boards / 0 nets**; treatment completes **1 board / 2 nets**
+  with one published repair and one `completed_with_repair` outcome, a measured differential of
+  **+1 board / +2 nets / +7,432 physical checks / +43,750,000 nm wire**. Mean arm times are
+  descriptive (**37.625 s** control, **37.938 s** treatment), not a performance claim. The closed
+  evidence contract is covered by **94/94** focused tests and **22/22** killed evidence-contract
+  mutants; this is separate from the **35/35** capability mutants for #238. The self-digested report
+  and companion commitment bind source `e3828ecc16688bf0ad3050eebb4ea8c55c076797`, runner
+  `sha256:7308365981ffe3bdbf7707842dfa4e9136cbaa77a52770c7a981f0e172dfa7e0`, configuration
+  `sha256:d7609e8dae5608cfed9127591e1dfb4f858f569f5136336d3e6963e095564daf`, report run
+  `sha256:f90f410afa9337c13960fd5cb24676f30a8463d1e4103e68e86ee9d4c2adc7fe`, artifact
+  `sha256:6987374c1aec317a0a3eaf3067343823aeed7ac142cf3f82afd9a6dd88626d19`, commitment run
+  `sha256:6bbac831c9f4c5a21908fc3587bbce1c8b4599a63f332209be5b5a90006674ce`, commitment
+  `sha256:7d1c9a07ad3f57d5c16dfb68fdfff9e2f753d06f31bbc573ee4c985740335a46`, and mutation spec
+  `sha256:4421e029d35c0125ec2a146b004ef7284e69cdb889d676f959753266562afebd`. This is a
+  deterministic completion differential, not held-out routing quality, KiCad DRC, electrical,
+  SI/PI/EMC, thermal, DFM, fabrication, apply, editor or hardware evidence; #90 remains open for
+  human review/calibration, and the next agent-only direction is #91's private surrogate ranking
+  with authoritative signoff (`ADR-0127`, `D-236`, `R-186`, `SEC-173`, `B-141`).
 - Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
   request's own lattice origin while retaining one common signal layer and grid step. Exact legacy
   two-pad identities remain pinned; malformed 1/33-pad requests refuse before router work; complete

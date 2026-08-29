@@ -757,14 +757,34 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   before atomic publication. Unselected target paths are unavailable to the local solver outside
   their existing attachment endpoints. One shared exact topology-edge ledger, charged cancellable
   contact predicates, and preserved failed-projection work close the resource-accounting gaps.
-  Three-pad first/last-branch and 32-pad fixtures plus 27/27 killed mutants close the machine
+  Three-pad first/last-branch and 32-pad fixtures plus 35/35 killed mutants close the machine
   contract, while legacy two-pad identities remain pinned. This
   is synthetic capability evidence, not the held-out improvement #90 requires: B-140 ran with
-  repair disabled. The next agent-only slice is a predeclared B-141 successor that replays B-140's
+  repair disabled. The predeclared successor was B-141, which replays B-140's
   exact admitted population with repair enabled, preserves an uninstrumented control, and reports
   completion/quality and every refusal separately. #90 closes only if that differential is
   deterministic and positive without weakening the physical, identity or work gates; otherwise it
   re-parks on the measured result.
+  B-141 differential measured (2026-08-30). The exact B-140/B-088 population produced **20
+  offered/imported, 16 admitted, 4 envelope refusals and 70 submitted nets** in both arms. The
+  uninstrumented control (`repair_settings: null`) completed **0 boards / 0 nets**; treatment with
+  the default bounded repair profile completed **1 board / 2 nets**, publishing one repair and one
+  `completed_with_repair` result. The measured differential is **+1 board / +2 nets / +7,432
+  physical checks / +43,750,000 nm wire**; mean arm times were 37.625 s and 37.938 s across two
+  deterministic repetitions. The closed report and companion commitment are bound to source
+  `e3828ecc16688bf0ad3050eebb4ea8c55c076797`, runner
+  `sha256:7308365981ffe3bdbf7707842dfa4e9136cbaa77a52770c7a981f0e172dfa7e0`, configuration
+  `sha256:d7609e8dae5608cfed9127591e1dfb4f858f569f5136336d3e6963e095564daf`, report run
+  `sha256:f90f410afa9337c13960fd5cb24676f30a8463d1e4103e68e86ee9d4c2adc7fe`, artifact
+  `sha256:6987374c1aec317a0a3eaf3067343823aeed7ac142cf3f82afd9a6dd88626d19`, commitment run
+  `sha256:6bbac831c9f4c5a21908fc3587bbce1c8b4599a63f332209be5b5a90006674ce`, commitment
+  `sha256:7d1c9a07ad3f57d5c16dfb68fdfff9e2f753d06f31bbc573ee4c985740335a46`, and spec
+  `sha256:4421e029d35c0125ec2a146b004ef7284e69cdb889d676f959753266562afebd`. Focused
+  evidence validation is **94/94 tests** and **22/22 evidence-contract mutants killed**, distinct
+  from #238's **35/35 capability mutants**. This is a deterministic completion differential, not
+  held-out routing quality, KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply,
+  editor, hardware or generalisation evidence. #90 remains open for human review/calibration and
+  the next agent-only direction is #91's private surrogate ranking with authoritative signoff.
 - [ ] **SI/PI/thermal/DFM surrogate hooks with authoritative signoff, parked behind #99**
   ([#91](https://github.com/seunghyukchoe/copper-mcp/issues/91)). The half of this that carries the
   safety property is the signoff, not the surrogate — any claim surfaced to a caller comes from an

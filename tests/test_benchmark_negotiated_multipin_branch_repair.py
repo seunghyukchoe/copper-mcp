@@ -1301,7 +1301,7 @@ def test_load_artifact_rejects_a_payload_tamper_before_accepting_it(
     tmp_path: Path,
 ) -> None:
     tampered = _artifact()
-    tampered["metrics"]["differential"]["verdict"] = "forged"
+    tampered["metrics"]["differential"]["total_physical_checks_delta"] += 1
     destination = tmp_path / "tampered.json"
     destination.write_text(json.dumps(tampered), encoding="utf-8")
 

@@ -8,7 +8,10 @@
   [ADR-0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md),
   [ADR-0126](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md),
   [D-235](../ledgers/decision-ledger.md), [R-185](../ledgers/risk-register.md),
-  [SEC-171](../ledgers/security-ledger.md), and [B-140](../ledgers/benchmark-ledger.md)
+  [SEC-171](../ledgers/security-ledger.md), [B-140](../ledgers/benchmark-ledger.md), and the
+  B-141 differential records [D-236](../ledgers/decision-ledger.md),
+  [R-186](../ledgers/risk-register.md), [SEC-173](../ledgers/security-ledger.md),
+  [B-141](../ledgers/benchmark-ledger.md)
 
 ## Context
 
@@ -112,6 +115,12 @@ non-echoing; no path, coordinate, pad, net or board content is added to a result
 - B-140 motivated this capability but did not run it. Issue #90 remains open until the exact B-140
   population is replayed with repair enabled and a predeclared held-out differential demonstrates
   deterministic improvement without weakening any work or physical gate.
+- B-141 is that repair-enabled replay and records a positive **completion** differential on the
+  exact immutable population: treatment completes one board and two nets where the uninstrumented
+  control completes none. The result is evidence that the private transaction was reached and
+  published once under its existing gates; it is not, by itself, a routing-quality or
+  generalisation result. Issue #90 therefore remains open for human review and calibration of the
+  benchmark interpretation and for any further held-out quality decision.
 
 ## Evidence and limits
 
@@ -146,6 +155,30 @@ successful untouched-work totals or evidence.
 
 This is contract and synthetic capability evidence, not held-out routing-quality evidence. It is
 not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor or hardware evidence.
+
+B-141 then exercised the production runner's closed differential contract over the exact B-140
+population. The two-arm run used Python 3.12.13 on Darwin/arm64, two repetitions, and an
+uninstrumented control with `repair_settings: null` beside treatment using the default bounded
+repair settings. The report is self-digested and the companion commitment independently binds the
+source commit, runner bytes, configuration, artifact bytes, and exact corpus population. It
+contains no board, net, candidate, path or geometry payload. Focused validation passes **94/94**
+tests and the B-141 contract mutation harness kills **22/22** mutants with zero survivors or
+control failures; the **35/35** capability mutant result above belongs to #238 and is not counted
+again here. The measured population is **20 offered/imported, 16 admitted, 4 envelope-refused and
+70 submitted**. Control is **0 boards / 0 nets**, while treatment is **1 board / 2 nets** with one
+published repair and one `completed_with_repair`; the differential is **+1 / +2 / +7,432 physical
+checks / +43,750,000 nm wire**. The exact evidence pins are: source
+`e3828ecc16688bf0ad3050eebb4ea8c55c076797`; runner
+`sha256:7308365981ffe3bdbf7707842dfa4e9136cbaa77a52770c7a981f0e172dfa7e0`; configuration
+`sha256:d7609e8dae5608cfed9127591e1dfb4f858f569f5136336d3e6963e095564daf`; artifact
+`sha256:6987374c1aec317a0a3eaf3067343823aeed7ac142cf3f82afd9a6dd88626d19`; report run
+`sha256:f90f410afa9337c13960fd5cb24676f30a8463d1e4103e68e86ee9d4c2adc7fe`; commitment
+`sha256:7d1c9a07ad3f57d5c16dfb68fdfff9e2f753d06f31bbc573ee4c985740335a46` with run
+`sha256:6bbac831c9f4c5a21908fc3587bbce1c8b4599a63f332209be5b5a90006674ce`; and mutation spec
+`sha256:4421e029d35c0125ec2a146b004ef7284e69cdb889d676f959753266562afebd`. Mean arm timings
+of 37.625 s and 37.938 s are descriptive only. This remains contract and completion evidence,
+not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor, hardware,
+general-corpus or human-calibration evidence; #90 remains open.
 
 ## Alternatives considered
 
