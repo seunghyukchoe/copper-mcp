@@ -1280,9 +1280,13 @@ def test_build_report_preserves_an_explicit_source_revision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     aggregate = _minimal_aggregate(EXPECTED_POPULATION)
-    aggregate["outcome_breakdown"]["envelope_construction"] = 20
-    aggregate["refusal_breakdown"]["envelope_construction"] = 20
-    aggregate["repair_outcome_breakdown"]["not_applicable_envelope_refused"] = 20
+    aggregate["outcome_breakdown"]["envelope_construction"] = 4
+    aggregate["outcome_breakdown"]["no_path_physical_clearance"] = 16
+    aggregate["refusal_breakdown"]["envelope_construction"] = 4
+    aggregate["refusal_breakdown"]["no_path_physical_clearance"] = 16
+    aggregate["repair_outcome_breakdown"]["not_applicable_envelope_refused"] = 4
+    aggregate["repair_outcome_breakdown"]["repair_not_published"] = 16
+    aggregate["status_breakdown"] = {"no_path": 16, "not_run": 4}
     aggregate["repair_enabled"] = False
     aggregate["repair_settings"] = None
     metrics = {

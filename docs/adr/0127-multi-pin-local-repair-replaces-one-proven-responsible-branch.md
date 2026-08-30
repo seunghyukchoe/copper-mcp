@@ -164,23 +164,25 @@ uninstrumented control with `repair_settings: null` beside treatment using the d
 repair settings. The report is self-digested and the companion commitment independently binds the
 source commit, runner bytes, configuration, artifact bytes, and exact corpus population. It
 contains no board, net, candidate, path or geometry payload. Per-reason refusal/outcome
-reconciliation is independently checked, and the loader accepts the record after a merge-ref or
-later checkout moves `HEAD` while retaining the historical source binding. Focused validation
-passes **95/95** tests and the B-141 contract mutation harness kills **24/24** mutants with zero
+reconciliation is independently checked, and the new envelope-outcome-to-population semantic guard
+requires each arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
+`boards_unable_to_form_a_two_request_envelope` count (**4**). The loader accepts the record after a
+merge-ref or later checkout moves `HEAD` while retaining the historical source binding. Focused
+validation passes **96/96** tests and the B-141 contract mutation harness kills **25/25** mutants with zero
 survivors or control failures; the **35/35** capability mutant result above belongs to #238 and is
 not counted again here. The measured population is **20 offered/imported, 16 admitted,
 4 envelope-refused and 70 submitted**. Control is **0 boards / 0 nets**, while treatment is
 **1 board / 2 nets** with one published repair and one `completed_with_repair`; the differential is
 **+1 / +2 / +7,432 physical checks / +43,750,000 nm wire**. The exact evidence pins are: source
-`cf374fcb2cd9d26aa9de9611a119966e20a491dc`; runner
-`sha256:5c61de9600df7075c8db70e7e678877388892ce4e5a33ec3622bb2e1aee50482`; configuration
-`sha256:688ffc121b7e4e20e38676da979dcf4ef0262ef37691be28a9dbed9d951c34bf`; artifact
-`sha256:a00b1313d7e31a67e2df0fcfa458afdadc4baacf53cb0a2042f08bf8f2ca32c8`; report run
-`sha256:cdddedc04976fc17be70e291e2cbaf1c3b0dc403d451e12268d059fede811001`; commitment
-`sha256:f206cbb3e1591ec82ca0710f227b0ce1359e902f264f8b65a995dfa30b2df2d5` with run
-`sha256:fd4c7dc5cf97c28c43ab70a3e12bb35ecde0e2ac82948146fb1a2765d6c0b2a3`; and mutation spec
-`sha256:82f41657687251e35a95b4133d02bd6760525e557e8e11c3ac79a2c28fb3cb5e`. Mean arm timings
-of 37.843 s and 38.131 s are descriptive only. This remains contract and completion evidence,
+`2f96264b93b407630e7447261dd91f281a30837c`; runner
+`sha256:c1733bd282239938aeaaebb98ff57be144fc89e4f40caa29f0456f545ac7b648`; configuration
+`sha256:0975640898b21760537fd18c822d4068f69ae2250b3f2da1e4ba215b403672f8`; artifact
+`sha256:3c3f962944e72d6fa4d1a9efa729964472e781bb050a3153bf69b6a826d8adab`; report run
+`sha256:534c9e2909247a47f5786e832293c76968837d1ddf553b4871f0a7c1c42d1544`; commitment
+`sha256:b6a571957862c657fd25c5fccbb9e683800f2601211d70ae09bfd32b9416525e` with run
+`sha256:6a078c3fb4216f515f9a3489bdc8e46d94db9b3a9cf8ac9e98865537188937ce`; and mutation spec
+`sha256:34c24cc5b2302220571e9c743582fce4fcf1659165823f419a5162ed16e730eb`. Mean arm timings
+of 39.69s and 40.683s are descriptive only. This remains contract and completion evidence,
 not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor, hardware,
 general-corpus or human-calibration evidence; #90 remains open.
 
