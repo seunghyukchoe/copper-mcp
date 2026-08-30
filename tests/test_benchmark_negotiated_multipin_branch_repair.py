@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sys
 from dataclasses import asdict
@@ -114,6 +115,12 @@ def _retag_commitment(document: dict[str, Any]) -> dict[str, Any]:
     body = {key: value for key, value in document.items() if key != "run_id"}
     document["run_id"] = _canonical_digest(body)
     return document
+
+
+def _boundary_json(size: int) -> bytes:
+    payload = b'{"boundary":true}'
+    assert len(payload) < size
+    return payload + (b" " * (size - len(payload)))
 
 
 def _reconcile_differential(document: dict[str, Any]) -> dict[str, Any]:
@@ -830,6 +837,113 @@ def test_total_wire_length_uses_the_exact_submitted_net_boundary(
     else:
         with pytest.raises(benchmark.NegotiatedDifferentialError, match="closed bound"):
             benchmark.validate_report(report)
+
+
+def test_json_artifact_reader_accepts_exact_64_kib_with_trailing_whitespace(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "exact.json"
+    path.write_bytes(_boundary_json(benchmark.MAX_JSON_ARTIFACT_BYTES))
+
+    assert benchmark._load_object(path, label="B-141") == {"boundary": True}
+
+
+@pytest.mark.parametrize("loader", ("report", "commitment"))
+def test_public_loaders_reject_oversized_valid_json_before_parsing(
+    loader: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / f"oversized-{loader}.json"
+    path.write_bytes(_boundary_json(benchmark.MAX_JSON_ARTIFACT_BYTES + 1))
+
+    def parsing_must_not_start(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("oversized input must be refused before JSON parsing")
+
+    monkeypatch.setattr(benchmark.json, "loads", parsing_must_not_start)
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=(
+            r"^the B-141 artifact exceeds 64 KiB$"
+            if loader == "report"
+            else r"^the B-141 commitment artifact exceeds 64 KiB$"
+        ),
+    ) as error:
+        if loader == "report":
+            benchmark.load_artifact(path)
+        else:
+            benchmark.load_commitment(path)
+    assert str(path) not in str(error.value)
+    assert path.name not in str(error.value)
+    assert "boundary" not in str(error.value)
+
+
+def test_bounded_reader_requests_only_one_byte_beyond_the_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "reader.json"
+    path.write_bytes(b"ignored")
+    descriptor = os.open(path, os.O_RDONLY)
+    requested: list[int] = []
+
+    class FakeReader:
+        def __enter__(self) -> FakeReader:
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            os.close(descriptor)
+
+        def read(self, count: int = -1) -> bytes:
+            requested.append(count)
+            return b"{}"
+
+    monkeypatch.setattr(benchmark.os, "open", lambda *_args, **_kwargs: descriptor)
+    monkeypatch.setattr(benchmark.os, "fdopen", lambda *_args, **_kwargs: FakeReader())
+    assert benchmark._read_bounded_bytes(path, label="B-141") == b"{}"
+    assert requested == [benchmark.MAX_JSON_ARTIFACT_BYTES + 1]
+
+
+def test_commitment_builder_rejects_direct_oversized_bytes_before_json_work() -> None:
+    oversized = _boundary_json(benchmark.MAX_JSON_ARTIFACT_BYTES + 1)
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=r"^the B-141 artifact exceeds 64 KiB$",
+    ):
+        benchmark._build_commitment_from_bytes(
+            _synthetic_public_report(), benchmark.DEFAULT_OUTPUT, oversized
+        )
+
+
+def test_json_recursion_error_maps_to_fixed_unreadable_diagnostic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "recursive.json"
+    path.write_bytes(b"{}")
+    monkeypatch.setattr(
+        benchmark.json, "loads", lambda *_args, **_kwargs: (_ for _ in ()).throw(RecursionError)
+    )
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=r"^the B-141 artifact is unreadable$",
+    ):
+        benchmark._load_object(path, label="B-141")
+
+
+def test_numeric_recursion_error_maps_to_fixed_unsafe_numbers_diagnostic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "recursive-number.json"
+    path.write_bytes(b"{}")
+    monkeypatch.setattr(
+        benchmark,
+        "_assert_finite_json_numbers",
+        lambda _value: (_ for _ in ()).throw(RecursionError),
+    )
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=r"^the B-141 artifact contains unsafe numbers$",
+    ):
+        benchmark._load_object(path, label="B-141")
 
 
 def test_self_resigned_same_total_refusal_reason_swap_is_rejected() -> None:

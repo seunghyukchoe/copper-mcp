@@ -29,6 +29,7 @@ import os
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -65,6 +66,7 @@ COMMITMENT_PATH = ROOT / (
 )
 COMMITMENT_RELATIVE_PATH = COMMITMENT_PATH.relative_to(ROOT).as_posix()
 COMMITMENT_SCHEMA = "copper-mcp/benchmark-commitment/negotiated-multipin-branch-repair/v1"
+MAX_JSON_ARTIFACT_BYTES = 64 * 1024
 BENCHMARK_REPETITIONS = 2
 REPORT_SCHEMA = "copper-mcp/benchmark/negotiated-multipin-branch-repair-differential/v1"
 B140_REPORT_SCHEMA = "copper-mcp/benchmark/negotiated-multipin-corpus-census/v1"
@@ -208,6 +210,36 @@ def _file_digest(path: Path) -> str:
         raise NegotiatedDifferentialError(
             f"required authority is unreadable: {path.name}"
         ) from error
+
+
+def _read_bounded_bytes(path: Path, *, label: str) -> bytes:
+    """Read one regular JSON artifact, retaining at most the ceiling plus one byte."""
+
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = -1
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise NegotiatedDifferentialError(f"the {label} artifact is unreadable") from error
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise OSError
+        with os.fdopen(descriptor, "rb", closefd=True) as stream:
+            descriptor = -1
+            payload = stream.read(MAX_JSON_ARTIFACT_BYTES + 1)
+    except OSError as error:
+        raise NegotiatedDifferentialError(f"the {label} artifact is unreadable") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if len(payload) > MAX_JSON_ARTIFACT_BYTES:
+        raise NegotiatedDifferentialError(f"the {label} artifact exceeds 64 KiB")
+    return payload
+
+
+def _bounded_file_digest(path: Path, *, label: str) -> str:
+    return "sha256:" + hashlib.sha256(_read_bounded_bytes(path, label=label)).hexdigest()
 
 
 def _git_state() -> tuple[str, tuple[str, ...]]:
@@ -363,16 +395,16 @@ def _validate_source_commit_runner_binding(document: dict[str, Any]) -> None:
 def _load_object(path: Path, *, label: str) -> dict[str, Any]:
     try:
         value = json.loads(
-            path.read_text(encoding="utf-8"),
+            _read_bounded_bytes(path, label=label).decode("utf-8"),
             parse_constant=_reject_json_constant,
         )
-    except (OSError, ValueError) as error:
+    except (RecursionError, UnicodeError, ValueError) as error:
         raise NegotiatedDifferentialError(f"the {label} artifact is unreadable") from error
     if not isinstance(value, dict):
         raise NegotiatedDifferentialError(f"the {label} artifact is not one JSON object")
     try:
         _assert_finite_json_numbers(value)
-    except ValueError as error:
+    except (RecursionError, ValueError) as error:
         raise NegotiatedDifferentialError(
             f"the {label} artifact contains unsafe numbers"
         ) from error
@@ -2311,6 +2343,8 @@ def validate_commitment(document: dict[str, Any]) -> None:
 def _build_commitment_from_bytes(
     document: dict[str, Any], artifact_path: Path, artifact_bytes: bytes
 ) -> dict[str, Any]:
+    if len(artifact_bytes) > MAX_JSON_ARTIFACT_BYTES:
+        raise NegotiatedDifferentialError("the B-141 artifact exceeds 64 KiB")
     validate_report(document)
     _validate_exact_measurement_pins(document)
     candidate = Path(artifact_path).expanduser()
@@ -2355,10 +2389,7 @@ def build_commitment(
     """Build the exact-result commitment after the report has been written."""
 
     candidate = Path(artifact_path).expanduser()
-    try:
-        artifact_bytes = candidate.read_bytes()
-    except OSError as error:
-        raise NegotiatedDifferentialError("the B-141 artifact is unreadable") from error
+    artifact_bytes = _read_bounded_bytes(candidate, label="B-141")
     return _build_commitment_from_bytes(document, candidate, artifact_bytes)
 
 
@@ -2448,7 +2479,7 @@ def _validate_authoritative_bindings(
     commitment = load_commitment()
     if (
         commitment["artifact_path"] != DEFAULT_OUTPUT.relative_to(ROOT).as_posix()
-        or commitment["artifact_sha256"] != _file_digest(candidate)
+        or commitment["artifact_sha256"] != _bounded_file_digest(candidate, label="B-141")
         or commitment["artifact_run_id"] != document.get("run_id")
         or commitment["source_commit"] != document.get("source_commit")
         or commitment["runner_sha256"] != configuration.get("runner_sha256")
