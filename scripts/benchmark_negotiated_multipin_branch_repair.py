@@ -1860,6 +1860,8 @@ def _validate_aggregate(
         REFUSAL_TAXONOMY,
         "the B-141 refusal taxonomy is not closed",
     )
+    if any(refusals[code] != outcomes[code] for code in REFUSAL_TAXONOMY):
+        raise NegotiatedDifferentialError("the B-141 refusal and outcome taxonomies disagree")
     repair_outcomes = _validate_counter(
         aggregate.get("repair_outcome_breakdown"),
         REPAIR_OUTCOME_TAXONOMY,

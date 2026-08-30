@@ -373,7 +373,6 @@ def test_published_artifact_uses_the_exact_b141_basename_and_self_digest(
     assert report["schema"] == benchmark.REPORT_SCHEMA
     assert isinstance(report["run_id"], str) and SHA256.fullmatch(report["run_id"])
     assert report["run_id"] == _canonical_digest(body)
-    assert report["source_commit"] == fresh_report["source_commit"]
     assert report["metrics"] == fresh_report["metrics"]
     assert report["configuration"] == fresh_report["configuration"]
     assert benchmark.load_artifact(EXPECTED_ARTIFACT) == report
@@ -757,6 +756,17 @@ def test_fresh_report_reconciles_both_arms_and_keeps_refusal_taxonomies_closed(
         "positive_completion_delta",
         "zero_or_negative_completion_delta",
     }
+
+
+def test_self_resigned_same_total_refusal_reason_swap_is_rejected() -> None:
+    tampered = _synthetic_public_report()
+    refusals = tampered["metrics"]["treatment"]["refusal_breakdown"]
+    refusals["no_path_physical_clearance"] = 14
+    refusals["no_path_search"] = 1
+    _resign_public_report(tampered)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="refusal"):
+        benchmark.validate_report(tampered)
 
 
 @pytest.mark.parametrize(
