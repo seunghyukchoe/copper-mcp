@@ -1851,6 +1851,7 @@ def test_completed_with_repair_requires_a_final_completed_result(
     refused = NegotiatedRoutingResult(
         status=NegotiatedRoutingStatus.NO_PATH,
         board_revision=board.problem.snapshot.snapshot_digest,
+        iterations=1,
         diagnostic="no path after repair transaction",
     )
     calls = 0
