@@ -797,6 +797,115 @@ def test_self_resigned_envelope_outcome_must_match_fixed_population() -> None:
         benchmark.validate_report(tampered)
 
 
+def test_self_resigned_control_cannot_claim_repair_or_repair_work() -> None:
+    """A control arm cannot manufacture repair evidence by re-signing every linked counter."""
+
+    tampered = _synthetic_public_report()
+    control = tampered["metrics"]["control"]
+    outcomes = control["outcome_breakdown"]
+    refusals = control["refusal_breakdown"]
+    repairs = control["repair_outcome_breakdown"]
+    statuses = control["status_breakdown"]
+    work = control["repair_work"]
+
+    # Move one admitted refusal to a completed-with-repair result and update every generic
+    # reconciliation field.  The report remains self-digested and its control boundary remains
+    # explicitly disabled, so only the control-only repair guard may reject this claim.
+    outcomes["no_path_physical_clearance"] -= 1
+    outcomes["completed_with_repair"] = 1
+    refusals["no_path_physical_clearance"] -= 1
+    repairs["repair_not_published"] -= 1
+    repairs["repair_published"] = 1
+    statuses["no_path"] -= 1
+    statuses["completed"] = 1
+    control["boards_completed"] = 1
+    control["negotiated_nets_completed"] = 2
+    control["total_physical_checks"] = 1
+    work["published_repairs"] = 1
+    work["repair_local_expanded_states"] = 1
+    _reconcile_differential(tampered)
+
+    assert control["repair_enabled"] is False
+    assert control["repair_settings"] is None
+    assert outcomes["completed_with_repair"] > 0
+    assert repairs["repair_published"] > 0
+    assert any(work.values())
+    assert sum(outcomes.values()) == control["boards_offered"]
+    assert sum(refusals.values()) == sum(outcomes[key] for key in benchmark.REFUSAL_TAXONOMY)
+    assert sum(repairs.values()) == control["boards_offered"]
+    assert statuses["completed"] == control["boards_completed"]
+    assert {key: control[key] for key in EXPECTED_POPULATION} == EXPECTED_POPULATION
+    assert tampered["metrics"]["differential"] == {
+        "boards_completed_delta": 0,
+        "negotiated_nets_completed_delta": 0,
+        "total_wire_length_nm_delta": 0,
+        "total_overflow_units_delta": 0,
+        "total_physical_checks_delta": 0,
+        "positive_completion_delta": False,
+        "verdict": "zero_or_negative_completion_delta",
+    }
+    assert tampered["run_id"] == _canonical_digest(
+        {key: value for key, value in tampered.items() if key != "run_id"}
+    )
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._CONTROL_REPAIR_CLAIMS_ERROR),
+    ):
+        benchmark.validate_report(tampered)
+
+
+def test_self_resigned_status_categories_must_match_outcome_categories() -> None:
+    """Equal totals do not make a treatment status/category contradiction valid."""
+
+    tampered = _synthetic_public_report()
+    treatment = tampered["metrics"]["treatment"]
+    outcomes = treatment["outcome_breakdown"]
+    refusals = treatment["refusal_breakdown"]
+    repairs = treatment["repair_outcome_breakdown"]
+    statuses = treatment["status_breakdown"]
+
+    # Keep refusal, repair, population, and differential totals unchanged while moving one
+    # refusal category.  Retain the old no_path status and explicitly add the zero partial status;
+    # only category-to-status reconciliation can reject this self-resigned report.
+    outcomes["no_path_physical_clearance"] -= 1
+    outcomes["partial_budget"] += 1
+    refusals["no_path_physical_clearance"] -= 1
+    refusals["partial_budget"] += 1
+    statuses["partial"] = 0
+    _reconcile_differential(tampered)
+
+    assert outcomes["no_path_physical_clearance"] == 14
+    assert outcomes["partial_budget"] == 1
+    assert refusals["no_path_physical_clearance"] == 14
+    assert refusals["partial_budget"] == 1
+    assert statuses["no_path"] == 15
+    assert statuses["partial"] == 0
+    assert sum(outcomes.values()) == treatment["boards_offered"]
+    assert sum(refusals.values()) == sum(outcomes[key] for key in benchmark.REFUSAL_TAXONOMY)
+    assert repairs["repair_published"] == outcomes["completed_with_repair"]
+    assert repairs["repair_not_published"] == 15
+    assert repairs["not_applicable_envelope_refused"] == outcomes["envelope_construction"]
+    assert sum(repairs.values()) == treatment["boards_offered"]
+    assert {key: treatment[key] for key in EXPECTED_POPULATION} == EXPECTED_POPULATION
+    assert sum(statuses.values()) == treatment["boards_offered"]
+    assert tampered["metrics"]["differential"] == {
+        "boards_completed_delta": 1,
+        "negotiated_nets_completed_delta": 2,
+        "total_wire_length_nm_delta": 0,
+        "total_overflow_units_delta": 0,
+        "total_physical_checks_delta": 1,
+        "positive_completion_delta": True,
+        "verdict": "positive_completion_delta",
+    }
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._STATUS_OUTCOME_RECONCILIATION_ERROR),
+    ):
+        benchmark.validate_report(tampered)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (

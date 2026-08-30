@@ -226,6 +226,26 @@
       ]
     },
     {
+      "id": "B141-SEM04-control-arm-must-not-claim-repair",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if not treatment and (\n        outcomes[\"completed_with_repair\"]\n        or repair_outcomes[\"repair_published\"]\n        or any(work[key] for key in _REPAIR_WORK_KEYS)\n    ):\n        raise NegotiatedDifferentialError(_CONTROL_REPAIR_CLAIMS_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(_CONTROL_REPAIR_CLAIMS_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_control_cannot_claim_repair_or_repair_work"
+      ]
+    },
+    {
+      "id": "B141-SEM05-status-categories-must-match-outcomes",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if sum(statuses.values()) != offered or any(\n        statuses.get(status, 0) != expected for status, expected in expected_status_counts.items()\n    ):\n        raise NegotiatedDifferentialError(_STATUS_OUTCOME_RECONCILIATION_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(_STATUS_OUTCOME_RECONCILIATION_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_status_categories_must_match_outcome_categories"
+      ]
+    },
+    {
       "id": "B141-SHAPE04-report-date-must-match-measurement-date",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
       "anchor": "        or record[\"date_utc\"] != \"2026-08-30\"\n",

@@ -1283,6 +1283,10 @@ FORBIDDEN_PUBLIC_KEYS = frozenset(
 _STATUS_TAXONOMY = frozenset(
     {"completed", "no_path", "partial", "invalid_request", "cancelled", "not_run"}
 )
+_CONTROL_REPAIR_CLAIMS_ERROR = "the B-141 control arm contains repair claims"
+_STATUS_OUTCOME_RECONCILIATION_ERROR = (
+    "the B-141 status counts do not reconcile with the outcome taxonomy"
+)
 _REPAIR_WORK_KEYS = frozenset(
     {
         "published_repairs",
@@ -1868,6 +1872,13 @@ def _validate_aggregate(
         REPAIR_OUTCOME_TAXONOMY,
         "the B-141 repair taxonomy is not closed",
     )
+    work = _validate_repair_work(aggregate)
+    if not treatment and (
+        outcomes["completed_with_repair"]
+        or repair_outcomes["repair_published"]
+        or any(work[key] for key in _REPAIR_WORK_KEYS)
+    ):
+        raise NegotiatedDifferentialError(_CONTROL_REPAIR_CLAIMS_ERROR)
     if (
         outcomes["envelope_construction"]
         != population["boards_unable_to_form_a_two_request_envelope"]
@@ -1903,13 +1914,26 @@ def _validate_aggregate(
         raise NegotiatedDifferentialError("the B-141 status taxonomy is malformed")
     for value in statuses.values():
         _require_nonnegative_int(value, "the B-141 status taxonomy is malformed")
-    if (
-        sum(statuses.values()) != offered
-        or statuses.get("not_run", 0) != outcomes["envelope_construction"]
-        or statuses.get("completed", 0) != completed_total
+    expected_status_counts = {
+        "partial": outcomes["partial_budget"],
+        "invalid_request": outcomes["invalid_request"],
+        "cancelled": outcomes["cancelled"],
+        "no_path": sum(
+            outcomes[code]
+            for code in (
+                "no_path_physical_clearance",
+                "no_path_budget",
+                "no_path_search",
+                "no_path_other",
+            )
+        ),
+        "not_run": outcomes["envelope_construction"],
+        "completed": completed_total,
+    }
+    if sum(statuses.values()) != offered or any(
+        statuses.get(status, 0) != expected for status, expected in expected_status_counts.items()
     ):
-        raise NegotiatedDifferentialError("the B-141 status totals do not reconcile")
-    work = _validate_repair_work(aggregate)
+        raise NegotiatedDifferentialError(_STATUS_OUTCOME_RECONCILIATION_ERROR)
     if any(work[key] > bounds["repair_work"][key] for key in _REPAIR_WORK_KEYS):
         raise NegotiatedDifferentialError("the B-141 repair work exceeds its closed bound")
     if work["published_repairs"] != repair_outcomes["repair_published"]:
