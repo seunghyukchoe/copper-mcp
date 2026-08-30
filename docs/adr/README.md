@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0128**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0129**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -204,8 +204,9 @@ never silently widens it.
 | [0125](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md) | Stray footprint copper is bounded by a box because no fill rule is written down | Accepted |
 | [0126](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md) | Negotiated routing admits bounded multi-pin nets on request-local lattices | Accepted (multi-pin repair deferral satisfied by 0127) |
 | [0127](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md) | Multi-pin local repair replaces one proven responsible branch | Accepted |
+| [0128](0128-private-surrogate-ranking-is-bounded-and-never-signs-off.md) | A private surrogate ranking is bounded and never signs off | Accepted |
 
-One hundred and twenty-seven numbers allocated, one hundred and twenty-two records, no duplicates — and
+One hundred and twenty-eight numbers allocated, one hundred and twenty-three records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
