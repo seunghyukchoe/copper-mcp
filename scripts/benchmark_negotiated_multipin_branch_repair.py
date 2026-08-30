@@ -67,6 +67,10 @@ COMMITMENT_PATH = ROOT / (
 COMMITMENT_RELATIVE_PATH = COMMITMENT_PATH.relative_to(ROOT).as_posix()
 COMMITMENT_SCHEMA = "copper-mcp/benchmark-commitment/negotiated-multipin-branch-repair/v1"
 MAX_JSON_ARTIFACT_BYTES = 64 * 1024
+# The manifest and licence are read under the descriptor ceiling; every declared sample size is
+# preflighted against the separate sample ceiling before any sample descriptor is opened.
+MAX_CORPUS_DESCRIPTOR_BYTES = 64 * 1024
+MAX_CORPUS_SAMPLE_BYTES = 256 * 1024
 BENCHMARK_REPETITIONS = 2
 REPORT_SCHEMA = "copper-mcp/benchmark/negotiated-multipin-branch-repair-differential/v1"
 B140_REPORT_SCHEMA = "copper-mcp/benchmark/negotiated-multipin-corpus-census/v1"
@@ -240,6 +244,109 @@ def _read_bounded_bytes(path: Path, *, label: str) -> bytes:
 
 def _bounded_file_digest(path: Path, *, label: str) -> str:
     return "sha256:" + hashlib.sha256(_read_bounded_bytes(path, label=label)).hexdigest()
+
+
+def _open_corpus_directory(path: Path) -> int:
+    """Open every corpus path component as a no-follow directory."""
+
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    directory = getattr(os, "O_DIRECTORY", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    if not nofollow or not directory or not nonblock or os.open not in os.supports_dir_fd:
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
+    try:
+        # `resolve()` would follow precisely the symlink components this walk must reject.
+        absolute = Path(os.path.abspath(os.fspath(path)))  # noqa: PTH100
+    except (OSError, TypeError, ValueError) as error:
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR) from error
+    parts = absolute.parts
+    if absolute.anchor != os.sep or not parts:
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
+    flags = os.O_RDONLY | nofollow | directory | nonblock | getattr(os, "O_CLOEXEC", 0)
+    current = -1
+    try:
+        current = os.open(absolute.anchor, flags)
+        for component in parts[1:]:
+            child = os.open(component, flags, dir_fd=current)
+            os.close(current)
+            current = child
+        return current
+    except (OSError, TypeError, ValueError) as error:
+        if current >= 0:
+            os.close(current)
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR) from error
+
+
+def _open_corpus_child_directory(directory_fd: int, name: str) -> int:
+    """Open one fixed child directory without following its final component."""
+
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    directory = getattr(os, "O_DIRECTORY", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    if (
+        not nofollow
+        or not directory
+        or not nonblock
+        or os.open not in os.supports_dir_fd
+        or not name
+        or Path(name).name != name
+    ):
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | nofollow | directory | nonblock | getattr(os, "O_CLOEXEC", 0),
+            dir_fd=directory_fd,
+        )
+        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            raise OSError
+        return descriptor
+    except (OSError, TypeError, ValueError) as error:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR) from error
+
+
+def _read_bounded_at(directory_fd: int, name: str, *, max_bytes: int) -> bytes:
+    """Read one fixed child regular file without following its final component."""
+
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    if (
+        not nofollow
+        or not nonblock
+        or os.open not in os.supports_dir_fd
+        or type(max_bytes) is not int
+        or max_bytes < 0
+        or not name
+        or Path(name).name != name
+        or "/" in name
+        or "\\" in name
+        or "\x00" in name
+    ):
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | nofollow | nonblock | getattr(os, "O_CLOEXEC", 0),
+            dir_fd=directory_fd,
+        )
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise OSError
+        with os.fdopen(descriptor, "rb", closefd=True) as stream:
+            descriptor = -1
+            payload = stream.read(max_bytes + 1)
+    except (OSError, TypeError, ValueError) as error:
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR) from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if len(payload) > max_bytes:
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
+    return payload
 
 
 def _git_state() -> tuple[str, tuple[str, ...]]:
@@ -432,21 +539,25 @@ def _manifest_entries(manifest: dict[str, Any]) -> tuple[dict[str, Any], ...]:
     """Return every manifest file entry after enforcing one canonical, closed file list."""
 
     files = manifest.get("files")
-    if not isinstance(files, list):
+    if type(files) is not list or len(files) != CORPUS_UPSTREAM_SAMPLE_COUNT:
         raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
     entries: list[dict[str, Any]] = []
     names: set[str] = set()
     for entry in files:
-        if not isinstance(entry, dict):
+        if type(entry) is not dict:
             raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
         name = entry.get("name")
         digest = entry.get("sha256")
         byte_count = entry.get("bytes")
         committed = entry.get("committed")
         if (
-            not isinstance(name, str)
+            set(entry) != {"bytes", "committed", "name", "sha256"}
+            or not isinstance(name, str)
             or not name
             or Path(name).name != name
+            or "/" in name
+            or "\\" in name
+            or "\x00" in name
             or Path(name).suffix != ".json"
             or name in names
             or not isinstance(digest, str)
@@ -484,12 +595,23 @@ def _assert_manifest_metadata(manifest: dict[str, Any]) -> tuple[dict[str, Any],
         "upstream_commit": CORPUS_UPSTREAM_COMMIT,
         "upstream_repository": CORPUS_UPSTREAM_REPOSITORY,
         "upstream_sample_count": CORPUS_UPSTREAM_SAMPLE_COUNT,
+        "copyright_holder": "Zach Dwiel",
+        "format": "tscircuit-simple-route-json",
+        "license_file": "LICENSE",
+        "license_url": "https://github.com/dwiel/tscircuit-benchmark/blob/master/LICENSE",
+        "reviewed_on": "2026-08-06",
+        "upstream_default_branch": "master",
+        "upstream_path": "samples",
     }
-    if any(manifest.get(key) != value for key, value in expected.items()):
+    if set(manifest) != {*expected, "files"} or any(
+        manifest.get(key) != value for key, value in expected.items()
+    ):
         raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
     entries = _manifest_entries(manifest)
     committed = tuple(entry for entry in entries if entry["committed"])
     if len(committed) != CORPUS_COMMITTED_COUNT:
+        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
+    if any(entry["bytes"] > MAX_CORPUS_SAMPLE_BYTES for entry in entries):
         raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
     return entries
 
@@ -574,31 +696,67 @@ def _assert_manifest_matches_samples(
         raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
 
 
-def _corpus_manifest_sha256(
-    corpus: Path, manifest: dict[str, Any], samples: tuple[tuple[str, bytes], ...]
-) -> str:
-    """Return the committed manifest digest after verifying its canonical file-set projection."""
-
-    entries = _assert_manifest_metadata(manifest)
-    _assert_manifest_matches_samples(entries, samples)
-    return _file_digest(corpus / "manifest.json")
-
-
 def _load_exact_corpus(
     corpus: Path, authority_by_board: dict[str, b140.ReferenceBoardAuthority]
-) -> tuple[dict[str, Any], tuple[tuple[str, bytes], ...]]:
-    """Load one corpus path and enforce the immutable B-088 manifest/file-set authority."""
+) -> tuple[dict[str, Any], tuple[tuple[str, bytes], ...], str]:
+    """Load one corpus and retain the digest of the exact manifest bytes that were validated."""
 
+    root_fd = -1
+    samples_fd = -1
     try:
-        manifest, samples = b140.reference.load_corpus(corpus)
-    except Exception as error:  # loader diagnostics are intentionally collapsed at this boundary
+        root_fd = _open_corpus_directory(corpus)
+        manifest_bytes = _read_bounded_at(
+            root_fd,
+            "manifest.json",
+            max_bytes=MAX_CORPUS_DESCRIPTOR_BYTES,
+        )
+        manifest = json.loads(manifest_bytes.decode("utf-8"), parse_constant=_reject_json_constant)
+        if not isinstance(manifest, dict):
+            raise ValueError
+        _assert_finite_json_numbers(manifest)
+        entries = _assert_manifest_metadata(manifest)
+        license_bytes = _read_bounded_at(root_fd, "LICENSE", max_bytes=MAX_CORPUS_DESCRIPTOR_BYTES)
+        if hashlib.sha256(license_bytes).hexdigest() != CORPUS_LICENSE_SHA256:
+            raise ValueError
+        committed_entries = tuple(
+            sorted(
+                (entry for entry in entries if entry["committed"]),
+                key=lambda entry: entry["name"],
+            )
+        )
+        samples_fd = _open_corpus_child_directory(root_fd, "samples")
+        loaded: list[tuple[str, bytes]] = []
+        for entry in committed_entries:
+            sample = _read_bounded_at(
+                samples_fd,
+                entry["name"],
+                max_bytes=MAX_CORPUS_SAMPLE_BYTES,
+            )
+            if (
+                len(sample) != entry["bytes"]
+                or hashlib.sha256(sample).hexdigest() != entry["sha256"]
+            ):
+                raise ValueError
+            loaded.append((entry["name"], sample))
+        samples = tuple(loaded)
+        _assert_manifest_matches_samples(entries, samples)
+        _assert_exact_corpus_membership(samples, authority_by_board)
+        manifest_sha256 = "sha256:" + hashlib.sha256(manifest_bytes).hexdigest()
+    except (
+        NegotiatedDifferentialError,
+        OSError,
+        RecursionError,
+        UnicodeError,
+        ValueError,
+        TypeError,
+    ) as error:
         raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR) from error
-    if not isinstance(manifest, dict) or not isinstance(samples, tuple):
-        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)
-    entries = _assert_manifest_metadata(manifest)
-    _assert_manifest_matches_samples(entries, samples)
-    _assert_exact_corpus_membership(samples, authority_by_board)
-    return manifest, samples
+    finally:
+        if samples_fd >= 0:
+            os.close(samples_fd)
+        if root_fd >= 0:
+            os.close(root_fd)
+    return manifest, samples, manifest_sha256
 
 
 def _corpus_summary(manifest: dict[str, Any], sample_count: int) -> dict[str, Any]:
@@ -633,10 +791,10 @@ def _current_corpus_binding(
 ) -> dict[str, Any]:
     if authority_by_board is None:
         authority_by_board = _reference_authority(load_reference_artifact())
-    manifest, samples = _load_exact_corpus(corpus, authority_by_board)
+    _manifest, samples, manifest_sha256 = _load_exact_corpus(corpus, authority_by_board)
     return {
         "corpus_manifest_count": len(samples),
-        "corpus_manifest_sha256": _corpus_manifest_sha256(corpus, manifest, samples),
+        "corpus_manifest_sha256": manifest_sha256,
     }
 
 
@@ -678,7 +836,7 @@ def load_reference_artifact(path: Path = REFERENCE_ARTIFACT) -> dict[str, Any]:
     if _file_digest(B088_ADAPTER_PATH) != B088_ADAPTER_SHA256:
         raise NegotiatedDifferentialError("the B-088 adapter bytes do not match its artifact")
     authority = _reference_authority(document)
-    manifest, samples = _load_exact_corpus(b140.CORPUS, authority)
+    manifest, samples, _manifest_sha256 = _load_exact_corpus(b140.CORPUS, authority)
     metrics = document.get("metrics")
     if not isinstance(metrics, dict):
         raise NegotiatedDifferentialError("the B-088 reference metrics are malformed")
@@ -743,7 +901,7 @@ def load_b140_artifact(path: Path = B140_ARTIFACT) -> dict[str, Any]:
         raise NegotiatedDifferentialError("the B-140 configuration drifted")
     b088_root = load_reference_artifact()
     authority = _reference_authority(b088_root)
-    manifest, samples = _load_exact_corpus(b140.CORPUS, authority)
+    manifest, samples, _manifest_sha256 = _load_exact_corpus(b140.CORPUS, authority)
     metrics = document.get("metrics")
     if not isinstance(metrics, dict):
         raise NegotiatedDifferentialError("the B-140 metrics are malformed")
@@ -808,7 +966,7 @@ def prepare_population(
     b140_root = b140_document or load_b140_artifact()
     b088_root = b088_document or load_reference_artifact()
     authority = _reference_authority(b088_root)
-    manifest, samples = _load_exact_corpus(corpus, authority)
+    manifest, samples, _manifest_sha256 = _load_exact_corpus(corpus, authority)
     _assert_corpus_summary(
         b140_root.get("metrics", {}).get("corpus"),
         manifest,
@@ -1049,6 +1207,8 @@ def _measure_configuration(
             router=router,
             repair_settings=settings,
         )
+        if result.iterations < 1:
+            raise NegotiatedDifferentialError("the B-141 admitted board returned zero iterations")
         evidence = _published_repair_evidence(result)
         if result.status is NegotiatedRoutingStatus.COMPLETED:
             outcome = (
@@ -1290,8 +1450,7 @@ def build_report(
     b140_root = load_b140_artifact()
     b088_root = load_reference_artifact()
     authority = _reference_authority(b088_root)
-    manifest, samples = _load_exact_corpus(corpus, authority)
-    corpus_manifest_sha256 = _corpus_manifest_sha256(corpus, manifest, samples)
+    _manifest, samples, corpus_manifest_sha256 = _load_exact_corpus(corpus, authority)
     report: dict[str, Any] = {
         "schema": REPORT_SCHEMA,
         "benchmark": "B-141",
@@ -1935,6 +2094,8 @@ def _validate_aggregate(
         value = _require_nonnegative_int(aggregate.get(key), "the B-141 arm totals are malformed")
         if value > bounds["completion_totals"][key]:
             raise NegotiatedDifferentialError("the B-141 arm total exceeds its closed bound")
+    if aggregate["total_iterations"] < aggregate["boards_admitted_by_the_coordinator"]:
+        raise NegotiatedDifferentialError("the B-141 arm iteration floor is not met")
     outcomes = _validate_counter(
         aggregate.get("outcome_breakdown"),
         RUN_OUTCOME_TAXONOMY,
@@ -2452,7 +2613,7 @@ def _validate_authoritative_bindings(
     load_b140_artifact()
     reference = load_reference_artifact()
     authority = _reference_authority(reference)
-    manifest, samples = _load_exact_corpus(corpus, authority)
+    _manifest, samples, corpus_manifest_sha256 = _load_exact_corpus(corpus, authority)
     expected_population_binding = {
         "benchmark": "B-140",
         "artifact": B140_ARTIFACT.relative_to(ROOT).as_posix(),
@@ -2461,7 +2622,7 @@ def _validate_authoritative_bindings(
         "boards_offered": 20,
         "nets_submitted": 70,
         "corpus_manifest_count": len(samples),
-        "corpus_manifest_sha256": _corpus_manifest_sha256(corpus, manifest, samples),
+        "corpus_manifest_sha256": corpus_manifest_sha256,
         "admission_partition": {
             "boards_admitted_by_the_coordinator": 16,
             "boards_unable_to_form_a_two_request_envelope": 4,

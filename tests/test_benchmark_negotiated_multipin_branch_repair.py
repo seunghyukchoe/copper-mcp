@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -123,6 +124,334 @@ def _boundary_json(size: int) -> bytes:
     return payload + (b" " * (size - len(payload)))
 
 
+def _corpus_manifest() -> dict[str, Any]:
+    document = json.loads((benchmark.b140.CORPUS / "manifest.json").read_text(encoding="utf-8"))
+    assert isinstance(document, dict)
+    return document
+
+
+def _reference_authority() -> dict[str, benchmark.b140.ReferenceBoardAuthority]:
+    return benchmark._reference_authority(benchmark.load_reference_artifact())
+
+
+def _copy_exact_corpus(tmp_path: Path) -> Path:
+    corpus = tmp_path / "corpus"
+    samples = corpus / "samples"
+    samples.mkdir(parents=True)
+    manifest = _corpus_manifest()
+    shutil.copyfile(benchmark.b140.CORPUS / "manifest.json", corpus / "manifest.json")
+    shutil.copyfile(benchmark.b140.CORPUS / "LICENSE", corpus / "LICENSE")
+    for entry in manifest["files"]:
+        if entry["committed"]:
+            shutil.copyfile(
+                benchmark.b140.CORPUS / "samples" / entry["name"], samples / entry["name"]
+            )
+    return corpus
+
+
+def test_b141_loader_does_not_call_historical_corpus_loader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = benchmark._reference_authority(benchmark.load_reference_artifact())
+
+    def forbidden(*_args: Any, **_kwargs: Any) -> object:
+        raise AssertionError("historical B-140 loader was called")
+
+    monkeypatch.setattr(benchmark.b140.reference, "load_corpus", forbidden)
+    manifest, samples, manifest_sha256 = benchmark._load_exact_corpus(
+        benchmark.b140.CORPUS, authority
+    )
+    assert len(manifest["files"]) == 36
+    assert len(samples) == 20
+    assert manifest_sha256 == benchmark._current_corpus_binding()["corpus_manifest_sha256"]
+
+
+def test_b141_loader_rejects_oversized_manifest_before_json_parsing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "manifest.json").write_bytes(b"{" + b" " * benchmark.MAX_CORPUS_DESCRIPTOR_BYTES)
+
+    def forbidden_json(*_args: Any, **_kwargs: Any) -> object:
+        raise AssertionError("oversized manifest reached JSON parsing")
+
+    monkeypatch.setattr(benchmark.json, "loads", forbidden_json)
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark.CORPUS_MANIFEST_ERROR),
+    ):
+        benchmark._load_exact_corpus(corpus, {})
+
+
+def test_b141_loader_preflights_declared_sample_size_before_license_or_sample_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    manifest = _corpus_manifest()
+    manifest["files"][0]["bytes"] = benchmark.MAX_CORPUS_SAMPLE_BYTES + 1
+    (corpus / "manifest.json").write_text(json.dumps(manifest))
+    original_read = benchmark._read_bounded_at
+    reads: list[str] = []
+
+    def recording_read(directory_fd: int, name: str, *, max_bytes: int) -> bytes:
+        reads.append(name)
+        return original_read(directory_fd, name, max_bytes=max_bytes)
+
+    monkeypatch.setattr(benchmark, "_read_bounded_at", recording_read)
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark.CORPUS_MANIFEST_ERROR),
+    ):
+        benchmark._load_exact_corpus(corpus, {})
+    assert reads == ["manifest.json"]
+
+
+def test_b141_corpus_reader_accepts_exact_sample_limit_and_refuses_plus_one(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "bounded"
+    directory.mkdir()
+    target = directory / "sample.json"
+    target.write_bytes(b"x" * benchmark.MAX_CORPUS_SAMPLE_BYTES)
+    descriptor = benchmark._open_corpus_directory(directory)
+    try:
+        assert (
+            len(
+                benchmark._read_bounded_at(
+                    descriptor, "sample.json", max_bytes=benchmark.MAX_CORPUS_SAMPLE_BYTES
+                )
+            )
+            == benchmark.MAX_CORPUS_SAMPLE_BYTES
+        )
+        target.write_bytes(b"x" * (benchmark.MAX_CORPUS_SAMPLE_BYTES + 1))
+        with pytest.raises(
+            benchmark.NegotiatedDifferentialError,
+            match=re.escape(benchmark.CORPUS_MANIFEST_ERROR),
+        ):
+            benchmark._read_bounded_at(
+                descriptor, "sample.json", max_bytes=benchmark.MAX_CORPUS_SAMPLE_BYTES
+            )
+    finally:
+        os.close(descriptor)
+
+
+def test_b141_loader_passes_the_sample_ceiling_to_every_sample_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _reference_authority()
+    original_read = benchmark._read_bounded_at
+    sample_limits: list[int] = []
+
+    def recording_read(directory_fd: int, name: str, *, max_bytes: int) -> bytes:
+        if name.endswith(".json") and name != "manifest.json":
+            sample_limits.append(max_bytes)
+        return original_read(directory_fd, name, max_bytes=max_bytes)
+
+    monkeypatch.setattr(benchmark, "_read_bounded_at", recording_read)
+    benchmark._load_exact_corpus(benchmark.b140.CORPUS, authority)
+    assert sample_limits == [benchmark.MAX_CORPUS_SAMPLE_BYTES] * 20
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "traversal",
+        "backslash_traversal",
+        "duplicate",
+        "extra_entry_key",
+        "missing_entry_key",
+        "extra_manifest_key",
+        "wrong_committed_count",
+        "too_few_entries",
+        "too_many_entries",
+    ),
+)
+def test_b141_manifest_preflight_rejects_noncanonical_entry_sets(mutation: str) -> None:
+    manifest = _corpus_manifest()
+    files = manifest["files"]
+    if mutation == "traversal":
+        files[0]["name"] = "../private.json"
+    elif mutation == "backslash_traversal":
+        files[0]["name"] = "..\\private.json"
+    elif mutation == "duplicate":
+        files[1]["name"] = files[0]["name"]
+    elif mutation == "extra_entry_key":
+        files[0]["private"] = True
+    elif mutation == "missing_entry_key":
+        files[0].pop("sha256")
+    elif mutation == "extra_manifest_key":
+        manifest["private"] = True
+    elif mutation == "wrong_committed_count":
+        next(entry for entry in files if entry["committed"])["committed"] = False
+    elif mutation == "too_few_entries":
+        files.pop()
+    elif mutation == "too_many_entries":
+        files.append(dict(files[-1], name="ts37_extra.json"))
+    else:  # pragma: no cover - parametrization is closed above
+        raise AssertionError(f"unhandled mutation {mutation}")
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark.CORPUS_MANIFEST_ERROR),
+    ):
+        benchmark._assert_manifest_metadata(manifest)
+
+
+def test_b141_loader_returns_the_digest_of_the_exact_manifest_bytes_read(
+    tmp_path: Path,
+) -> None:
+    corpus = _copy_exact_corpus(tmp_path)
+    raw_manifest = (corpus / "manifest.json").read_bytes()
+    manifest, samples, manifest_sha256 = benchmark._load_exact_corpus(
+        corpus, _reference_authority()
+    )
+
+    assert len(manifest["files"]) == 36
+    assert len(samples) == 20
+    assert manifest_sha256 == "sha256:" + hashlib.sha256(raw_manifest).hexdigest()
+
+
+def test_b141_loader_rejects_license_digest_drift_before_sample_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus = _copy_exact_corpus(tmp_path)
+    (corpus / "LICENSE").write_bytes(b"drifted licence")
+    original_open_samples = benchmark._open_corpus_child_directory
+
+    def forbidden_samples(directory_fd: int, name: str) -> int:
+        if name == "samples":
+            raise AssertionError("license drift reached sample access")
+        return original_open_samples(directory_fd, name)
+
+    monkeypatch.setattr(benchmark, "_open_corpus_child_directory", forbidden_samples)
+    with pytest.raises(benchmark.NegotiatedDifferentialError) as captured:
+        benchmark._load_exact_corpus(corpus, {})
+    assert str(captured.value) == benchmark.CORPUS_MANIFEST_ERROR
+
+
+@pytest.mark.parametrize("directory_kind", ("corpus", "samples"))
+def test_b141_loader_rejects_symlinked_directory_components(
+    tmp_path: Path, directory_kind: str
+) -> None:
+    authority = _reference_authority()
+    if directory_kind == "corpus":
+        corpus = tmp_path / "linked-corpus"
+        corpus.symlink_to(benchmark.b140.CORPUS, target_is_directory=True)
+    else:
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+        shutil.copyfile(benchmark.b140.CORPUS / "manifest.json", corpus / "manifest.json")
+        shutil.copyfile(benchmark.b140.CORPUS / "LICENSE", corpus / "LICENSE")
+        (corpus / "samples").symlink_to(benchmark.b140.CORPUS / "samples", target_is_directory=True)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError) as captured:
+        benchmark._load_exact_corpus(corpus, authority)
+    assert str(captured.value) == benchmark.CORPUS_MANIFEST_ERROR
+    assert "linked-corpus" not in str(captured.value)
+
+
+def test_b141_loader_rejects_a_symlinked_sample_file(tmp_path: Path) -> None:
+    corpus = _copy_exact_corpus(tmp_path)
+    first_name = next(entry["name"] for entry in _corpus_manifest()["files"] if entry["committed"])
+    sample = corpus / "samples" / first_name
+    sample.unlink()
+    sample.symlink_to(benchmark.b140.CORPUS / "samples" / first_name)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError) as captured:
+        benchmark._load_exact_corpus(corpus, _reference_authority())
+    assert str(captured.value) == benchmark.CORPUS_MANIFEST_ERROR
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation is unavailable")
+def test_b141_loader_rejects_a_fifo_sample_without_blocking(tmp_path: Path) -> None:
+    corpus = _copy_exact_corpus(tmp_path)
+    first_name = next(entry["name"] for entry in _corpus_manifest()["files"] if entry["committed"])
+    sample = corpus / "samples" / first_name
+    sample.unlink()
+    os.mkfifo(sample)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError) as captured:
+        benchmark._load_exact_corpus(corpus, _reference_authority())
+    assert str(captured.value) == benchmark.CORPUS_MANIFEST_ERROR
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation is unavailable")
+def test_b141_corpus_reader_rejects_fifo_before_reading(tmp_path: Path) -> None:
+    directory = tmp_path / "fifo"
+    directory.mkdir()
+    os.mkfifo(directory / "sample.json")
+    descriptor = benchmark._open_corpus_directory(directory)
+    try:
+        with pytest.raises(benchmark.NegotiatedDifferentialError) as captured:
+            benchmark._read_bounded_at(
+                descriptor, "sample.json", max_bytes=benchmark.MAX_CORPUS_SAMPLE_BYTES
+            )
+    finally:
+        os.close(descriptor)
+    assert str(captured.value) == benchmark.CORPUS_MANIFEST_ERROR
+
+
+@pytest.mark.parametrize("mismatch", ("length", "digest"))
+def test_b141_loader_rejects_declared_sample_mismatch_at_the_read_boundary(
+    tmp_path: Path, mismatch: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus = _copy_exact_corpus(tmp_path)
+    manifest = _corpus_manifest()
+    first = next(entry for entry in manifest["files"] if entry["committed"])
+    sample = corpus / "samples" / first["name"]
+    payload = sample.read_bytes()
+    if mismatch == "length":
+        sample.write_bytes(payload + b"x")
+    else:
+        sample.write_bytes(bytes([payload[0] ^ 1]) + payload[1:])
+    monkeypatch.setattr(benchmark, "_assert_manifest_matches_samples", lambda *_args: None)
+    monkeypatch.setattr(benchmark, "_assert_exact_corpus_membership", lambda *_args: None)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError) as captured:
+        benchmark._load_exact_corpus(corpus, {})
+    assert str(captured.value) == benchmark.CORPUS_MANIFEST_ERROR
+
+
+@pytest.mark.parametrize("shortfall", [15, 0])
+def test_b141_iteration_floor_accepts_exact_and_refuses_shortfall(shortfall: int) -> None:
+    population = dict(EXPECTED_POPULATION)
+    aggregate = _synthetic_public_report()["metrics"]["control"]
+    bounds = benchmark._upper_bounds()
+    benchmark._validate_aggregate(aggregate, treatment=False, population=population, bounds=bounds)
+    aggregate["total_iterations"] = shortfall
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="iteration floor"):
+        benchmark._validate_aggregate(
+            aggregate, treatment=False, population=population, bounds=bounds
+        )
+
+
+def test_b141_measurement_rejects_zero_iteration_on_one_of_two_admitted_boards(
+    prepared_population: tuple[tuple[benchmark.PreparedBoard, ...], dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared, _population = prepared_population
+    boards = tuple(board for board in prepared if board.envelope is not None)[:2]
+    results = iter(
+        (
+            NegotiatedRoutingResult(
+                status=NegotiatedRoutingStatus.NO_PATH,
+                board_revision=boards[0].problem.snapshot.snapshot_digest,
+                iterations=0,
+            ),
+            NegotiatedRoutingResult(
+                status=NegotiatedRoutingStatus.NO_PATH,
+                board_revision=boards[1].problem.snapshot.snapshot_digest,
+                iterations=2,
+            ),
+        )
+    )
+    monkeypatch.setattr(benchmark, "negotiate_routes", lambda *_args, **_kwargs: next(results))
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="zero iterations"):
+        benchmark._measure_configuration(boards, treatment=False)
+
+
 def _reconcile_differential(document: dict[str, Any]) -> dict[str, Any]:
     """Compute the public deltas independently of the runner's validator implementation."""
 
@@ -223,7 +552,7 @@ def _minimal_aggregate(population: dict[str, Any]) -> dict[str, Any]:
         "total_wire_length_nm": 0,
         "total_overflow_units": 0,
         "total_physical_checks": 0,
-        "total_iterations": 0,
+        "total_iterations": population["boards_admitted_by_the_coordinator"],
         "total_ripups": 0,
         "outcome_breakdown": zero_counts,
         "refusal_breakdown": zero_refusals,
@@ -721,14 +1050,11 @@ def test_authoritative_load_rejects_a_self_resigned_source_without_its_pinned_ru
     monkeypatch.setattr(
         benchmark,
         "_load_exact_corpus",
-        lambda _corpus, _authority: ({}, tuple(range(EXPECTED_POPULATION["boards_offered"]))),
-    )
-    monkeypatch.setattr(
-        benchmark,
-        "_corpus_manifest_sha256",
-        lambda _corpus, _manifest, _samples: tampered["population_binding"][
-            "corpus_manifest_sha256"
-        ],
+        lambda _corpus, _authority: (
+            {},
+            tuple(range(EXPECTED_POPULATION["boards_offered"])),
+            tampered["population_binding"]["corpus_manifest_sha256"],
+        ),
     )
     with pytest.raises(benchmark.NegotiatedDifferentialError, match="source commit/runner"):
         benchmark._validate_authoritative_bindings(tampered)
@@ -1424,7 +1750,7 @@ def test_same_count_reference_membership_tamper_is_refused(
 
 
 def test_prepare_population_refuses_a_duplicate_omitted_board_with_same_population_counts(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Roster identity must be checked independently of 20/70/16-4 aggregate arithmetic."""
 
@@ -1475,26 +1801,14 @@ def test_prepare_population_refuses_a_duplicate_omitted_board_with_same_populati
     )
     omitted_entry["bytes"] = len(duplicate[1])
     omitted_entry["sha256"] = hashlib.sha256(duplicate[1]).hexdigest()
-    monkeypatch.setattr(
-        benchmark.b140.reference,
-        "load_corpus",
-        lambda _corpus: (mutated_manifest, tuple(replaced)),
-    )
-    # Isolate the exact-membership seam from the later per-board candidate authority check.  If the
-    # new guard is removed, this bypass lets the aggregate-preserving substitution reach the end.
-    monkeypatch.setattr(
-        benchmark.b140,
-        "_assert_reference_authority",
-        lambda _problem, submitted, _expected: sum(
-            item.reference_outcome == "routed" for item in submitted
-        ),
-    )
-
+    corpus = _copy_exact_corpus(tmp_path)
+    (corpus / "manifest.json").write_text(json.dumps(mutated_manifest), encoding="utf-8")
+    (corpus / "samples" / omitted[0]).write_bytes(duplicate[1])
     with pytest.raises(
         benchmark.NegotiatedDifferentialError,
         match=re.escape(benchmark.CORPUS_MANIFEST_ERROR),
     ):
-        benchmark.prepare_population()
+        benchmark._load_exact_corpus(corpus, _reference_authority())
 
 
 def test_zero_repair_result_is_a_valid_treatment_measurement(

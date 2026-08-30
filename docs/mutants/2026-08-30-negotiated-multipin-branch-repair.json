@@ -385,6 +385,189 @@
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_numeric_recursion_error_maps_to_fixed_unsafe_numbers_diagnostic"
       ]
+    },
+    {
+      "id": "B141-CORPUS01-local-loader-must-not-delegate-to-B140",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        root_fd = _open_corpus_directory(corpus)\n",
+      "replacement": "        manifest, samples = b140.reference.load_corpus(corpus)\n        return manifest, samples, \"sha256:\" + \"0\" * 64\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_does_not_call_historical_corpus_loader"
+      ]
+    },
+    {
+      "id": "B141-CORPUS02-all-declared-sizes-must-preflight-before-sample-open",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if any(entry[\"bytes\"] > MAX_CORPUS_SAMPLE_BYTES for entry in entries):\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_preflights_declared_sample_size_before_license_or_sample_reads"
+      ]
+    },
+    {
+      "id": "B141-CORPUS03-manifest-must-be-bounded-before-json-parsing",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        manifest_bytes = _read_bounded_at(\n            root_fd,\n            \"manifest.json\",\n            max_bytes=MAX_CORPUS_DESCRIPTOR_BYTES,\n        )\n",
+      "replacement": "        manifest_bytes = _read_bounded_at(\n            root_fd,\n            \"manifest.json\",\n            max_bytes=MAX_CORPUS_SAMPLE_BYTES,\n        )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_oversized_manifest_before_json_parsing"
+      ]
+    },
+    {
+      "id": "B141-CORPUS04-manifest-must-declare-exactly-36-entries",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if type(files) is not list or len(files) != CORPUS_UPSTREAM_SAMPLE_COUNT:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "replacement": "    if type(files) is not list:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[too_few_entries]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[too_many_entries]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS05-manifest-entry-schema-must-be-closed",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            set(entry) != {\"bytes\", \"committed\", \"name\", \"sha256\"}\n",
+      "replacement": "            False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[extra_entry_key]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS06-backslash-traversal-must-be-rejected",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            or \"\\\\\" in name\n",
+      "replacement": "            or False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[backslash_traversal]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS07-corpus-path-components-must-not-follow-symlinks",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    flags = os.O_RDONLY | nofollow | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0)\n",
+      "replacement": "    flags = os.O_RDONLY | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_symlinked_directory_components[corpus]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS08-samples-directory-must-not-follow-symlinks",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            os.O_RDONLY | nofollow | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "replacement": "            os.O_RDONLY | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_symlinked_directory_components[samples]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS09-sample-file-must-not-follow-symlinks",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            os.O_RDONLY | nofollow | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "replacement": "            os.O_RDONLY | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_a_symlinked_sample_file"
+      ]
+    },
+    {
+      "id": "B141-CORPUS10-sample-descriptor-must-be-an-exact-regular-file",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            dir_fd=directory_fd,\n        )\n        metadata = os.fstat(descriptor)\n        if not stat.S_ISREG(metadata.st_mode):\n            raise OSError\n",
+      "replacement": "            dir_fd=directory_fd,\n        )\n        metadata = os.fstat(descriptor)\n        if False:\n            raise OSError\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_corpus_reader_rejects_fifo_before_reading"
+      ]
+    },
+    {
+      "id": "B141-CORPUS11-sample-read-must-use-the-256-KiB-ceiling",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "                max_bytes=MAX_CORPUS_SAMPLE_BYTES,\n",
+      "replacement": "                max_bytes=MAX_CORPUS_SAMPLE_BYTES * 2,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_passes_the_sample_ceiling_to_every_sample_read"
+      ]
+    },
+    {
+      "id": "B141-CORPUS12-sample-length-and-digest-must-match-the-manifest",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            if (\n                len(sample) != entry[\"bytes\"]\n                or hashlib.sha256(sample).hexdigest() != entry[\"sha256\"]\n            ):\n                raise ValueError\n",
+      "replacement": "            if False:\n                raise ValueError\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_declared_sample_mismatch_at_the_read_boundary[length]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_declared_sample_mismatch_at_the_read_boundary[digest]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS13-population-binding-must-digest-the-validated-raw-manifest-bytes",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        manifest_sha256 = \"sha256:\" + hashlib.sha256(manifest_bytes).hexdigest()\n",
+      "replacement": "        manifest_sha256 = _digest(manifest)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_returns_the_digest_of_the_exact_manifest_bytes_read"
+      ]
+    },
+    {
+      "id": "B141-CORPUS14-root-manifest-schema-must-be-closed",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if set(manifest) != {*expected, \"files\"} or any(\n        manifest.get(key) != value for key, value in expected.items()\n    ):\n",
+      "replacement": "    if any(manifest.get(key) != value for key, value in expected.items()):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[extra_manifest_key]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS15-license-must-match-the-pinned-digest-before-sample-access",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        if hashlib.sha256(license_bytes).hexdigest() != CORPUS_LICENSE_SHA256:\n            raise ValueError\n",
+      "replacement": "        if False:\n            raise ValueError\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_license_digest_drift_before_sample_reads"
+      ]
+    },
+    {
+      "id": "B141-CORPUS16-exactly-20-manifest-entries-must-be-committed",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if len(committed) != CORPUS_COMMITTED_COUNT:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[wrong_committed_count]"
+      ]
+    },
+    {
+      "id": "B141-ITER01-admitted-arms-must-report-at-least-one-iteration-each",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if aggregate[\"total_iterations\"] < aggregate[\"boards_admitted_by_the_coordinator\"]:\n        raise NegotiatedDifferentialError(\"the B-141 arm iteration floor is not met\")\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"the B-141 arm iteration floor is not met\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_iteration_floor_accepts_exact_and_refuses_shortfall[15]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_iteration_floor_accepts_exact_and_refuses_shortfall[0]"
+      ]
+    },
+    {
+      "id": "B141-ITER02-each-admitted-board-must-report-an-iteration",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        if result.iterations < 1:\n            raise NegotiatedDifferentialError(\"the B-141 admitted board returned zero iterations\")\n",
+      "replacement": "        if False:\n            raise NegotiatedDifferentialError(\"the B-141 admitted board returned zero iterations\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_measurement_rejects_zero_iteration_on_one_of_two_admitted_boards"
+      ]
     }
   ]
 }
