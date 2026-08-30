@@ -769,6 +769,34 @@ def test_self_resigned_same_total_refusal_reason_swap_is_rejected() -> None:
         benchmark.validate_report(tampered)
 
 
+def test_self_resigned_envelope_outcome_must_match_fixed_population() -> None:
+    tampered = _synthetic_public_report()
+    control = tampered["metrics"]["control"]
+    outcomes = control["outcome_breakdown"]
+    refusals = control["refusal_breakdown"]
+    repairs = control["repair_outcome_breakdown"]
+    statuses = control["status_breakdown"]
+
+    # Move one refusal unit while preserving every aggregate total and closed taxonomy.  The
+    # fixed population still contains four non-constructible envelopes, so only the population
+    # binding can reject this self-consistent arm rewrite.
+    outcomes["envelope_construction"] -= 1
+    outcomes["no_path_physical_clearance"] += 1
+    refusals["envelope_construction"] -= 1
+    refusals["no_path_physical_clearance"] += 1
+    repairs["not_applicable_envelope_refused"] -= 1
+    repairs["repair_not_published"] += 1
+    statuses["not_run"] -= 1
+    statuses["no_path"] += 1
+    _resign_public_report(tampered)
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match="envelope refusal count drifted from the fixed population",
+    ):
+        benchmark.validate_report(tampered)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (

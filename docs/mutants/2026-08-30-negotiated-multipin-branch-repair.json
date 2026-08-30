@@ -216,6 +216,16 @@
       ]
     },
     {
+      "id": "B141-SEM03-envelope-outcome-must-match-population",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if (\n        outcomes[\"envelope_construction\"]\n        != population[\"boards_unable_to_form_a_two_request_envelope\"]\n    ):\n        raise NegotiatedDifferentialError(\n            \"the B-141 envelope refusal count drifted from the fixed population\"\n        )\n",
+      "replacement": "    pass\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_envelope_outcome_must_match_fixed_population"
+      ]
+    },
+    {
       "id": "B141-SHAPE04-report-date-must-match-measurement-date",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
       "anchor": "        or record[\"date_utc\"] != \"2026-08-30\"\n",

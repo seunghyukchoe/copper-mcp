@@ -1867,6 +1867,13 @@ def _validate_aggregate(
         REPAIR_OUTCOME_TAXONOMY,
         "the B-141 repair taxonomy is not closed",
     )
+    if (
+        outcomes["envelope_construction"]
+        != population["boards_unable_to_form_a_two_request_envelope"]
+    ):
+        raise NegotiatedDifferentialError(
+            "the B-141 envelope refusal count drifted from the fixed population"
+        )
     offered = population["boards_offered"]
     refusal_total = sum(outcomes[key] for key in REFUSAL_TAXONOMY)
     completed_without_repair = outcomes["completed_without_repair"]
