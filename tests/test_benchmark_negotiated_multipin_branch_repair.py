@@ -1411,6 +1411,59 @@ def test_authoritative_load_rejects_tampered_commitment_fields(
         benchmark.load_artifact(EXPECTED_ARTIFACT)
 
 
+def test_exact_pins_reject_self_resigned_treatment_total_with_patched_metrics_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tampered arm total cannot become authoritative by re-signing the metrics projection."""
+
+    tampered = _artifact()
+    tampered["metrics"]["treatment"]["total_iterations"] += 1
+    _retag_document(tampered)
+
+    # The arm-total mutation remains within the generic semantic bounds.  Patch the source-owned
+    # digest authority so this isolated assertion reaches the exact treatment arm pin.
+    benchmark.validate_report(tampered)
+    monkeypatch.setattr(benchmark, "B141_METRICS_SHA256", _canonical_digest(tampered["metrics"]))
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="commitment arm"):
+        benchmark._validate_exact_measurement_pins(tampered)
+
+
+def test_exact_pins_reject_non_headline_metric_without_metrics_digest_recompute() -> None:
+    """Repair-work detail is outside the headline pins but remains covered by the metrics digest."""
+
+    tampered = _artifact()
+    tampered["metrics"]["treatment"]["repair_work"]["repair_local_expanded_states"] += 1
+    _retag_document(tampered)
+
+    # Keep the report semantically valid and prove that only a non-headline metric changed before
+    # using the narrow commitment helper; the source-owned whole-metrics digest must refuse it.
+    benchmark.validate_report(tampered)
+    assert benchmark._measurement_arm_pin(tampered["metrics"]["treatment"]) == (
+        benchmark._COMMITMENT_TREATMENT_EXPECTED
+    )
+    assert tampered["metrics"]["differential"] == benchmark._COMMITMENT_DIFFERENTIAL_EXPECTED
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="metrics digest"):
+        benchmark._validate_exact_measurement_pins(tampered)
+
+
+def test_exact_pins_reject_self_resigned_differential_with_patched_metrics_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The differential pin remains exact even if a caller re-signs the enclosing metrics."""
+
+    tampered = _artifact()
+    tampered["metrics"]["differential"]["total_physical_checks_delta"] += 1
+    _retag_document(tampered)
+    monkeypatch.setattr(benchmark, "B141_METRICS_SHA256", _canonical_digest(tampered["metrics"]))
+
+    # This deliberately changes the differential's measured claim, so use the narrow helper to
+    # isolate the commitment contract rather than the generic semantic reconciliation guard.
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="differential pin"):
+        benchmark._validate_exact_measurement_pins(tampered)
+
+
 @pytest.mark.parametrize("mode", ("missing", "malformed"))
 def test_authoritative_load_requires_a_present_well_formed_commitment(
     mode: str,

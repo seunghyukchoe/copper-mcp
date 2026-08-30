@@ -158,7 +158,7 @@
     {
       "id": "B141-COMMIT01-authoritative-commitment-binding-must-not-be-bypassed",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "    commitment = load_commitment()\n    if (\n        commitment[\"artifact_path\"] != DEFAULT_OUTPUT.relative_to(ROOT).as_posix()\n        or commitment[\"artifact_sha256\"] != _file_digest(candidate)\n        or commitment[\"artifact_run_id\"] != document.get(\"run_id\")\n        or commitment[\"source_commit\"] != document.get(\"source_commit\")\n        or commitment[\"runner_sha256\"] != configuration.get(\"runner_sha256\")\n        or commitment[\"configuration_sha256\"] != configuration.get(\"configuration_sha256\")\n        or commitment[\"repetitions\"] != BENCHMARK_REPETITIONS\n        or commitment[\"population\"] != _B141_POPULATION_EXPECTED\n    ):\n        raise NegotiatedDifferentialError(\"the B-141 commitment binding drifted\")\n",
+      "anchor": "    commitment = load_commitment()\n    if (\n        commitment[\"artifact_path\"] != DEFAULT_OUTPUT.relative_to(ROOT).as_posix()\n        or commitment[\"artifact_sha256\"] != _file_digest(candidate)\n        or commitment[\"artifact_run_id\"] != document.get(\"run_id\")\n        or commitment[\"source_commit\"] != document.get(\"source_commit\")\n        or commitment[\"runner_sha256\"] != configuration.get(\"runner_sha256\")\n        or commitment[\"configuration_sha256\"] != configuration.get(\"configuration_sha256\")\n        or commitment[\"metrics_sha256\"] != _digest(document.get(\"metrics\"))\n        or commitment[\"repetitions\"] != BENCHMARK_REPETITIONS\n        or commitment[\"population\"] != _B141_POPULATION_EXPECTED\n    ):\n        raise NegotiatedDifferentialError(\"the B-141 commitment binding drifted\")\n",
       "replacement": "    commitment = load_commitment()\n    if False:\n        raise NegotiatedDifferentialError(\"the B-141 commitment binding drifted\")\n",
       "expectation": "killed",
       "killing_tests": [
@@ -253,6 +253,36 @@
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_post_measurement_runner_drift_is_refused_before_publication"
+      ]
+    },
+    {
+      "id": "B141-METRICS01-whole-metrics-digest-must-be-pinned",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if _digest(metrics) != B141_METRICS_SHA256:\n        raise NegotiatedDifferentialError(\"the B-141 metrics digest pin is malformed\")\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"the B-141 metrics digest pin is malformed\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_exact_pins_reject_non_headline_metric_without_metrics_digest_recompute"
+      ]
+    },
+    {
+      "id": "B141-COMMIT03-treatment-arm-pin-must-not-self-bind",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    _validate_commitment_arm(\n        _measurement_arm_pin(metrics.get(\"treatment\")), _COMMITMENT_TREATMENT_EXPECTED\n    )\n",
+      "replacement": "    _validate_commitment_arm(\n        _measurement_arm_pin(metrics.get(\"treatment\")),\n        _measurement_arm_pin(metrics.get(\"treatment\")),\n    )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_exact_pins_reject_self_resigned_treatment_total_with_patched_metrics_digest"
+      ]
+    },
+    {
+      "id": "B141-COMMIT04-differential-pin-must-not-self-bind",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if value != _COMMITMENT_DIFFERENTIAL_EXPECTED:\n        raise NegotiatedDifferentialError(\"the B-141 commitment differential pin is malformed\")\n",
+      "replacement": "    if value != value:\n        raise NegotiatedDifferentialError(\"the B-141 commitment differential pin is malformed\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_exact_pins_reject_self_resigned_differential_with_patched_metrics_digest"
       ]
     }
   ]

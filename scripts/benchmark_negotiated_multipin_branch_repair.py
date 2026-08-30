@@ -77,6 +77,7 @@ B140_RUNNER_SHA256 = "sha256:eb4339e5e2264c62a1971958af6a6d5d037d5e5703a3609561c
 B088_RUNNER_SHA256 = "sha256:8fb5d05fb60a75b66e4720b3aa3ba9e0b28dbd8c3377ac159a239adbc4795fed"
 B088_ADAPTER_PATH = ROOT / "src/copper_mcp/benchmarks/simple_route_json.py"
 B088_ADAPTER_SHA256 = "sha256:fb64b59f5727d792de30d82b1e9c0b7eab606d071569a29c8c8bc3ff8db5ec66"
+B141_METRICS_SHA256 = "sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2"
 CORPUS_UPSTREAM_COMMIT = "be36518b5bf51755dae92c230061ab3cf4e3e063"
 CORPUS_COMMITTED_COUNT = 20
 CORPUS_UPSTREAM_SAMPLE_COUNT = 36
@@ -2093,27 +2094,53 @@ _COMMITMENT_KEYS = frozenset(
         "source_commit",
         "runner_sha256",
         "configuration_sha256",
+        "metrics_sha256",
         "repetitions",
         "population",
         "control",
         "treatment",
+        "differential",
         "run_id",
     }
 )
 _COMMITMENT_ARM_KEYS = frozenset(
-    {"boards_completed", "negotiated_nets_completed", "repair_published", "completed_with_repair"}
+    {
+        *_AGGREGATE_TOTAL_KEYS,
+        "repair_published",
+        "completed_with_repair",
+    }
 )
 _COMMITMENT_CONTROL_EXPECTED = {
     "boards_completed": 0,
     "negotiated_nets_completed": 0,
+    "total_wire_length_nm": 0,
+    "total_overflow_units": 0,
+    "total_physical_checks": 11326,
+    "total_iterations": 128,
+    "total_ripups": 0,
     "repair_published": 0,
     "completed_with_repair": 0,
 }
 _COMMITMENT_TREATMENT_EXPECTED = {
     "boards_completed": 1,
     "negotiated_nets_completed": 2,
+    "total_wire_length_nm": 43750000,
+    "total_overflow_units": 0,
+    "total_physical_checks": 18758,
+    "total_iterations": 121,
+    "total_ripups": 0,
     "repair_published": 1,
     "completed_with_repair": 1,
+}
+_COMMITMENT_DIFFERENTIAL_KEYS = frozenset(_DIFFERENTIAL_KEYS)
+_COMMITMENT_DIFFERENTIAL_EXPECTED: dict[str, Any] = {
+    "boards_completed_delta": 1,
+    "negotiated_nets_completed_delta": 2,
+    "total_wire_length_nm_delta": 43750000,
+    "total_overflow_units_delta": 0,
+    "total_physical_checks_delta": 7432,
+    "positive_completion_delta": True,
+    "verdict": "positive_completion_delta",
 }
 
 
@@ -2135,11 +2162,16 @@ def _measurement_arm_pin(aggregate: Any) -> dict[str, Any]:
     if not isinstance(repairs, dict) or not isinstance(outcomes, dict):
         raise NegotiatedDifferentialError("the B-141 commitment arm pin is malformed")
     return {
-        "boards_completed": aggregate.get("boards_completed"),
-        "negotiated_nets_completed": aggregate.get("negotiated_nets_completed"),
+        **{key: aggregate.get(key) for key in _AGGREGATE_TOTAL_KEYS},
         "repair_published": repairs.get("repair_published"),
         "completed_with_repair": outcomes.get("completed_with_repair"),
     }
+
+
+def _validate_commitment_differential(value: Any) -> None:
+    _validate_differential_shape(value)
+    if value != _COMMITMENT_DIFFERENTIAL_EXPECTED:
+        raise NegotiatedDifferentialError("the B-141 commitment differential pin is malformed")
 
 
 def _validate_exact_measurement_pins(document: dict[str, Any]) -> None:
@@ -2152,6 +2184,9 @@ def _validate_exact_measurement_pins(document: dict[str, Any]) -> None:
     _validate_commitment_arm(
         _measurement_arm_pin(metrics.get("treatment")), _COMMITMENT_TREATMENT_EXPECTED
     )
+    _validate_commitment_differential(metrics.get("differential"))
+    if _digest(metrics) != B141_METRICS_SHA256:
+        raise NegotiatedDifferentialError("the B-141 metrics digest pin is malformed")
 
 
 def validate_commitment(document: dict[str, Any]) -> None:
@@ -2163,10 +2198,18 @@ def validate_commitment(document: dict[str, Any]) -> None:
         raise NegotiatedDifferentialError("the B-141 commitment schema is malformed")
     if document.get("artifact_path") != DEFAULT_OUTPUT.relative_to(ROOT).as_posix():
         raise NegotiatedDifferentialError("the B-141 commitment artifact path is malformed")
-    for key in ("artifact_sha256", "artifact_run_id", "runner_sha256", "configuration_sha256"):
+    for key in (
+        "artifact_sha256",
+        "artifact_run_id",
+        "runner_sha256",
+        "configuration_sha256",
+        "metrics_sha256",
+    ):
         value = document.get(key)
         if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
             raise NegotiatedDifferentialError("the B-141 commitment digest pin is malformed")
+    if document["metrics_sha256"] != B141_METRICS_SHA256:
+        raise NegotiatedDifferentialError("the B-141 commitment metrics digest pin is malformed")
     source_commit = document.get("source_commit")
     if not isinstance(source_commit, str) or _GIT_COMMIT.fullmatch(source_commit) is None:
         raise NegotiatedDifferentialError("the B-141 commitment source revision is malformed")
@@ -2184,6 +2227,7 @@ def validate_commitment(document: dict[str, Any]) -> None:
         raise NegotiatedDifferentialError("the B-141 commitment population pin is malformed")
     _validate_commitment_arm(document.get("control"), _COMMITMENT_CONTROL_EXPECTED)
     _validate_commitment_arm(document.get("treatment"), _COMMITMENT_TREATMENT_EXPECTED)
+    _validate_commitment_differential(document.get("differential"))
     recorded = document.get("run_id")
     if not isinstance(recorded, str) or _SHA256.fullmatch(recorded) is None:
         raise NegotiatedDifferentialError("the B-141 commitment run ID is malformed")
@@ -2212,6 +2256,7 @@ def _build_commitment_from_bytes(
     configuration = document.get("configuration")
     if not isinstance(configuration, dict):
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
+    metrics_digest = _digest(document["metrics"])
     commitment: dict[str, Any] = {
         "schema": COMMITMENT_SCHEMA,
         "artifact_path": DEFAULT_OUTPUT.relative_to(ROOT).as_posix(),
@@ -2220,10 +2265,12 @@ def _build_commitment_from_bytes(
         "source_commit": document["source_commit"],
         "runner_sha256": configuration["runner_sha256"],
         "configuration_sha256": configuration["configuration_sha256"],
+        "metrics_sha256": metrics_digest,
         "repetitions": BENCHMARK_REPETITIONS,
         "population": dict(_B141_POPULATION_EXPECTED),
         "control": dict(_COMMITMENT_CONTROL_EXPECTED),
         "treatment": dict(_COMMITMENT_TREATMENT_EXPECTED),
+        "differential": dict(_COMMITMENT_DIFFERENTIAL_EXPECTED),
     }
     commitment["run_id"] = _digest(commitment)
     validate_commitment(commitment)
@@ -2333,6 +2380,7 @@ def _validate_authoritative_bindings(
         or commitment["source_commit"] != document.get("source_commit")
         or commitment["runner_sha256"] != configuration.get("runner_sha256")
         or commitment["configuration_sha256"] != configuration.get("configuration_sha256")
+        or commitment["metrics_sha256"] != _digest(document.get("metrics"))
         or commitment["repetitions"] != BENCHMARK_REPETITIONS
         or commitment["population"] != _B141_POPULATION_EXPECTED
     ):
@@ -2342,6 +2390,8 @@ def _validate_authoritative_bindings(
         raise NegotiatedDifferentialError("the B-141 control commitment pin drifted")
     if _measurement_arm_pin(document["metrics"]["treatment"]) != commitment["treatment"]:
         raise NegotiatedDifferentialError("the B-141 treatment commitment pin drifted")
+    if document["metrics"]["differential"] != commitment["differential"]:
+        raise NegotiatedDifferentialError("the B-141 differential commitment pin drifted")
 
 
 def validate_report(
