@@ -120,9 +120,13 @@ non-echoing; no path, coordinate, pad, net or board content is added to a result
   control completes none. The result is evidence that the private transaction was reached and
   published once under its existing gates; it is not, by itself, a routing-quality or
   generalisation result. Per-reason refusal/outcome reconciliation is part of the evidence
-  contract, and a later checkout or merge-ref movement may load the artifact without replacing its
-  historically recorded source commit. Issue #90 therefore remains open for human review and
-  calibration of the benchmark interpretation and for any further held-out quality decision.
+  contract. Its semantic guards additionally forbid a disabled control (`repair_settings: null`)
+  from claiming `completed_with_repair`, `repair_published`, or any non-zero repair work, and
+  require all six status categories (`completed`, `no_path`, `partial`, `invalid_request`,
+  `cancelled`, `not_run`) to reconcile to the outcome taxonomy. A later checkout or merge-ref
+  movement may load the artifact without replacing its historically recorded source commit. Issue
+  #90 therefore remains open for human review and calibration of the benchmark interpretation and
+  for any further held-out quality decision.
 
 ## Evidence and limits
 
@@ -164,26 +168,29 @@ uninstrumented control with `repair_settings: null` beside treatment using the d
 repair settings. The report is self-digested and the companion commitment independently binds the
 source commit, runner bytes, configuration, artifact bytes, and exact corpus population. It
 contains no board, net, candidate, path or geometry payload. Per-reason refusal/outcome
-reconciliation is independently checked, and the new envelope-outcome-to-population semantic guard
-requires each arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
-`boards_unable_to_form_a_two_request_envelope` count (**4**). The loader accepts the record after a
+reconciliation is independently checked. The semantic guards require each arm's
+`outcome_breakdown["envelope_construction"]` to equal the fixed population's
+`boards_unable_to_form_a_two_request_envelope` count (**4**); forbid the disabled control from
+claiming `completed_with_repair`, `repair_published`, or any non-zero repair-work field; and
+require all six status categories (`completed`, `no_path`, `partial`, `invalid_request`,
+`cancelled`, `not_run`) to reconcile to the outcome taxonomy. The loader accepts the record after a
 merge-ref or later checkout moves `HEAD` while retaining the historical source binding. Focused
-validation passes **99/99** tests and the B-141 contract mutation harness kills **28/28** mutants with zero
-survivors or control failures; the **35/35** capability mutant result above belongs to #238 and is
-not counted again here. The measured population is **20 offered/imported, 16 admitted,
+validation passes **101/101** tests and the B-141 contract mutation harness kills **30/30** mutants with
+zero survivors or control failures; the **35/35** capability mutant result above belongs to #238 and
+is not counted again here. The measured population is **20 offered/imported, 16 admitted,
 4 envelope-refused and 70 submitted**. Control is **0 boards / 0 nets**, while treatment is
 **1 board / 2 nets** with one published repair and one `completed_with_repair`; the differential is
 **+1 / +2 / +7,432 physical checks / +43,750,000 nm wire**. The exact evidence pins are: source
-`7d32045f34ee7d8f4561f9ff2fea46fdde490934`; runner
-`sha256:a25052ff49f925c057e68fc257a6a86a87f702e5a4290c911b151b24aca0d490`; configuration
-`sha256:f6d5da89db014b3e396c5cd31ddc7e81e441abe3d0a12980d29c25066b02eccb`; whole-metrics digest
-`sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`; artifact
-`sha256:0ddc4c998fc8e6175ab85f9f3e9a0d960b8a14f658349b3da05ec85f171dd7fa`; report run
-`sha256:6788b0a6e786c32d484d4d71b3d25925c099e504eef590f1475f5e3ac7c9091b`; commitment
-`sha256:73c4de2747a97cbb0f5da39cf8a2861b540519ee4240df7f51cd5286c1d233c3` with run
-`sha256:6bc8aca8f1bb048624bd7e64e7d7d860b8956abf09ef897d28cf5bc3b3dca2ac`; and mutation spec
-`sha256:3834610403d2b47f833a577eaf65e3dbf476b70a0952507b55ea9f84f51e5fb0`. Mean arm timings
-of 40.262s and 41.136s are descriptive only. The commitment pins exact control and treatment
+`a7f3183fb215da375bd4efd5a1988f65922118ab`; runner
+`sha256:fda75a8ae1ddd80731bf04ca560836c331f32c68913864dbd64a17f606bdd7c9`; configuration
+`sha256:adc9efdbcf5d48b3f8b07f8dde5a56f1943dfc3c2c98f864ded7af29a0fb6aab`; whole-metrics digest
+`sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`; report raw
+`sha256:bffb9183f04ef88673c739787254f240286aadb879940432f10af789c0379033` with run
+`sha256:7a97ea65050d7b777b2a9f8b41de6ef4aba04281cb174a932483f1c6c46e7e7a`; commitment raw
+`sha256:e0a61355215f847b3fdbd14c530cbbc71edb874c5c021a7a5070d3984657267a` with run
+`sha256:d62215d4544c4f9396233e6c17cfd8bd1e74b1a092aa801dd4681cff399dfa50`; and mutation spec
+`sha256:21afaeb770b4e71ceb9a0d48df11e7bc0774e8c67c156c974aafe690ee3636d`. Mean arm timings
+of 42.685s and 43.940s are descriptive only. The commitment pins exact control and treatment
 arm totals plus the full differential, while the whole-metrics digest prevents a self-consistent
 re-signing from changing any other metric. This remains contract and completion evidence,
 not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor, hardware,
