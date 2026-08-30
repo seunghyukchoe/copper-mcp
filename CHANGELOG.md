@@ -16,7 +16,7 @@ All notable changes are documented here. The format follows
   both arms. The control completes **0 boards / 0 nets**; treatment completes **1 board / 2 nets**
   with one published repair and one `completed_with_repair` outcome, a measured differential of
   **+1 board / +2 nets / +7,432 physical checks / +43,750,000 nm wire**. Mean arm times are
-  descriptive (**41.060s** control, **41.292s** treatment), not a performance claim. Per-reason
+  descriptive (**43.638s** control, **44.725s** treatment), not a performance claim. Per-reason
   refusal/outcome reconciliation is validated independently. The semantic guards require each
   arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
   `boards_unable_to_form_a_two_request_envelope` count (**4**); a disabled control
@@ -28,19 +28,19 @@ All notable changes are documented here. The format follows
   source commit and still accepts later historical `HEAD` movement without replacing that binding.
   The closed `total_ripups` bound is `70 * (8 - 1) = 490`; 490 is accepted and 491 is
   mutation-killed. The closed aggregate wire bound is `70 * 62,500,000,000 = 4,375,000,000,000 nm`;
-  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **113/113** focused tests and **38/38** killed
+  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **139/139** focused tests and **56/56** killed
   evidence-contract mutants with zero survivors or control failures; this is separate from the
   **35/35** capability mutants for #238. The
   self-digested report and companion commitment bind source
-  `b6f01d3928cc10b6c5876fef018cb606d1bd48da`, runner
-  `sha256:199ac422a95759a011b3c27bba1b896905f10d1e6fa0fd8b6cc971fc5d1571f2`, configuration
-  `sha256:349d03a7e54c3548eeba837fd223085d9c92752ef1e54b81a1bcc0175583e2f9`, whole-metrics
+  `44684bc329c2a630a61903f36f31b23732483ac9`, runner
+  `sha256:38688c8a1ce163b2ac52fca7b385e52ae5ed59d7ecd61477fbda00016ec90ba4`, configuration
+  `sha256:a788c4a72f68f1a414223f18fe0eddebb360977eee712db08b00f12ff492434a`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:692dabcdfb035efcba389f8693caeb8eab4ab3ef589c674311a6f80788f163a5`, report raw
-  `sha256:cf06d07f1fe9ae50a5fa9dbeb427e3e0ce9a7883a4c9c1992c5794532f9e8fd9`, commitment run
-  `sha256:47a0c48b33fdeb83baf8bb2d026ac0a9311e52b2c22639eec8c87baaa302eb99`, commitment raw
-  `sha256:30db62d8a720f4a0b11a3cca38024cfe8fbe0fdf0caada34cfccea8a36f82807`, and mutation spec
-  `sha256:3ae659ed7fcaa560bc3b57d5c00032b2bfada1715d5bc1b6edbe43ee21d65852`. The companion
+  `sha256:9dce93e4bc57d11bdc29396f06136332dd169841c003687109af6b86fce3f9f4`, report raw
+  `sha256:346de8c36792fa05054e2456c6be20ce691b2f6f5f6464ec973fa63d15c64a90`, commitment run
+  `sha256:744ef7b34de415c321cb162ef6d5c3fd0153630452fa3a555260c6f584fecb85`, commitment raw
+  `sha256:ee2b1cce729948a9b20e08dac7a401f56fd246906965cb504d24aec5bbf6316d`, and mutation spec
+  `sha256:c53dbcc949fe95280231528aba50511de81dcaa312014a0553c157021b1ae0f7`. The companion
   commitment pins exact control and treatment arm totals plus the full differential, while the
   whole-metrics digest prevents a self-consistent re-signing from changing any other metric. This is a
   deterministic completion differential, not held-out routing quality, KiCad DRC, electrical,

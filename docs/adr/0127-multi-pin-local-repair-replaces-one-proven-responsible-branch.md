@@ -179,23 +179,23 @@ guard verifies the actual Git runner blob SHA at the declared source commit and 
 historical `HEAD` movement without replacing that binding. The closed `total_ripups` bound is
 `70 * (8 - 1) = 490`; 490 is accepted and 491 is mutation-killed. The closed aggregate wire bound is
 `70 * 62,500,000,000 = 4,375,000,000,000 nm`; the exact bound is accepted and the `+1` boundary
-is mutation-killed. Focused validation passes **113/113** tests and the B-141 contract mutation
-harness kills **38/38** mutants with
+is mutation-killed. Focused validation passes **139/139** tests and the B-141 contract mutation
+harness kills **56/56** mutants with
 zero survivors or control failures; the **35/35** capability mutant result above belongs to #238 and
 is not counted again here. The measured population is **20 offered/imported, 16 admitted,
 4 envelope-refused and 70 submitted**. Control is **0 boards / 0 nets**, while treatment is
 **1 board / 2 nets** with one published repair and one `completed_with_repair`; the differential is
 **+1 / +2 / +7,432 physical checks / +43,750,000 nm wire**. The exact evidence pins are: source
-`b6f01d3928cc10b6c5876fef018cb606d1bd48da`; runner
-`sha256:199ac422a95759a011b3c27bba1b896905f10d1e6fa0fd8b6cc971fc5d1571f2`; configuration
-`sha256:349d03a7e54c3548eeba837fd223085d9c92752ef1e54b81a1bcc0175583e2f9`; whole-metrics digest
+`44684bc329c2a630a61903f36f31b23732483ac9`; runner
+`sha256:38688c8a1ce163b2ac52fca7b385e52ae5ed59d7ecd61477fbda00016ec90ba4`; configuration
+`sha256:a788c4a72f68f1a414223f18fe0eddebb360977eee712db08b00f12ff492434a`; whole-metrics digest
 `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`; report raw
-`sha256:cf06d07f1fe9ae50a5fa9dbeb427e3e0ce9a7883a4c9c1992c5794532f9e8fd9` with run
-`sha256:692dabcdfb035efcba389f8693caeb8eab4ab3ef589c674311a6f80788f163a5`; commitment raw
-`sha256:30db62d8a720f4a0b11a3cca38024cfe8fbe0fdf0caada34cfccea8a36f82807` with run
-`sha256:47a0c48b33fdeb83baf8bb2d026ac0a9311e52b2c22639eec8c87baaa302eb99`; and mutation spec
-`sha256:3ae659ed7fcaa560bc3b57d5c00032b2bfada1715d5bc1b6edbe43ee21d65852`. Mean arm timings
-of 41.060s and 41.292s are descriptive only. The commitment pins exact control and treatment
+`sha256:346de8c36792fa05054e2456c6be20ce691b2f6f5f6464ec973fa63d15c64a90` with run
+`sha256:9dce93e4bc57d11bdc29396f06136332dd169841c003687109af6b86fce3f9f4`; commitment raw
+`sha256:ee2b1cce729948a9b20e08dac7a401f56fd246906965cb504d24aec5bbf6316d` with run
+`sha256:744ef7b34de415c321cb162ef6d5c3fd0153630452fa3a555260c6f584fecb85`; and mutation spec
+`sha256:c53dbcc949fe95280231528aba50511de81dcaa312014a0553c157021b1ae0f7`. Mean arm timings
+of 43.638s and 44.725s are descriptive only. The commitment pins exact control and treatment
 arm totals plus the full differential, while the whole-metrics digest prevents a self-consistent
 re-signing from changing any other metric. This remains contract and completion evidence,
 not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor, hardware,
@@ -205,6 +205,10 @@ Closure for caller-selected B-141 report and sidecar reads is bounded: each is a
 file opened without following links, capped at 64 KiB before decode/JSON, and checked with a
 max+1 probe. Diagnostics are fixed and non-echoing; recursion is mapped to a fail-closed refusal.
 This adds no quality, physics or generalisation claim.
+The corpus closure additionally uses an fd-relative no-follow walk, a 36-entry/20-board closed
+manifest, bounded manifest/license and sample reads, raw-manifest and sample size/digest checks,
+special-file and traversal refusal, declared-size preflight, and per-board and aggregate iteration
+floors.
 
 ## Alternatives considered
 
