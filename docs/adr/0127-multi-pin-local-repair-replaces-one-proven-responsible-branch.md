@@ -168,21 +168,24 @@ reconciliation is independently checked, and the new envelope-outcome-to-populat
 requires each arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
 `boards_unable_to_form_a_two_request_envelope` count (**4**). The loader accepts the record after a
 merge-ref or later checkout moves `HEAD` while retaining the historical source binding. Focused
-validation passes **96/96** tests and the B-141 contract mutation harness kills **25/25** mutants with zero
+validation passes **99/99** tests and the B-141 contract mutation harness kills **28/28** mutants with zero
 survivors or control failures; the **35/35** capability mutant result above belongs to #238 and is
 not counted again here. The measured population is **20 offered/imported, 16 admitted,
 4 envelope-refused and 70 submitted**. Control is **0 boards / 0 nets**, while treatment is
 **1 board / 2 nets** with one published repair and one `completed_with_repair`; the differential is
 **+1 / +2 / +7,432 physical checks / +43,750,000 nm wire**. The exact evidence pins are: source
-`2f96264b93b407630e7447261dd91f281a30837c`; runner
-`sha256:c1733bd282239938aeaaebb98ff57be144fc89e4f40caa29f0456f545ac7b648`; configuration
-`sha256:0975640898b21760537fd18c822d4068f69ae2250b3f2da1e4ba215b403672f8`; artifact
-`sha256:3c3f962944e72d6fa4d1a9efa729964472e781bb050a3153bf69b6a826d8adab`; report run
-`sha256:534c9e2909247a47f5786e832293c76968837d1ddf553b4871f0a7c1c42d1544`; commitment
-`sha256:b6a571957862c657fd25c5fccbb9e683800f2601211d70ae09bfd32b9416525e` with run
-`sha256:6a078c3fb4216f515f9a3489bdc8e46d94db9b3a9cf8ac9e98865537188937ce`; and mutation spec
-`sha256:34c24cc5b2302220571e9c743582fce4fcf1659165823f419a5162ed16e730eb`. Mean arm timings
-of 39.69s and 40.683s are descriptive only. This remains contract and completion evidence,
+`7d32045f34ee7d8f4561f9ff2fea46fdde490934`; runner
+`sha256:a25052ff49f925c057e68fc257a6a86a87f702e5a4290c911b151b24aca0d490`; configuration
+`sha256:f6d5da89db014b3e396c5cd31ddc7e81e441abe3d0a12980d29c25066b02eccb`; whole-metrics digest
+`sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`; artifact
+`sha256:0ddc4c998fc8e6175ab85f9f3e9a0d960b8a14f658349b3da05ec85f171dd7fa`; report run
+`sha256:6788b0a6e786c32d484d4d71b3d25925c099e504eef590f1475f5e3ac7c9091b`; commitment
+`sha256:73c4de2747a97cbb0f5da39cf8a2861b540519ee4240df7f51cd5286c1d233c3` with run
+`sha256:6bc8aca8f1bb048624bd7e64e7d7d860b8956abf09ef897d28cf5bc3b3dca2ac`; and mutation spec
+`sha256:3834610403d2b47f833a577eaf65e3dbf476b70a0952507b55ea9f84f51e5fb0`. Mean arm timings
+of 40.262s and 41.136s are descriptive only. The commitment pins exact control and treatment
+arm totals plus the full differential, while the whole-metrics digest prevents a self-consistent
+re-signing from changing any other metric. This remains contract and completion evidence,
 not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor, hardware,
 general-corpus or human-calibration evidence; #90 remains open.
 

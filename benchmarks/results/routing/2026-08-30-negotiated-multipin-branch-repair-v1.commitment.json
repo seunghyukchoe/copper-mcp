@@ -1,0 +1,53 @@
+{
+  "artifact_path": "benchmarks/results/routing/2026-08-30-negotiated-multipin-branch-repair-v1.json",
+  "artifact_run_id": "sha256:6788b0a6e786c32d484d4d71b3d25925c099e504eef590f1475f5e3ac7c9091b",
+  "artifact_sha256": "sha256:0ddc4c998fc8e6175ab85f9f3e9a0d960b8a14f658349b3da05ec85f171dd7fa",
+  "configuration_sha256": "sha256:f6d5da89db014b3e396c5cd31ddc7e81e441abe3d0a12980d29c25066b02eccb",
+  "control": {
+    "boards_completed": 0,
+    "completed_with_repair": 0,
+    "negotiated_nets_completed": 0,
+    "repair_published": 0,
+    "total_iterations": 128,
+    "total_overflow_units": 0,
+    "total_physical_checks": 11326,
+    "total_ripups": 0,
+    "total_wire_length_nm": 0
+  },
+  "differential": {
+    "boards_completed_delta": 1,
+    "negotiated_nets_completed_delta": 2,
+    "positive_completion_delta": true,
+    "total_overflow_units_delta": 0,
+    "total_physical_checks_delta": 7432,
+    "total_wire_length_nm_delta": 43750000,
+    "verdict": "positive_completion_delta"
+  },
+  "metrics_sha256": "sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2",
+  "population": {
+    "boards_admitted_by_the_coordinator": 16,
+    "boards_imported": 20,
+    "boards_offered": 20,
+    "boards_unable_to_form_a_two_request_envelope": 4,
+    "boards_with_a_constructible_envelope": 16,
+    "nets_submitted": 70,
+    "reference_per_net_nets_routed": 70,
+    "submitted_nets_the_reference_routed": 70
+  },
+  "repetitions": 2,
+  "run_id": "sha256:6bc8aca8f1bb048624bd7e64e7d7d860b8956abf09ef897d28cf5bc3b3dca2ac",
+  "runner_sha256": "sha256:a25052ff49f925c057e68fc257a6a86a87f702e5a4290c911b151b24aca0d490",
+  "schema": "copper-mcp/benchmark-commitment/negotiated-multipin-branch-repair/v1",
+  "source_commit": "7d32045f34ee7d8f4561f9ff2fea46fdde490934",
+  "treatment": {
+    "boards_completed": 1,
+    "completed_with_repair": 1,
+    "negotiated_nets_completed": 2,
+    "repair_published": 1,
+    "total_iterations": 121,
+    "total_overflow_units": 0,
+    "total_physical_checks": 18758,
+    "total_ripups": 0,
+    "total_wire_length_nm": 43750000
+  }
+}

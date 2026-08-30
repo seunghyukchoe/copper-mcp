@@ -770,23 +770,26 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   uninstrumented control (`repair_settings: null`) completed **0 boards / 0 nets**; treatment with
   the default bounded repair profile completed **1 board / 2 nets**, publishing one repair and one
   `completed_with_repair` result. The measured differential is **+1 board / +2 nets / +7,432
-  physical checks / +43,750,000 nm wire**; mean arm times were 39.69s and 40.683s across two
+  physical checks / +43,750,000 nm wire**; mean arm times were 40.262s and 41.136s across two
   deterministic repetitions. Per-reason refusal/outcome reconciliation is independently checked,
   and the new envelope-outcome-to-population semantic guard requires each arm's
   `outcome_breakdown["envelope_construction"]` to equal the fixed population's
   `boards_unable_to_form_a_two_request_envelope` count (**4**).
   The closed report and companion commitment are bound to source
-  `2f96264b93b407630e7447261dd91f281a30837c`, runner
-  `sha256:c1733bd282239938aeaaebb98ff57be144fc89e4f40caa29f0456f545ac7b648`, configuration
-  `sha256:0975640898b21760537fd18c822d4068f69ae2250b3f2da1e4ba215b403672f8`, report run
-  `sha256:534c9e2909247a47f5786e832293c76968837d1ddf553b4871f0a7c1c42d1544`, artifact
-  `sha256:3c3f962944e72d6fa4d1a9efa729964472e781bb050a3153bf69b6a826d8adab`, commitment run
-  `sha256:6a078c3fb4216f515f9a3489bdc8e46d94db9b3a9cf8ac9e98865537188937ce`, commitment
-  `sha256:b6a571957862c657fd25c5fccbb9e683800f2601211d70ae09bfd32b9416525e`, and spec
-  `sha256:34c24cc5b2302220571e9c743582fce4fcf1659165823f419a5162ed16e730eb`. Focused
-  evidence validation is **96/96 tests** and **25/25 evidence-contract mutants killed**, distinct
+  `7d32045f34ee7d8f4561f9ff2fea46fdde490934`, runner
+  `sha256:a25052ff49f925c057e68fc257a6a86a87f702e5a4290c911b151b24aca0d490`, configuration
+  `sha256:f6d5da89db014b3e396c5cd31ddc7e81e441abe3d0a12980d29c25066b02eccb`, whole-metrics
+  digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
+  `sha256:6788b0a6e786c32d484d4d71b3d25925c099e504eef590f1475f5e3ac7c9091b`, artifact
+  `sha256:0ddc4c998fc8e6175ab85f9f3e9a0d960b8a14f658349b3da05ec85f171dd7fa`, commitment run
+  `sha256:6bc8aca8f1bb048624bd7e64e7d7d860b8956abf09ef897d28cf5bc3b3dca2ac`, commitment
+  `sha256:73c4de2747a97cbb0f5da39cf8a2861b540519ee4240df7f51cd5286c1d233c3`, and spec
+  `sha256:3834610403d2b47f833a577eaf65e3dbf476b70a0952507b55ea9f84f51e5fb0`. Focused
+  evidence validation is **99/99 tests** and **28/28 evidence-contract mutants killed**, distinct
   from #238's **35/35 capability mutants**. A later checkout or merge-ref movement may load this
-  record without replacing its historically bound source commit. This is a deterministic
+  record without replacing its historically bound source commit. The commitment pins exact control
+  and treatment arm totals plus the full differential, while its whole-metrics digest prevents a
+  self-consistent re-signing from changing any other metric. This is a deterministic
   completion differential, not held-out routing quality, KiCad DRC, electrical, SI/PI/EMC,
   thermal, DFM, fabrication, apply, editor, hardware or generalisation evidence. #90 remains open
   for human review/calibration and the next agent-only direction is #91's private surrogate ranking
