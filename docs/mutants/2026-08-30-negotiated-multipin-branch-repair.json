@@ -324,6 +324,16 @@
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_total_ripups_uses_the_exact_490_transaction_boundary[491-False]"
       ]
+    },
+    {
+      "id": "B141-BOUND05-wire-length-must-use-submitted-net-bound",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            \"total_wire_length_nm\": submitted * max_grid_path_length_nm,\n",
+      "replacement": "            \"total_wire_length_nm\": admitted * submitted * max_grid_path_length_nm,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_total_wire_length_uses_the_exact_submitted_net_boundary[4375000000001-False]"
+      ]
     }
   ]
 }

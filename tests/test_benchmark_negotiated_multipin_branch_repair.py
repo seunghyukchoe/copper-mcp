@@ -810,6 +810,28 @@ def test_total_ripups_uses_the_exact_490_transaction_boundary(
             benchmark.validate_report(report)
 
 
+@pytest.mark.parametrize(
+    "total_wire_length_nm, accepted",
+    ((4_375_000_000_000, True), (4_375_000_000_001, False)),
+)
+def test_total_wire_length_uses_the_exact_submitted_net_boundary(
+    total_wire_length_nm: int, accepted: bool
+) -> None:
+    """The wire-length ceiling is one maximum grid path per submitted net."""
+
+    report = _synthetic_public_report()
+    treatment = report["metrics"]["treatment"]
+    treatment["total_wire_length_nm"] = total_wire_length_nm
+    report["metrics"]["differential"]["total_wire_length_nm_delta"] = total_wire_length_nm
+    _retag_document(report)
+
+    if accepted:
+        benchmark.validate_report(report)
+    else:
+        with pytest.raises(benchmark.NegotiatedDifferentialError, match="closed bound"):
+            benchmark.validate_report(report)
+
+
 def test_self_resigned_same_total_refusal_reason_swap_is_rejected() -> None:
     tampered = _synthetic_public_report()
     refusals = tampered["metrics"]["treatment"]["refusal_breakdown"]

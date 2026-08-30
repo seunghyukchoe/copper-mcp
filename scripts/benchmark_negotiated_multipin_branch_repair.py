@@ -1519,7 +1519,7 @@ def _upper_bounds() -> dict[str, dict[str, int]]:
             "negotiated_nets_completed": submitted,
             "total_iterations": admitted * iterations,
             "total_ripups": max_ripups,
-            "total_wire_length_nm": admitted * submitted * max_grid_path_length_nm,
+            "total_wire_length_nm": submitted * max_grid_path_length_nm,
             "total_overflow_units": admitted * iterations * submitted * submitted,
             "total_physical_checks": admitted * b140.ENVELOPE_BUDGETS["max_total_physical_checks"],
         },
