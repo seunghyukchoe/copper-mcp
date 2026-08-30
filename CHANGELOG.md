@@ -16,7 +16,7 @@ All notable changes are documented here. The format follows
   both arms. The control completes **0 boards / 0 nets**; treatment completes **1 board / 2 nets**
   with one published repair and one `completed_with_repair` outcome, a measured differential of
   **+1 board / +2 nets / +7,432 physical checks / +43,750,000 nm wire**. Mean arm times are
-  descriptive (**41.387s** control, **43.506s** treatment), not a performance claim. Per-reason
+  descriptive (**41.060s** control, **41.292s** treatment), not a performance claim. Per-reason
   refusal/outcome reconciliation is validated independently. The semantic guards require each
   arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
   `boards_unable_to_form_a_two_request_envelope` count (**4**); a disabled control
@@ -28,25 +28,28 @@ All notable changes are documented here. The format follows
   source commit and still accepts later historical `HEAD` movement without replacing that binding.
   The closed `total_ripups` bound is `70 * (8 - 1) = 490`; 490 is accepted and 491 is
   mutation-killed. The closed aggregate wire bound is `70 * 62,500,000,000 = 4,375,000,000,000 nm`;
-  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **106/106** focused tests and **33/33** killed
+  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **113/113** focused tests and **38/38** killed
   evidence-contract mutants with zero survivors or control failures; this is separate from the
   **35/35** capability mutants for #238. The
   self-digested report and companion commitment bind source
-  `12c7dcb64f028feb7dcffe203149a9f3968cdcf1`, runner
-  `sha256:827ebdc878fd49d6a22319bfddf0c196771c76fc6c138f8984efc0f43b232fae`, configuration
-  `sha256:8465fdb10b27b312a2b3b2a38bc89dd0a4f6d29668962313405d56ac63e55307`, whole-metrics
+  `b6f01d3928cc10b6c5876fef018cb606d1bd48da`, runner
+  `sha256:199ac422a95759a011b3c27bba1b896905f10d1e6fa0fd8b6cc971fc5d1571f2`, configuration
+  `sha256:349d03a7e54c3548eeba837fd223085d9c92752ef1e54b81a1bcc0175583e2f9`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:e21eb25de6c83ab39a819d14e5dace42fb7cfd706469e02162a7cc7f5f8f7d27`, report raw
-  `sha256:7d9fd02a917ee5535b2991a59e51c01cfd55b7dfd410f937af350902239f4fc1`, commitment run
-  `sha256:85e7ba90624ffca3bd4a78e62cc4a783b14cfa8a6a2574ccc142d4bcce1d5b76`, commitment raw
-  `sha256:a27d8f07d538f70955939e182eabb8112d73da9a245b6f607e594472c0bc5767`, and mutation spec
-  `sha256:5d22285741145e4194f3c118c57e5c60ca0dd03c634a1951c892c6abe7bf535d`. The companion
+  `sha256:692dabcdfb035efcba389f8693caeb8eab4ab3ef589c674311a6f80788f163a5`, report raw
+  `sha256:cf06d07f1fe9ae50a5fa9dbeb427e3e0ce9a7883a4c9c1992c5794532f9e8fd9`, commitment run
+  `sha256:47a0c48b33fdeb83baf8bb2d026ac0a9311e52b2c22639eec8c87baaa302eb99`, commitment raw
+  `sha256:30db62d8a720f4a0b11a3cca38024cfe8fbe0fdf0caada34cfccea8a36f82807`, and mutation spec
+  `sha256:3ae659ed7fcaa560bc3b57d5c00032b2bfada1715d5bc1b6edbe43ee21d65852`. The companion
   commitment pins exact control and treatment arm totals plus the full differential, while the
   whole-metrics digest prevents a self-consistent re-signing from changing any other metric. This is a
   deterministic completion differential, not held-out routing quality, KiCad DRC, electrical,
   SI/PI/EMC, thermal, DFM, fabrication, apply, editor or hardware evidence; #90 remains open for
   human review/calibration, and the next agent-only direction is #91's private surrogate ranking
   with authoritative signoff (`ADR-0127`, `D-236`, `R-186`, `SEC-173`, `B-141`).
+  Caller-selected report/sidecar reads are capped at 64 KiB before decode/JSON, exact regular
+  files are opened without following links with a max+1 probe, diagnostics are fixed/non-echoing,
+  and recursion fails closed; this is not a quality, physics or generalisation claim.
 - Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
   request's own lattice origin while retaining one common signal layer and grid step. Exact legacy
   two-pad identities remain pinned; malformed 1/33-pad requests refuse before router work; complete
