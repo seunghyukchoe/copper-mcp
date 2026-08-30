@@ -312,6 +312,54 @@ def _require_publishable_source(
     return commit
 
 
+def _validate_source_commit_runner_binding(document: dict[str, Any]) -> None:
+    """Require the report runner digest to come from its declared Git revision."""
+
+    source_commit = document.get("source_commit")
+    configuration = document.get("configuration")
+    if (
+        not isinstance(source_commit, str)
+        or _GIT_COMMIT.fullmatch(source_commit) is None
+        or not isinstance(configuration, dict)
+        or not isinstance(configuration.get("runner_sha256"), str)
+        or _SHA256.fullmatch(configuration["runner_sha256"]) is None
+    ):
+        raise NegotiatedDifferentialError(
+            "the B-141 source commit/runner binding could not be verified"
+        )
+    git = shutil.which("git")
+    if git is None:
+        raise NegotiatedDifferentialError(
+            "the B-141 source commit/runner binding could not be verified"
+        )
+    try:
+        resolved = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+            [git, "rev-parse", "--verify", "--quiet", f"{source_commit}^{{commit}}"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        if resolved != source_commit or _GIT_COMMIT.fullmatch(resolved) is None:
+            raise ValueError
+        runner_bytes = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+            [git, "show", f"{resolved}:{SCRIPT_PATH}"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            timeout=5,
+        ).stdout
+    except (OSError, subprocess.SubprocessError, ValueError):
+        raise NegotiatedDifferentialError(
+            "the B-141 source commit/runner binding could not be verified"
+        ) from None
+    if "sha256:" + hashlib.sha256(runner_bytes).hexdigest() != configuration["runner_sha256"]:
+        raise NegotiatedDifferentialError(
+            "the B-141 source commit/runner binding could not be verified"
+        )
+
+
 def _load_object(path: Path, *, label: str) -> dict[str, Any]:
     try:
         value = json.loads(
@@ -1417,7 +1465,7 @@ def _upper_bounds() -> dict[str, dict[str, int]]:
     admitted = _B141_POPULATION_EXPECTED["boards_admitted_by_the_coordinator"]
     submitted = _B141_POPULATION_EXPECTED["nets_submitted"]
     iterations = b140.ENVELOPE_BUDGETS["max_iterations"]
-    route_calls = admitted * submitted * iterations
+    max_ripups = submitted * (iterations - 1)
     max_grid_path_length_nm = b140.ROUTER_LIMITS["max_grid_nodes"] * b140.FIXED_GRID_STEP_NM
     max_final_candidates_per_repaired_board = 32
     per_repair_work = {
@@ -1470,7 +1518,7 @@ def _upper_bounds() -> dict[str, dict[str, int]]:
             "boards_completed": admitted,
             "negotiated_nets_completed": submitted,
             "total_iterations": admitted * iterations,
-            "total_ripups": route_calls,
+            "total_ripups": max_ripups,
             "total_wire_length_nm": admitted * submitted * max_grid_path_length_nm,
             "total_overflow_units": admitted * iterations * submitted * submitted,
             "total_physical_checks": admitted * b140.ENVELOPE_BUDGETS["max_total_physical_checks"],
@@ -2366,6 +2414,7 @@ def _validate_authoritative_bindings(
 ) -> None:
     """Bind a generic report to the live runner, historical roots, corpus, and optional sidecar."""
 
+    _validate_source_commit_runner_binding(document)
     configuration = document.get("configuration")
     if not isinstance(configuration, dict) or configuration != _configuration():
         raise NegotiatedDifferentialError("the B-141 source/configuration binding drifted")

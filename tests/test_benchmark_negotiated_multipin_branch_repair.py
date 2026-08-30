@@ -692,6 +692,41 @@ def test_load_artifact_accepts_a_recorded_source_revision_after_head_moves(
     assert loaded["source_commit"] == recorded_source_commit
 
 
+def test_authoritative_load_rejects_a_self_resigned_source_without_its_pinned_runner_blob(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Generic self-digests cannot make an arbitrary source revision authoritative."""
+
+    tampered = _synthetic_public_report()
+    tampered["source_commit"] = "f" * 40
+    _retag_document(tampered)
+    commitment = _commitment()
+    commitment["source_commit"] = tampered["source_commit"]
+    _retag_commitment(commitment)
+
+    # Both documents remain independently well-formed and self-consistent.  The authoritative
+    # check must reject because this revision cannot provide the report's pinned runner bytes.
+    benchmark.validate_report(tampered)
+    benchmark.validate_commitment(commitment)
+    monkeypatch.setattr(benchmark, "load_b140_artifact", lambda: {})
+    monkeypatch.setattr(benchmark, "load_reference_artifact", lambda: {})
+    monkeypatch.setattr(benchmark, "_reference_authority", lambda _document: {})
+    monkeypatch.setattr(
+        benchmark,
+        "_load_exact_corpus",
+        lambda _corpus, _authority: ({}, tuple(range(EXPECTED_POPULATION["boards_offered"]))),
+    )
+    monkeypatch.setattr(
+        benchmark,
+        "_corpus_manifest_sha256",
+        lambda _corpus, _manifest, _samples: tampered["population_binding"][
+            "corpus_manifest_sha256"
+        ],
+    )
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="source commit/runner"):
+        benchmark._validate_authoritative_bindings(tampered)
+
+
 def test_fresh_report_reconciles_both_arms_and_keeps_refusal_taxonomies_closed(
     fresh_report: dict[str, Any],
 ) -> None:
@@ -756,6 +791,23 @@ def test_fresh_report_reconciles_both_arms_and_keeps_refusal_taxonomies_closed(
         "positive_completion_delta",
         "zero_or_negative_completion_delta",
     }
+
+
+@pytest.mark.parametrize("total_ripups, accepted", ((490, True), (491, False)))
+def test_total_ripups_uses_the_exact_490_transaction_boundary(
+    total_ripups: int, accepted: bool
+) -> None:
+    """The closed rip-up ceiling is 70 submitted nets times seven retry gaps."""
+
+    report = _synthetic_public_report()
+    report["metrics"]["treatment"]["total_ripups"] = total_ripups
+    _retag_document(report)
+
+    if accepted:
+        benchmark.validate_report(report)
+    else:
+        with pytest.raises(benchmark.NegotiatedDifferentialError, match="closed bound"):
+            benchmark.validate_report(report)
 
 
 def test_self_resigned_same_total_refusal_reason_swap_is_rejected() -> None:
