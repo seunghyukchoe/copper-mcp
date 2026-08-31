@@ -16,7 +16,7 @@ All notable changes are documented here. The format follows
   both arms. The control completes **0 boards / 0 nets**; treatment completes **1 board / 2 nets**
   with one published repair and one `completed_with_repair` outcome, a measured differential of
   **+1 board / +2 nets / +7,432 physical checks / +43,750,000 nm wire**. Mean arm times are
-  descriptive (**43.638s** control, **44.725s** treatment), not a performance claim. Per-reason
+  descriptive (**38.540s** control, **37.416s** treatment), not a performance claim. Per-reason
   refusal/outcome reconciliation is validated independently. The semantic guards require each
   arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
   `boards_unable_to_form_a_two_request_envelope` count (**4**); a disabled control
@@ -28,28 +28,29 @@ All notable changes are documented here. The format follows
   source commit and still accepts later historical `HEAD` movement without replacing that binding.
   The closed `total_ripups` bound is `70 * (8 - 1) = 490`; 490 is accepted and 491 is
   mutation-killed. The closed aggregate wire bound is `70 * 62,500,000,000 = 4,375,000,000,000 nm`;
-  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **139/139** focused tests and **56/56** killed
+  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **151/151** focused tests and **59/59** killed
   evidence-contract mutants with zero survivors or control failures; this is separate from the
   **35/35** capability mutants for #238. The
   self-digested report and companion commitment bind source
-  `44684bc329c2a630a61903f36f31b23732483ac9`, runner
-  `sha256:38688c8a1ce163b2ac52fca7b385e52ae5ed59d7ecd61477fbda00016ec90ba4`, configuration
-  `sha256:a788c4a72f68f1a414223f18fe0eddebb360977eee712db08b00f12ff492434a`, whole-metrics
+  `d76a465e2e18e906b70f98724d20bbd5111b87ad`, runner
+  `sha256:e266dd889b97a4597188cabd9962d71d3ddb52e7a1a6135e7816bdd88a5711a7`, configuration
+  `sha256:227890b981528286b7d443d8ceab0c65730140d15860d531b3869e444cf86d9e`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:9dce93e4bc57d11bdc29396f06136332dd169841c003687109af6b86fce3f9f4`, report raw
-  `sha256:346de8c36792fa05054e2456c6be20ce691b2f6f5f6464ec973fa63d15c64a90`, commitment run
-  `sha256:744ef7b34de415c321cb162ef6d5c3fd0153630452fa3a555260c6f584fecb85`, commitment raw
-  `sha256:ee2b1cce729948a9b20e08dac7a401f56fd246906965cb504d24aec5bbf6316d`, and mutation spec
-  `sha256:c53dbcc949fe95280231528aba50511de81dcaa312014a0553c157021b1ae0f7`. The companion
+  `sha256:bd0d47f660d77c9d273314d8599c06bc385f862aae9a543998c61fa2596ac7f0`, report raw
+  `sha256:086904a00e3f74100193a3a641e5e4205f791128ad136ab81f072b8685ff6eef`, commitment run
+  `sha256:3225f6b4e325e945955805ba06c1d1cc6610e623f60b57eb5e64ec05f896b712`, commitment raw
+  `sha256:a6f95d366c329eb9ecc9da2594678778241093c0de57d736433543df8010b6a1`, and mutation spec
+  `sha256:ef1254c11aeeb3149252d57848be86e839df1a1ef7fee110e76ab7fd041b4bc1`. The companion
   commitment pins exact control and treatment arm totals plus the full differential, while the
   whole-metrics digest prevents a self-consistent re-signing from changing any other metric. This is a
   deterministic completion differential, not held-out routing quality, KiCad DRC, electrical,
   SI/PI/EMC, thermal, DFM, fabrication, apply, editor or hardware evidence; #90 remains open for
   human review/calibration, and the next agent-only direction is #91's private surrogate ranking
   with authoritative signoff (`ADR-0127`, `D-236`, `R-186`, `SEC-173`, `B-141`).
-  Caller-selected report/sidecar reads are capped at 64 KiB before decode/JSON, exact regular
-  files are opened without following links with a max+1 probe, diagnostics are fixed/non-echoing,
-  and recursion fails closed; this is not a quality, physics or generalisation claim.
+  Caller-selected report/sidecar reads walk every parent directory fd-relatively without following
+  links, open the final exact regular file nonblocking, and use a 64 KiB max+1 probe before
+  decode/JSON. FIFO and other special files refuse with fixed, non-echoing diagnostics, recursion
+  fails closed, and no path is exposed; this is not a quality, physics or generalisation claim.
 - Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
   request's own lattice origin while retaining one common signal layer and grid step. Exact legacy
   two-pad identities remain pinned; malformed 1/33-pad requests refuse before router work; complete

@@ -765,12 +765,13 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   completion/quality and every refusal separately. #90 closes only if that differential is
   deterministic and positive without weakening the physical, identity or work gates; otherwise it
   re-parks on the measured result.
-  B-141 differential measured (2026-08-30). The exact B-140/B-088 population produced **20
+  B-141 differential measured (2026-08-31; the predeclared artifact basename remains dated
+  2026-08-30). The exact B-140/B-088 population produced **20
   offered/imported, 16 admitted, 4 envelope refusals and 70 submitted nets** in both arms. The
   uninstrumented control (`repair_settings: null`) completed **0 boards / 0 nets**; treatment with
   the default bounded repair profile completed **1 board / 2 nets**, publishing one repair and one
   `completed_with_repair` result. The measured differential is **+1 board / +2 nets / +7,432
-  physical checks / +43,750,000 nm wire**; mean arm times were **43.638s** and **44.725s** across
+  physical checks / +43,750,000 nm wire**; mean arm times were **38.540s** and **37.416s** across
   two deterministic repetitions. Per-reason refusal/outcome reconciliation is independently
   checked. The semantic guards require each arm's `outcome_breakdown["envelope_construction"]` to
   equal the fixed population's `boards_unable_to_form_a_two_request_envelope` count (**4**); a
@@ -778,16 +779,16 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   and every non-zero repair-work field; and all six status categories (`completed`, `no_path`,
   `partial`, `invalid_request`, `cancelled`, `not_run`) reconcile to the outcome taxonomy.
   The closed report and companion commitment are bound to source
-  `44684bc329c2a630a61903f36f31b23732483ac9`, runner
-  `sha256:38688c8a1ce163b2ac52fca7b385e52ae5ed59d7ecd61477fbda00016ec90ba4`, configuration
-  `sha256:a788c4a72f68f1a414223f18fe0eddebb360977eee712db08b00f12ff492434a`, whole-metrics
+  `d76a465e2e18e906b70f98724d20bbd5111b87ad`, runner
+  `sha256:e266dd889b97a4597188cabd9962d71d3ddb52e7a1a6135e7816bdd88a5711a7`, configuration
+  `sha256:227890b981528286b7d443d8ceab0c65730140d15860d531b3869e444cf86d9e`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:9dce93e4bc57d11bdc29396f06136332dd169841c003687109af6b86fce3f9f4`, report raw
-  `sha256:346de8c36792fa05054e2456c6be20ce691b2f6f5f6464ec973fa63d15c64a90`, commitment run
-  `sha256:744ef7b34de415c321cb162ef6d5c3fd0153630452fa3a555260c6f584fecb85`, commitment raw
-  `sha256:ee2b1cce729948a9b20e08dac7a401f56fd246906965cb504d24aec5bbf6316d`, and spec
-  `sha256:c53dbcc949fe95280231528aba50511de81dcaa312014a0553c157021b1ae0f7`. Focused
-  evidence validation is **139/139 tests** and **56/56 evidence-contract mutants killed** with zero
+  `sha256:bd0d47f660d77c9d273314d8599c06bc385f862aae9a543998c61fa2596ac7f0`, report raw
+  `sha256:086904a00e3f74100193a3a641e5e4205f791128ad136ab81f072b8685ff6eef`, commitment run
+  `sha256:3225f6b4e325e945955805ba06c1d1cc6610e623f60b57eb5e64ec05f896b712`, commitment raw
+  `sha256:a6f95d366c329eb9ecc9da2594678778241093c0de57d736433543df8010b6a1`, and spec
+  `sha256:ef1254c11aeeb3149252d57848be86e839df1a1ef7fee110e76ab7fd041b4bc1`. Focused
+  evidence validation is **151/151 tests** and **59/59 evidence-contract mutants killed** with zero
   survivors or control failures, distinct
   from #238's **35/35 capability mutants**. A later checkout or merge-ref movement may load this
   record without replacing its historically bound source commit. The source guard verifies the
@@ -797,7 +798,9 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   `70 * 62,500,000,000 = 4,375,000,000,000 nm`; the exact bound is accepted and the `+1` boundary
   is mutation-killed. The commitment pins exact control
   and treatment arm totals plus the full differential, while its whole-metrics digest prevents a
-  self-consistent re-signing from changing any other metric. This is a deterministic
+  self-consistent re-signing from changing any other metric. Caller-selected report/sidecar paths
+  are walked fd-relatively without following parent links; the final exact regular file is opened
+  nonblocking, so FIFO and other special files refuse before decode/JSON. This is a deterministic
   completion differential, not held-out routing quality, KiCad DRC, electrical, SI/PI/EMC,
   thermal, DFM, fabrication, apply, editor, hardware or generalisation evidence. #90 remains open
   for human review/calibration and the next agent-only direction is #91's private surrogate ranking
