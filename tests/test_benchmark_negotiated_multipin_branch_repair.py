@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -391,6 +392,73 @@ def test_b141_corpus_reader_rejects_fifo_before_reading(tmp_path: Path) -> None:
     finally:
         os.close(descriptor)
     assert str(captured.value) == benchmark.CORPUS_MANIFEST_ERROR
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation is unavailable")
+@pytest.mark.parametrize("label", ("B-141", "B-141 commitment"))
+def test_caller_selected_artifact_fifo_refuses_promptly_without_blocking(
+    tmp_path: Path, label: str
+) -> None:
+    """Report and commitment readers must reject a FIFO before any blocking read."""
+
+    path = tmp_path / "selected.json"
+    os.mkfifo(path)
+    code = (
+        "from pathlib import Path; "
+        "from scripts import benchmark_negotiated_multipin_branch_repair as b; "
+        f"p=Path({str(path)!r}); "
+        f"\ntry: b._read_bounded_bytes(p, label={label!r})\n"
+        "except Exception as error: print(type(error).__name__); raise SystemExit(3)"
+    )
+    completed = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=2,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert str(path) not in completed.stderr
+    assert path.name not in completed.stderr
+
+
+@pytest.mark.parametrize("label", ("B-141", "B-141 commitment"))
+def test_caller_selected_artifact_rejects_a_symlinked_parent_without_echoing_path(
+    tmp_path: Path, label: str
+) -> None:
+    real_parent = tmp_path / "real-parent"
+    nested_parent = real_parent / "nested"
+    nested_parent.mkdir(parents=True)
+    target = nested_parent / "selected.json"
+    target.write_text("{}", encoding="utf-8")
+    linked_parent = tmp_path / "linked-parent"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+    selected = linked_parent / nested_parent.name / target.name
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError) as captured:
+        benchmark._read_bounded_bytes(selected, label=label)
+    assert str(selected) not in str(captured.value)
+    assert selected.name not in str(captured.value)
+
+
+@pytest.mark.parametrize("kind", ("symlink", "fifo"))
+@pytest.mark.parametrize("label", ("B-141", "B-141 commitment"))
+def test_caller_selected_artifact_rejects_final_nonregular_without_echoing_path(
+    tmp_path: Path, kind: str, label: str
+) -> None:
+    path = tmp_path / f"selected-{kind}.json"
+    if kind == "symlink":
+        target = tmp_path / "regular.json"
+        target.write_text("{}", encoding="utf-8")
+        path.symlink_to(target)
+    else:
+        os.mkfifo(path)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError) as captured:
+        benchmark._read_bounded_bytes(path, label=label)
+    assert str(captured.value) == f"the {label} artifact is unreadable"
+    assert str(path) not in str(captured.value)
+    assert path.name not in str(captured.value)
 
 
 @pytest.mark.parametrize("mismatch", ("length", "digest"))
@@ -1174,6 +1242,28 @@ def test_json_artifact_reader_accepts_exact_64_kib_with_trailing_whitespace(
     assert benchmark._load_object(path, label="B-141") == {"boundary": True}
 
 
+@pytest.mark.parametrize("label", ("B-141", "B-141 commitment"))
+@pytest.mark.parametrize("relative", (False, True))
+def test_caller_selected_regular_json_paths_keep_exact_64_kib_boundary(
+    tmp_path: Path, label: str, relative: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / f"selected-{label.replace(' ', '-')}.json"
+    path.write_bytes(_boundary_json(benchmark.MAX_JSON_ARTIFACT_BYTES))
+    selected = path
+    if relative:
+        monkeypatch.chdir(tmp_path)
+        selected = Path(path.name)
+
+    assert benchmark._read_bounded_bytes(selected, label=label) == path.read_bytes()
+
+    path.write_bytes(_boundary_json(benchmark.MAX_JSON_ARTIFACT_BYTES + 1))
+    with pytest.raises(benchmark.NegotiatedDifferentialError) as captured:
+        benchmark._read_bounded_bytes(selected, label=label)
+    assert str(captured.value) == f"the {label} artifact exceeds 64 KiB"
+    assert str(selected) not in str(captured.value)
+    assert path.name not in str(captured.value)
+
+
 @pytest.mark.parametrize("loader", ("report", "commitment"))
 def test_public_loaders_reject_oversized_valid_json_before_parsing(
     loader: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1207,22 +1297,26 @@ def test_bounded_reader_requests_only_one_byte_beyond_the_limit(
 ) -> None:
     path = tmp_path / "reader.json"
     path.write_bytes(b"ignored")
-    descriptor = os.open(path, os.O_RDONLY)
     requested: list[int] = []
+    opened_descriptor = -1
 
     class FakeReader:
         def __enter__(self) -> FakeReader:
             return self
 
         def __exit__(self, *_args: Any) -> None:
-            os.close(descriptor)
+            os.close(opened_descriptor)
 
         def read(self, count: int = -1) -> bytes:
             requested.append(count)
             return b"{}"
 
-    monkeypatch.setattr(benchmark.os, "open", lambda *_args, **_kwargs: descriptor)
-    monkeypatch.setattr(benchmark.os, "fdopen", lambda *_args, **_kwargs: FakeReader())
+    def fake_fdopen(descriptor: int, *_args: Any, **_kwargs: Any) -> FakeReader:
+        nonlocal opened_descriptor
+        opened_descriptor = descriptor
+        return FakeReader()
+
+    monkeypatch.setattr(benchmark.os, "fdopen", fake_fdopen)
     assert benchmark._read_bounded_bytes(path, label="B-141") == b"{}"
     assert requested == [benchmark.MAX_JSON_ARTIFACT_BYTES + 1]
 

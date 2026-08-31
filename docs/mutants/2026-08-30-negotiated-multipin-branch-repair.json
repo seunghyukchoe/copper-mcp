@@ -387,6 +387,39 @@
       ]
     },
     {
+      "id": "B141-ARTIFACT01-final-open-must-be-nonblocking",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        descriptor = os.open(\n            absolute.name,\n            os.O_RDONLY | nofollow | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n            dir_fd=parent_fd,\n        )\n",
+      "replacement": "        descriptor = os.open(\n            absolute.name,\n            os.O_RDONLY | nofollow | getattr(os, \"O_CLOEXEC\", 0),\n            dir_fd=parent_fd,\n        )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_fifo_refuses_promptly_without_blocking[B-141]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_fifo_refuses_promptly_without_blocking[B-141 commitment]"
+      ]
+    },
+    {
+      "id": "B141-ARTIFACT02-parent-components-must-be-no-follow-fd-relative",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    directory_flags = os.O_RDONLY | nofollow | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0)\n",
+      "replacement": "    directory_flags = os.O_RDONLY | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_rejects_a_symlinked_parent_without_echoing_path[B-141]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_rejects_a_symlinked_parent_without_echoing_path[B-141 commitment]"
+      ]
+    },
+    {
+      "id": "B141-ARTIFACT03-parent-components-must-be-opened-fd-relative",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        parent_fd = os.open(absolute.anchor, directory_flags)\n        for component in absolute.parts[1:-1]:\n            child_fd = os.open(component, directory_flags, dir_fd=parent_fd)\n            os.close(parent_fd)\n            parent_fd = child_fd\n",
+      "replacement": "        parent_fd = os.open(absolute.parent, directory_flags)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_rejects_a_symlinked_parent_without_echoing_path[B-141]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_rejects_a_symlinked_parent_without_echoing_path[B-141 commitment]"
+      ]
+    },
+    {
       "id": "B141-CORPUS01-local-loader-must-not-delegate-to-B140",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
       "anchor": "        root_fd = _open_corpus_directory(corpus)\n",
@@ -470,8 +503,8 @@
     {
       "id": "B141-CORPUS09-sample-file-must-not-follow-symlinks",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "            os.O_RDONLY | nofollow | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
-      "replacement": "            os.O_RDONLY | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "anchor": "            name,\n            os.O_RDONLY | nofollow | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "replacement": "            name,\n            os.O_RDONLY | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_a_symlinked_sample_file"

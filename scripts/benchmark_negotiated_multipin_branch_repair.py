@@ -219,13 +219,39 @@ def _file_digest(path: Path) -> str:
 def _read_bounded_bytes(path: Path, *, label: str) -> bytes:
     """Read one regular JSON artifact, retaining at most the ceiling plus one byte."""
 
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    unreadable = f"the {label} artifact is unreadable"
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    directory = getattr(os, "O_DIRECTORY", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    supports_dir_fd = getattr(os, "supports_dir_fd", ())
+    if not nofollow or not directory or not nonblock or os.open not in supports_dir_fd:
+        raise NegotiatedDifferentialError(unreadable)
+    if any(not callable(getattr(os, primitive, None)) for primitive in ("open", "fstat", "fdopen")):
+        raise NegotiatedDifferentialError(unreadable)
+
+    try:
+        # Resolve only lexical ``.``/``..`` components.  Calling ``resolve`` here would follow
+        # symlinks before the descriptor-relative walk had a chance to reject them.
+        absolute = Path(os.path.abspath(os.fspath(path)))  # noqa: PTH100
+    except (OSError, TypeError, ValueError) as error:
+        raise NegotiatedDifferentialError(unreadable) from error
+    if absolute.anchor != os.sep or not absolute.name or len(absolute.parts) < 2:
+        raise NegotiatedDifferentialError(unreadable)
+
+    directory_flags = os.O_RDONLY | nofollow | directory | nonblock | getattr(os, "O_CLOEXEC", 0)
+    parent_fd = -1
     descriptor = -1
     try:
-        descriptor = os.open(path, flags)
-    except OSError as error:
-        raise NegotiatedDifferentialError(f"the {label} artifact is unreadable") from error
-    try:
+        parent_fd = os.open(absolute.anchor, directory_flags)
+        for component in absolute.parts[1:-1]:
+            child_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+            os.close(parent_fd)
+            parent_fd = child_fd
+        descriptor = os.open(
+            absolute.name,
+            os.O_RDONLY | nofollow | nonblock | getattr(os, "O_CLOEXEC", 0),
+            dir_fd=parent_fd,
+        )
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
             raise OSError
@@ -233,10 +259,12 @@ def _read_bounded_bytes(path: Path, *, label: str) -> bytes:
             descriptor = -1
             payload = stream.read(MAX_JSON_ARTIFACT_BYTES + 1)
     except OSError as error:
-        raise NegotiatedDifferentialError(f"the {label} artifact is unreadable") from error
+        raise NegotiatedDifferentialError(unreadable) from error
     finally:
         if descriptor >= 0:
             os.close(descriptor)
+        if parent_fd >= 0:
+            os.close(parent_fd)
     if len(payload) > MAX_JSON_ARTIFACT_BYTES:
         raise NegotiatedDifferentialError(f"the {label} artifact exceeds 64 KiB")
     return payload
