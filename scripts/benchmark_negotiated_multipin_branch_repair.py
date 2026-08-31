@@ -1482,7 +1482,7 @@ def build_report(
     report: dict[str, Any] = {
         "schema": REPORT_SCHEMA,
         "benchmark": "B-141",
-        "date_utc": "2026-08-30",
+        "date_utc": "2026-08-31",
         "source_commit": captured_commit,
         "environment": _environment_projection(),
         "population_binding": {
@@ -2356,7 +2356,7 @@ def _validate_report_shape(document: Any) -> dict[str, Any]:
         or type(record["benchmark"]) is not str
         or record["benchmark"] != "B-141"
         or type(record["date_utc"]) is not str
-        or record["date_utc"] != "2026-08-30"
+        or record["date_utc"] != "2026-08-31"
         or type(record["source_commit"]) is not str
         or _GIT_COMMIT.fullmatch(record["source_commit"]) is None
         or type(record["repair_work_definition"]) is not str

@@ -691,7 +691,7 @@ def _synthetic_public_report() -> dict[str, Any]:
     report: dict[str, Any] = {
         "schema": benchmark.REPORT_SCHEMA,
         "benchmark": "B-141",
-        "date_utc": "2026-08-30",
+        "date_utc": "2026-08-31",
         "source_commit": "a" * 40,
         "environment": benchmark._environment_projection(),
         "population_binding": binding,
@@ -981,7 +981,7 @@ def _replace_path(document: dict[str, Any], path: tuple[str, ...], value: Any) -
     (
         (("schema",), "copper-mcp/benchmark/other/v1"),
         (("benchmark",), "B-140"),
-        (("date_utc",), "2026-08-31"),
+        (("date_utc",), "2026-09-01"),
         (("repair_work_definition",), "arbitrary claim"),
         (("differential_definition",), "arbitrary differential"),
         (("not_claimed",), ["private_payload"]),

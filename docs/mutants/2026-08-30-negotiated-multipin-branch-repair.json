@@ -248,11 +248,11 @@
     {
       "id": "B141-SHAPE04-report-date-must-match-measurement-date",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "        or record[\"date_utc\"] != \"2026-08-30\"\n",
+      "anchor": "        or record[\"date_utc\"] != \"2026-08-31\"\n",
       "replacement": "        or False\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_public_static_definitions_and_allowed_string_containers_cannot_be_rewritten[path2-2026-08-31]"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_public_static_definitions_and_allowed_string_containers_cannot_be_rewritten[path2-2026-09-01]"
       ]
     },
     {
