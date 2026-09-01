@@ -433,3 +433,25 @@ def test_the_oracle_refuses_a_verdict_the_observation_boundary_could_not_produce
             token_configured=False,
             compatibility="probably_fine",
         )
+
+
+def test_no_live_entry_point_accepts_a_compatibility_override() -> None:
+    """The structural half of ADR-0128: the window cannot be widened because no argument widens it.
+
+    ``inspect_live_editor_context`` refused a real 10.0.5 editor that ``inspect_live_board`` could
+    observe for one reason -- ``allow_future_api`` existed, and one of the two call sites forwarded
+    it. Asserting the *absence* of such a parameter pins the fix at the level the defect lived at,
+    rather than re-checking the two call sites that happened to be wrong once.
+    """
+
+    import inspect
+
+    for function in (
+        kicad_ipc.capture_live_board,
+        kicad_ipc.capture_live_editor_context,
+        kicad_ipc.inspect_live_board,
+    ):
+        names = set(inspect.signature(function).parameters)
+        assert "allow_future_api" not in names, f"{function.__name__} can still widen the window"
+        # Guard the guard: a renamed flag would slip past an exact-name check.
+        assert not [n for n in names if "future" in n or "compat" in n or "version" in n.lower()]
