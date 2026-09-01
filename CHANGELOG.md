@@ -6,6 +6,22 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-01
+
+Upgrading from 0.11.0: see the
+[0.12.0 migration note](docs/migrations/copper-mcp-0.12.0.md). No schema version moves —
+`BOARD_IR_SCHEMA_VERSION` stays `0.4.0`, `schemas/` has no diff at all, and no persisted snapshot
+needs re-conversion. What moves is caller-visible in four places: Board IR accepts two more
+constructs, so boards that refused in 0.11.0 now convert — `Edge.Cuts` outline **arcs**, modelled
+as an inscribed polyline, and a footprint's stray **copper polygons**, modelled as a proven
+superset bounding box; `inspect_board_ir`'s `unmodelled_counts` map grows from nine entries to
+**eleven**, and one of the two new entries — `outline_inward_deviation_nm` — is a *distance* rather
+than a count, and the other discloses an **approximation** rather than an erasure; `preview_placement`
+and `preview_live_placement` now **refuse** a board whose outline is approximated, which is the one
+place in this release where a previously answered request becomes an error; and a family of
+refusal messages splits into per-primitive sentences, retiring two shared strings. Internal
+negotiated routing gains bounded multi-pin nets and one-branch local repair behind no new surface.
+
 ### Changed
 
 - Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
@@ -121,6 +137,26 @@ All notable changes are documented here. The format follows
   No artifact or benchmark row is added, and this does not accept a zone field or change any
   production, schema, MCP, CLI, routing, DRC, apply, or board-write behavior (`D-232`, `R-183`,
   [issue #231](https://github.com/seunghyukchoe/copper-mcp/issues/231)).
+- A new read-only live-editor probe, `scripts/probe_live_text_shapes.py`, produced this project's
+  **first observation of a real running KiCad editor** through CopperMCP's own IPC transport, and
+  with it the ADR-0095 text-to-shape measurement. It is gated behind `COPPER_MCP_ALLOW_LIVE_IPC`
+  and **refuses loudly, publishing no artifact, without a live session** — so a machine that cannot
+  reproduce the measurement produces nothing rather than a misleading `skipped` record. Every run
+  binds one board digest **and** one session revision up front and re-verifies at two checkpoints,
+  validates `--board` (lexical *and* `realpath` containment, regular-file, non-empty, a 16 MiB cap
+  charged from `st_size`, git-tracked) before a single byte is read, and caps the census at 256
+  items and 180 s of wall clock shared across every IPC call; each of those refuses rather than
+  truncating. The measurement moved exactly one of ADR-0095's five exit conditions and only
+  partially — glyph extents become a *read* value over a live session — while **refuting** the lead
+  that motivated the probe: `GetTextAsShapes` renders `${…}` literally and carries no document
+  reference. `ADR-0095`'s copper-text refusal is **unchanged**, no shipped code path consumes
+  anything measured here, and no conversion, routing, DRC, apply or board-write behavior moves.
+  `R-182` records that this is the first evidence in this repository that **cannot be replayed**
+  from committed bytes, and `D-231` is where whether such evidence may ever bind an offline
+  conversion is decided — proposed, with the recommendation being that it may not (`B-138`,
+  `B-139`, `D-231`, `R-182`, `SEC-168`, satisfying roadmap M3 entry criterion E3,
+  [issue #68](https://github.com/seunghyukchoe/copper-mcp/issues/68),
+  [issue #193](https://github.com/seunghyukchoe/copper-mcp/issues/193)).
 
 ### Fixed
 
@@ -3936,7 +3972,8 @@ reproducible only by the version that recorded it.
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.8.0...v0.9.0
