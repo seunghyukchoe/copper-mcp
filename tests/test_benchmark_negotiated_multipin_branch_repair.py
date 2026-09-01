@@ -981,7 +981,12 @@ def _replace_path(document: dict[str, Any], path: tuple[str, ...], value: Any) -
     (
         (("schema",), "copper-mcp/benchmark/other/v1"),
         (("benchmark",), "B-140"),
-        (("date_utc",), "2026-09-01"),
+        # The shape layer no longer pins a date literal -- the value is bound to the recorded
+        # commit by `_validate_evidence_date_binding`, which
+        # `test_evidence_date_must_be_the_recorded_commits_utc_date` exercises.  What the shape
+        # layer still owes is that the field is a real calendar day.
+        (("date_utc",), "2026-13-45"),
+        (("date_utc",), "31-08-2026"),
         (("repair_work_definition",), "arbitrary claim"),
         (("differential_definition",), "arbitrary differential"),
         (("not_claimed",), ["private_payload"]),
@@ -2022,7 +2027,9 @@ def test_build_report_preserves_an_explicit_source_revision(
             "nets_attempted": 117,
         },
     }
-    source_commit = "a" * 40
+    # A real historical revision, not a synthetic hex: the evidence date is derived from the
+    # recorded commit, so a revision that names nothing cannot produce a report at all.
+    source_commit = benchmark.B140_SOURCE_COMMIT
     monkeypatch.setattr(
         benchmark,
         "run_differential",
@@ -2040,9 +2047,13 @@ def test_build_report_preserves_an_explicit_source_revision(
     report = benchmark.build_report(repetitions=2, source_commit=source_commit)
 
     assert report["source_commit"] == source_commit
+    assert report["date_utc"] == benchmark._commit_utc_date(source_commit)
     assert report["run_id"] == _canonical_digest(
         {key: value for key, value in report.items() if key != "run_id"}
     )
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="evidence date"):
+        benchmark.build_report(repetitions=2, source_commit="a" * 40)
 
 
 def test_load_artifact_rejects_a_payload_tamper_before_accepting_it(
@@ -2391,3 +2402,316 @@ def test_second_commitment_write_race_rolls_back_only_the_new_artifact(
     assert calls == 2
     assert not artifact_path.exists()
     assert commitment_path.read_bytes() == raced_bytes
+
+
+# --- Family A: partitions are declared, and every count/breakdown pair reconciles ---------------
+
+
+def test_declared_partitions_are_total_and_disjoint_over_the_run_outcome_taxonomy() -> None:
+    """The declaration itself is checked, so a new outcome code cannot land in no bucket."""
+
+    benchmark._assert_declared_partitions()
+
+    for name, partition in benchmark._ARM_BREAKDOWN_PARTITIONS.items():
+        buckets = [bucket for bucket, _codes in partition.buckets]
+        assert set(buckets) == benchmark._PARTITION_TAXONOMIES[name]
+        assigned = [code for _bucket, codes in partition.buckets for code in codes]
+        assert len(assigned) == len(set(assigned))
+        assert set(assigned) <= set(benchmark.RUN_OUTCOME_TAXONOMY)
+        if partition.total:
+            assert set(assigned) == set(benchmark.RUN_OUTCOME_TAXONOMY)
+    assert set(benchmark._PARTITION_RECONCILIATION_ERRORS) == set(
+        benchmark._ARM_BREAKDOWN_PARTITIONS
+    )
+
+
+@pytest.mark.parametrize("breakdown", ("status_breakdown", "repair_outcome_breakdown"))
+def test_a_partition_that_stops_covering_its_taxonomy_fails_the_run(
+    monkeypatch: pytest.MonkeyPatch, breakdown: str
+) -> None:
+    """Dropping one outcome code from a total partition must fail, not publish a quiet zero."""
+
+    partition = benchmark._ARM_BREAKDOWN_PARTITIONS[breakdown]
+    bucket, codes = next(item for item in partition.buckets if item[1])
+    crippled = tuple(
+        (name, () if name == bucket else assigned) for name, assigned in partition.buckets
+    )
+    monkeypatch.setitem(
+        benchmark._ARM_BREAKDOWN_PARTITIONS,
+        breakdown,
+        benchmark._DeclaredPartition(buckets=crippled, total=partition.total),
+    )
+    assert codes
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._PARTITION_DECLARATION_ERROR),
+    ):
+        benchmark._assert_declared_partitions()
+    with pytest.raises(benchmark.NegotiatedDifferentialError):
+        benchmark.validate_report(_synthetic_public_report())
+
+
+def test_self_resigned_repair_outcome_bucket_swap_is_rejected() -> None:
+    """One repair outcome moved between buckets, every total preserved, still refused."""
+
+    tampered = _synthetic_public_report()
+    treatment = tampered["metrics"]["treatment"]
+    repairs = treatment["repair_outcome_breakdown"]
+    repairs["not_applicable_envelope_refused"] += 1
+    repairs["repair_not_published"] -= 1
+    _resign_public_report(tampered)
+
+    assert sum(repairs.values()) == treatment["boards_offered"]
+    assert sum(treatment["outcome_breakdown"].values()) == treatment["boards_offered"]
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._PARTITION_RECONCILIATION_ERRORS["repair_outcome_breakdown"]),
+    ):
+        benchmark.validate_report(tampered)
+
+
+def test_companion_arm_breakdowns_are_reconciled_against_their_own_outcome_taxonomy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pin is not the only guard: a re-pinned companion must still partition its outcomes."""
+
+    lying = json.loads(json.dumps(benchmark._COMMITMENT_TREATMENT_EXPECTED))
+    lying["status_breakdown"]["no_path"] -= 1
+    lying["status_breakdown"]["partial"] = 1
+    # Re-pin the constant as a republication would, so only the partition guard can object.
+    monkeypatch.setattr(benchmark, "_COMMITMENT_TREATMENT_EXPECTED", lying)
+
+    assert sum(lying["status_breakdown"].values()) == 20
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._PARTITION_RECONCILIATION_ERRORS["status_breakdown"]),
+    ):
+        benchmark._validate_commitment_arm(lying, lying)
+
+
+# --- Family B: every ceiling is derived from the denominator that applies to it -----------------
+
+
+def test_total_overflow_units_uses_the_submitted_net_grid_boundary() -> None:
+    """Overflow is a per-board single-iteration snapshot; boards and iterations do not multiply."""
+
+    bounds = benchmark._upper_bounds()
+    submitted = EXPECTED_POPULATION["nets_submitted"]
+    admitted = EXPECTED_POPULATION["boards_admitted_by_the_coordinator"]
+    iterations = benchmark.b140.ENVELOPE_BUDGETS["max_iterations"]
+    expected = submitted * benchmark.b140.ROUTER_LIMITS["max_grid_nodes"]
+
+    assert bounds["completion_totals"]["total_overflow_units"] == expected
+    # The retired ceiling multiplied two population-wide aggregates by a per-board repeat count.
+    assert expected != admitted * iterations * submitted * submitted
+
+    accepted = _synthetic_public_report()
+    accepted["metrics"]["treatment"]["total_overflow_units"] = expected
+    _reconcile_differential(accepted)
+    benchmark.validate_report(accepted)
+
+    refused = _synthetic_public_report()
+    refused["metrics"]["treatment"]["total_overflow_units"] = expected + 1
+    _reconcile_differential(refused)
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="closed bound"):
+        benchmark.validate_report(refused)
+
+
+def test_every_completion_ceiling_states_a_denominator_that_applies_to_it() -> None:
+    """No completion ceiling may be a population aggregate multiplied by the board count."""
+
+    bounds = benchmark._upper_bounds()["completion_totals"]
+    submitted = EXPECTED_POPULATION["nets_submitted"]
+    admitted = EXPECTED_POPULATION["boards_admitted_by_the_coordinator"]
+    iterations = benchmark.b140.ENVELOPE_BUDGETS["max_iterations"]
+    grid_nodes = benchmark.b140.ROUTER_LIMITS["max_grid_nodes"]
+
+    assert bounds == {
+        "boards_completed": admitted,
+        "negotiated_nets_completed": submitted,
+        "total_iterations": admitted * iterations,
+        "total_ripups": submitted * (iterations - 1),
+        "total_wire_length_nm": submitted * grid_nodes * benchmark.b140.FIXED_GRID_STEP_NM,
+        "total_overflow_units": submitted * grid_nodes,
+        "total_physical_checks": (
+            admitted * benchmark.b140.ENVELOPE_BUDGETS["max_total_physical_checks"]
+        ),
+    }
+    # `nets_submitted * boards_admitted` is 16 copies of a population that exists once.
+    forbidden = submitted * admitted
+    assert all(value != forbidden for value in bounds.values())
+
+
+# --- Family C: provenance and commitment coverage ----------------------------------------------
+
+
+def test_evidence_date_must_be_the_recorded_commits_utc_date() -> None:
+    """A hand-written label can name a day the run did not happen on; a derived one cannot."""
+
+    head = benchmark._git_state()[0]
+    document = {"source_commit": head, "date_utc": benchmark._commit_utc_date(head)}
+    benchmark._validate_evidence_date_binding(document)
+
+    for wrong in ("2026-01-01", "1999-12-31"):
+        if wrong == document["date_utc"]:
+            continue
+        with pytest.raises(
+            benchmark.NegotiatedDifferentialError,
+            match=re.escape(benchmark._EVIDENCE_DATE_ERROR),
+        ):
+            benchmark._validate_evidence_date_binding({**document, "date_utc": wrong})
+
+    # A well-formed hex that names no commit cannot supply a date at all.
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._EVIDENCE_DATE_ERROR)
+    ):
+        benchmark._validate_evidence_date_binding({**document, "source_commit": "0" * 40})
+
+
+def test_published_artifact_date_is_its_own_recorded_commits_utc_date() -> None:
+    """The published audit record's chronology is checked against Git, not asserted in prose."""
+
+    document = _artifact()
+
+    assert document["date_utc"] == benchmark._commit_utc_date(document["source_commit"])
+
+
+def test_commitment_pins_every_claimed_arm_aggregate() -> None:
+    """If an aggregate is claimed, it is signed -- enumerated from the report's own arm schema."""
+
+    benchmark._assert_commitment_covers_claims()
+
+    assert not (benchmark._ARM_CONFIGURATION_KEYS & benchmark._COMMITMENT_ARM_KEYS)
+    assert (
+        benchmark._ARM_CONFIGURATION_KEYS | benchmark._COMMITMENT_ARM_KEYS
+    ) == benchmark._AGGREGATE_KEYS
+    assert set(benchmark._COMMITMENT_CONTROL_EXPECTED) == benchmark._COMMITMENT_ARM_KEYS
+    assert set(benchmark._COMMITMENT_TREATMENT_EXPECTED) == benchmark._COMMITMENT_ARM_KEYS
+    # The two headline measurements this benchmark exists to publish are among the pins.
+    assert {"total_physical_checks", "total_wire_length_nm"} <= benchmark._COMMITMENT_ARM_KEYS
+    # So is every breakdown and the whole repair-work accounting.
+    assert set(benchmark._ARM_BREAKDOWN_PARTITIONS) <= benchmark._COMMITMENT_ARM_KEYS
+    assert "repair_work" in benchmark._COMMITMENT_ARM_KEYS
+
+
+def test_a_claimed_aggregate_added_without_a_pin_fails_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A future arm field cannot be published unsigned: the guard is derived, not hand-listed."""
+
+    monkeypatch.setattr(
+        benchmark, "_AGGREGATE_KEYS", benchmark._AGGREGATE_KEYS | {"total_unsigned_claim"}
+    )
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._COMMITMENT_COVERAGE_ERROR),
+    ):
+        benchmark._assert_commitment_covers_claims()
+
+
+@pytest.mark.parametrize(
+    ("field", "delta"),
+    (
+        ("total_physical_checks", 1000),
+        ("total_wire_length_nm", 1),
+        ("total_iterations", -1),
+        ("total_ripups", 1),
+        ("total_overflow_units", 1),
+    ),
+)
+def test_re_signed_headline_arm_totals_are_refused_by_the_named_commitment_pin(
+    field: str, delta: int
+) -> None:
+    """Re-signing both files and rebuilding the companion still cannot move a claimed total."""
+
+    commitment = _commitment()
+    # The untampered companion validates, so the refusal below is caused by the tamper and not by
+    # a companion that was already unacceptable.
+    benchmark.validate_commitment(commitment)
+    commitment["treatment"] = {
+        **commitment["treatment"],
+        field: commitment["treatment"][field] + delta,
+    }
+    _retag_commitment(commitment)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="arm pin"):
+        benchmark.validate_commitment(commitment)
+
+
+# --- Family D: no byte is read from an unvalidated path ------------------------------------------
+
+
+@pytest.mark.parametrize("loader", ("load_artifact", "load_commitment"))
+def test_untrusted_artifact_bytes_are_capped_before_any_parse(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, loader: str
+) -> None:
+    """The ceiling is applied to the read, not to a value the parser already constructed."""
+
+    oversized = tmp_path / "oversized.json"
+    oversized.write_text(
+        json.dumps({"pad": "a" * (benchmark.MAX_JSON_ARTIFACT_BYTES * 2)}), encoding="utf-8"
+    )
+    assert oversized.stat().st_size > benchmark.MAX_JSON_ARTIFACT_BYTES
+
+    def refuse_to_parse(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("an over-limit payload reached the JSON parser")
+
+    monkeypatch.setattr(json, "loads", refuse_to_parse)
+
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="64 KiB"):
+        getattr(benchmark, loader)(oversized)
+
+
+def test_companion_breakdown_may_not_carry_a_bucket_its_declaration_does_not_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The companion's breakdowns are not key-closed elsewhere; the sum guard closes them."""
+
+    lying = json.loads(json.dumps(benchmark._COMMITMENT_TREATMENT_EXPECTED))
+    lying["status_breakdown"]["undeclared_bucket"] = 1
+    monkeypatch.setattr(benchmark, "_COMMITMENT_TREATMENT_EXPECTED", lying)
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._PARTITION_RECONCILIATION_ERRORS["status_breakdown"]),
+    ):
+        benchmark._validate_commitment_arm(lying, lying)
+
+
+def test_companion_published_repairs_must_match_its_own_repair_outcome(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A re-pinned companion cannot claim repair work it did not also claim a repair for."""
+
+    lying = json.loads(json.dumps(benchmark._COMMITMENT_TREATMENT_EXPECTED))
+    lying["repair_work"]["published_repairs"] += 1
+    monkeypatch.setattr(benchmark, "_COMMITMENT_TREATMENT_EXPECTED", lying)
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._COMMITMENT_ARM_PIN_ERROR),
+    ):
+        benchmark._validate_commitment_arm(lying, lying)
+
+
+def test_authoritative_load_rejects_a_self_resigned_evidence_date() -> None:
+    """The reviewer's tampering, executed: a re-signed artifact with a lying UTC date is refused."""
+
+    document = _artifact()
+    published = benchmark._commit_utc_date(document["source_commit"])
+    year, month, day = published.split("-")
+    document["date_utc"] = f"{int(year) + 1:04d}-{month}-{day}"
+    _retag_document(document)
+    assert document["date_utc"] != published
+
+    # Self-consistent by its own digest, and still refused.
+    benchmark.validate_report(document)
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._EVIDENCE_DATE_ERROR)
+    ):
+        benchmark._validate_authoritative_bindings(document)

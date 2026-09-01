@@ -35,6 +35,7 @@ import sys
 import time
 from collections import Counter
 from dataclasses import asdict, dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,8 @@ CORPUS_MANIFEST_ERROR = "the B-088 corpus membership is not the exact pinned fil
 
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
+_DATE_UTC = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_EVIDENCE_DATE_ERROR = "the B-141 evidence date is not its recorded commit's UTC date"
 
 # These codes are the only refusal values the public differential may contain.  A raw production
 # diagnostic is intentionally used only by the private classifier, never by the artifact.
@@ -525,6 +528,52 @@ def _validate_source_commit_runner_binding(document: dict[str, Any]) -> None:
         raise NegotiatedDifferentialError(
             "the B-141 source commit/runner binding could not be verified"
         )
+
+
+def _commit_utc_date(commit: str) -> str:
+    """Return the UTC calendar date the recorded commit was committed on.
+
+    The evidence date is *derived*, never written by hand.  A hand-written label can name a day the
+    run did not happen on -- and did, in the first version of this artifact, which claimed a UTC
+    date later than the commit it recorded as its own source.  Reading the committer date of the
+    recorded revision makes the chronology of the audit record checkable rather than asserted.
+    """
+
+    if not isinstance(commit, str) or _GIT_COMMIT.fullmatch(commit) is None:
+        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
+    git = shutil.which("git")
+    if git is None:
+        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
+    try:
+        committed = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+            [git, "show", "--no-patch", "--format=%cI", f"{commit}^{{commit}}"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        moment = datetime.fromisoformat(committed)
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR) from error
+    if moment.tzinfo is None:
+        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
+    return moment.astimezone(UTC).strftime("%Y-%m-%d")
+
+
+def _validate_evidence_date_binding(document: dict[str, Any]) -> None:
+    """Require the published evidence date to be the recorded commit's own UTC date."""
+
+    recorded = document.get("date_utc")
+    source_commit = document.get("source_commit")
+    if (
+        not isinstance(recorded, str)
+        or _DATE_UTC.fullmatch(recorded) is None
+        or not isinstance(source_commit, str)
+    ):
+        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
+    if recorded != _commit_utc_date(source_commit):
+        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
 
 
 def _load_object(path: Path, *, label: str) -> dict[str, Any]:
@@ -1474,6 +1523,8 @@ def build_report(
     captured_commit = _git_state()[0] if source_commit is None else source_commit
     if _GIT_COMMIT.fullmatch(captured_commit) is None:
         raise NegotiatedDifferentialError("the captured source commit is malformed")
+    # Derived from the revision this run actually read, never typed in by whoever published it.
+    captured_date_utc = _commit_utc_date(captured_commit)
     metrics, timing = run_differential(repetitions, corpus)
     b140_root = load_b140_artifact()
     b088_root = load_reference_artifact()
@@ -1482,7 +1533,7 @@ def build_report(
     report: dict[str, Any] = {
         "schema": REPORT_SCHEMA,
         "benchmark": "B-141",
-        "date_utc": "2026-08-31",
+        "date_utc": captured_date_utc,
         "source_commit": captured_commit,
         "environment": _environment_projection(),
         "population_binding": {
@@ -1567,6 +1618,133 @@ _REPAIR_WORK_KEYS = frozenset(
         "repair_validator_obstacle_checks",
     }
 )
+_PARTITION_DECLARATION_ERROR = "the B-141 declared partitions do not cover their taxonomy exactly"
+# One fixed, named refusal per partitioned breakdown.  A single shared string would tell an auditor
+# that something failed to reconcile but not which count/breakdown pair contradicted the other.
+_PARTITION_RECONCILIATION_ERRORS: dict[str, str] = {
+    "outcome_breakdown": "the B-141 outcome breakdown does not partition its own taxonomy",
+    "refusal_breakdown": "the B-141 refusal and outcome taxonomies disagree",
+    "repair_outcome_breakdown": (
+        "the B-141 repair outcome breakdown does not partition the run outcomes"
+    ),
+    "status_breakdown": _STATUS_OUTCOME_RECONCILIATION_ERROR,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class _DeclaredPartition:
+    """One published breakdown, declared as a partition of the run-outcome taxonomy."""
+
+    buckets: tuple[tuple[str, tuple[str, ...]], ...]
+    total: bool
+
+
+# The #226 discipline -- a total partition plus a sum-reconciliation guard that fails the run on
+# mismatch -- applied to every count/breakdown pair this benchmark publishes, in the report and in
+# its companion.  Each declared bucket names the run-outcome codes it stands for.  Reconciling only
+# a grand total accepts a report that moved one item between buckets and left the total alone;
+# reconciling every bucket against the codes it partitions does not, and reconciling the
+# *declaration* against the taxonomy means a code added later cannot land nowhere and be published
+# as a quiet zero.  `_assert_declared_partitions` checks the declaration, `_reconcile_partitions`
+# checks a published document against it.
+_STATUS_OUTCOME_PARTITION: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("cancelled", ("cancelled",)),
+    ("completed", ("completed_without_repair", "completed_with_repair")),
+    ("invalid_request", ("invalid_request",)),
+    (
+        "no_path",
+        ("no_path_physical_clearance", "no_path_budget", "no_path_search", "no_path_other"),
+    ),
+    ("not_run", ("envelope_construction",)),
+    ("partial", ("partial_budget",)),
+)
+_REPAIR_OUTCOME_PARTITION: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("not_applicable_envelope_refused", ("envelope_construction",)),
+    ("repair_published", ("completed_with_repair",)),
+    (
+        "repair_not_published",
+        (
+            "partial_budget",
+            "no_path_physical_clearance",
+            "no_path_budget",
+            "no_path_search",
+            "no_path_other",
+            "invalid_request",
+            "cancelled",
+            "completed_without_repair",
+        ),
+    ),
+)
+# A refusal reason is its own bucket: the refusal breakdown must agree with the outcome breakdown
+# reason by reason, not merely in sum.  It is a partial partition -- it deliberately does not cover
+# the two completion codes -- so its buckets are reconciled without a population total.
+_REFUSAL_OUTCOME_PARTITION: tuple[tuple[str, tuple[str, ...]], ...] = tuple(
+    (code, (code,)) for code in REFUSAL_TAXONOMY
+)
+_ARM_BREAKDOWN_PARTITIONS: dict[str, _DeclaredPartition] = {
+    "outcome_breakdown": _DeclaredPartition(
+        buckets=tuple((code, (code,)) for code in RUN_OUTCOME_TAXONOMY), total=True
+    ),
+    "refusal_breakdown": _DeclaredPartition(buckets=_REFUSAL_OUTCOME_PARTITION, total=False),
+    "repair_outcome_breakdown": _DeclaredPartition(buckets=_REPAIR_OUTCOME_PARTITION, total=True),
+    "status_breakdown": _DeclaredPartition(buckets=_STATUS_OUTCOME_PARTITION, total=True),
+}
+_PARTITION_TAXONOMIES: dict[str, frozenset[str]] = {
+    "outcome_breakdown": frozenset(RUN_OUTCOME_TAXONOMY),
+    "refusal_breakdown": frozenset(REFUSAL_TAXONOMY),
+    "repair_outcome_breakdown": frozenset(REPAIR_OUTCOME_TAXONOMY),
+    "status_breakdown": _STATUS_TAXONOMY,
+}
+
+
+def _assert_declared_partitions() -> None:
+    """Fail the run when a declared breakdown stops partitioning its taxonomy exactly once."""
+
+    if (
+        set(_ARM_BREAKDOWN_PARTITIONS) != set(_PARTITION_TAXONOMIES)
+        or set(_ARM_BREAKDOWN_PARTITIONS) != set(_PARTITION_RECONCILIATION_ERRORS)
+        or len(set(_PARTITION_RECONCILIATION_ERRORS.values()))
+        != len(_PARTITION_RECONCILIATION_ERRORS)
+    ):
+        raise NegotiatedDifferentialError(_PARTITION_DECLARATION_ERROR)
+    for name, partition in _ARM_BREAKDOWN_PARTITIONS.items():
+        buckets = [bucket for bucket, _codes in partition.buckets]
+        if len(buckets) != len(set(buckets)) or set(buckets) != _PARTITION_TAXONOMIES[name]:
+            raise NegotiatedDifferentialError(_PARTITION_DECLARATION_ERROR)
+        assigned = [code for _bucket, codes in partition.buckets for code in codes]
+        if len(assigned) != len(set(assigned)) or not set(assigned).issubset(
+            set(RUN_OUTCOME_TAXONOMY)
+        ):
+            raise NegotiatedDifferentialError(_PARTITION_DECLARATION_ERROR)
+        if partition.total and set(assigned) != set(RUN_OUTCOME_TAXONOMY):
+            raise NegotiatedDifferentialError(_PARTITION_DECLARATION_ERROR)
+
+
+def _reconcile_partitions(outcomes: dict[str, int], document: dict[str, Any]) -> None:
+    """Require every published bucket to equal the outcome codes its declaration partitions.
+
+    A total partition's buckets sum to the outcome total by construction, so no separate
+    population check is repeated here; the sum guard below is what refuses a bucket the
+    declaration does not name -- the case where a breakdown's own key set is not otherwise closed,
+    as in the companion.
+    """
+
+    _assert_declared_partitions()
+    for name, partition in _ARM_BREAKDOWN_PARTITIONS.items():
+        message = _PARTITION_RECONCILIATION_ERRORS[name]
+        published = document.get(name)
+        if type(published) is not dict:
+            raise NegotiatedDifferentialError(message)
+        declared_total = 0
+        for bucket, codes in partition.buckets:
+            expected = sum(outcomes[code] for code in codes)
+            declared_total += expected
+            if _require_nonnegative_int(published.get(bucket, 0), message) != expected:
+                raise NegotiatedDifferentialError(message)
+        if sum(published.values()) != declared_total:
+            raise NegotiatedDifferentialError(message)
+
+
 _B141_POPULATION_EXPECTED: dict[str, int] = {
     **_B140_PRIMARY_EXPECTED,
     "boards_unable_to_form_a_two_request_envelope": 4,
@@ -1679,13 +1857,32 @@ _AGGREGATE_TOTAL_KEYS = frozenset(
 
 
 def _upper_bounds() -> dict[str, dict[str, int]]:
-    """Derive closed aggregate ceilings from the pinned population and declared budgets."""
+    """Derive closed aggregate ceilings from the pinned population and declared budgets.
+
+    Each ceiling is derived from the population that actually applies to the quantity it bounds.
+    The failure this guards against is multiplying two population-wide aggregates together --
+    ``nets_submitted * boards_admitted`` -- when the 70 submitted nets are *already distributed
+    across* the 16 admitted boards.  That product is not a bound on anything: it is 16 copies of a
+    population that only exists once.  Each derivation below therefore states which denominator it
+    uses and why.
+    """
 
     admitted = _B141_POPULATION_EXPECTED["boards_admitted_by_the_coordinator"]
     submitted = _B141_POPULATION_EXPECTED["nets_submitted"]
     iterations = b140.ENVELOPE_BUDGETS["max_iterations"]
+    # Per net, not per net-board: a submitted request may be ripped up once per iteration after the
+    # first, and each request belongs to exactly one board's envelope.
     max_ripups = submitted * (iterations - 1)
     max_grid_path_length_nm = b140.ROUTER_LIMITS["max_grid_nodes"] * b140.FIXED_GRID_STEP_NM
+    # ``overflow_units`` is ``sum(usage - 1)`` over one board's *best* iteration's overflowed
+    # resources, so the iteration count does not multiply it and neither does the board count.
+    # Per board the summed resource usage cannot exceed that board's own nets times the grid each
+    # may occupy; summing over boards collapses the per-board net counts back to the 70 submitted
+    # nets.  The previous ``admitted * iterations * submitted**2`` had no such reading -- it
+    # multiplied two population-wide aggregates by a per-board repeat count -- and at 627,200 it
+    # was also small enough to refuse a truthful measurement from one dense board, which is the
+    # dangerous direction for a ceiling.
+    max_overflow_units = submitted * b140.ROUTER_LIMITS["max_grid_nodes"]
     max_final_candidates_per_repaired_board = 32
     per_repair_work = {
         "inherited_search_expansions": (
@@ -1734,12 +1931,17 @@ def _upper_bounds() -> dict[str, dict[str, int]]:
             "reference_per_net_nets_routed": submitted,
         },
         "completion_totals": {
+            # Per admitted board: one board can complete at most once.
             "boards_completed": admitted,
+            # Per submitted net: a net completes on the one board that submitted it.
             "negotiated_nets_completed": submitted,
+            # Per admitted board: the iteration budget is a per-board envelope budget.
             "total_iterations": admitted * iterations,
             "total_ripups": max_ripups,
+            # Per submitted net: each returned candidate is capped at one grid path length.
             "total_wire_length_nm": submitted * max_grid_path_length_nm,
-            "total_overflow_units": admitted * iterations * submitted * submitted,
+            "total_overflow_units": max_overflow_units,
+            # Per admitted board: the physical-check budget is a per-board envelope budget.
             "total_physical_checks": admitted * b140.ENVELOPE_BUDGETS["max_total_physical_checks"],
         },
         "repair_work": {
@@ -2134,8 +2336,6 @@ def _validate_aggregate(
         REFUSAL_TAXONOMY,
         "the B-141 refusal taxonomy is not closed",
     )
-    if any(refusals[code] != outcomes[code] for code in REFUSAL_TAXONOMY):
-        raise NegotiatedDifferentialError("the B-141 refusal and outcome taxonomies disagree")
     repair_outcomes = _validate_counter(
         aggregate.get("repair_outcome_breakdown"),
         REPAIR_OUTCOME_TAXONOMY,
@@ -2171,11 +2371,6 @@ def _validate_aggregate(
         or sum(refusals.values()) != refusal_total
         or aggregate["boards_completed"] != completed_total
         or not valid_completion_net_range
-        or repair_outcomes["not_applicable_envelope_refused"] != outcomes["envelope_construction"]
-        or repair_outcomes["repair_published"] != completed_with_repair
-        or repair_outcomes["repair_not_published"]
-        != refusal_total - outcomes["envelope_construction"] + completed_without_repair
-        or sum(repair_outcomes.values()) != offered
     ):
         raise NegotiatedDifferentialError("the B-141 arm totals do not reconcile")
     statuses = aggregate.get("status_breakdown")
@@ -2183,26 +2378,10 @@ def _validate_aggregate(
         raise NegotiatedDifferentialError("the B-141 status taxonomy is malformed")
     for value in statuses.values():
         _require_nonnegative_int(value, "the B-141 status taxonomy is malformed")
-    expected_status_counts = {
-        "partial": outcomes["partial_budget"],
-        "invalid_request": outcomes["invalid_request"],
-        "cancelled": outcomes["cancelled"],
-        "no_path": sum(
-            outcomes[code]
-            for code in (
-                "no_path_physical_clearance",
-                "no_path_budget",
-                "no_path_search",
-                "no_path_other",
-            )
-        ),
-        "not_run": outcomes["envelope_construction"],
-        "completed": completed_total,
-    }
-    if sum(statuses.values()) != offered or any(
-        statuses.get(status, 0) != expected for status, expected in expected_status_counts.items()
-    ):
-        raise NegotiatedDifferentialError(_STATUS_OUTCOME_RECONCILIATION_ERROR)
+    # Every count/breakdown pair, reconciled bucket by bucket against the outcome codes each
+    # bucket is declared to partition.  A reason moved between buckets with the totals patched up
+    # fails here even though every grand total still adds up.
+    _reconcile_partitions(outcomes, aggregate)
     if any(work[key] > bounds["repair_work"][key] for key in _REPAIR_WORK_KEYS):
         raise NegotiatedDifferentialError("the B-141 repair work exceeds its closed bound")
     if work["published_repairs"] != repair_outcomes["repair_published"]:
@@ -2356,7 +2535,7 @@ def _validate_report_shape(document: Any) -> dict[str, Any]:
         or type(record["benchmark"]) is not str
         or record["benchmark"] != "B-141"
         or type(record["date_utc"]) is not str
-        or record["date_utc"] != "2026-08-31"
+        or _DATE_UTC.fullmatch(record["date_utc"]) is None
         or type(record["source_commit"]) is not str
         or _GIT_COMMIT.fullmatch(record["source_commit"]) is None
         or type(record["repair_work_definition"]) is not str
@@ -2365,6 +2544,13 @@ def _validate_report_shape(document: Any) -> dict[str, Any]:
         or record["differential_definition"] != DIFFERENTIAL_DEFINITION
     ):
         raise NegotiatedDifferentialError("the B-141 report shape is malformed")
+    # The shape check no longer pins a literal date: the value is bound to the recorded commit by
+    # `_validate_evidence_date_binding`.  It must still be a real calendar day, so `9999-99-99`
+    # cannot pass the regex and then be excused as merely unverified.
+    try:
+        date.fromisoformat(record["date_utc"])
+    except ValueError as error:
+        raise NegotiatedDifferentialError("the B-141 report shape is malformed") from error
     _validate_environment_shape(record["environment"])
     _validate_population_binding_shape(record["population_binding"])
     _validate_configuration_shape(record["configuration"])
@@ -2396,14 +2582,24 @@ _COMMITMENT_KEYS = frozenset(
         "run_id",
     }
 )
-_COMMITMENT_ARM_KEYS = frozenset(
+# The arm keys that describe how the arm was *configured* rather than what it measured.  Everything
+# else in the arm schema is a claim, and every claim is signed.
+_ARM_CONFIGURATION_KEYS = frozenset(
     {
-        *_AGGREGATE_TOTAL_KEYS,
-        "repair_published",
-        "completed_with_repair",
+        *_POPULATION_KEYS,
+        "repair_enabled",
+        "repair_settings",
+        "repair_work_accounting",
     }
 )
-_COMMITMENT_CONTROL_EXPECTED = {
+# Derived from the report's own arm schema rather than listed by hand.  The previous list pinned
+# only the completion counts, so re-signing both files could move `total_physical_checks` or
+# `total_wire_length_nm` -- the two headline numbers this benchmark exists to publish -- while the
+# "exact result" commitment still validated.  Deriving the key set means adding a claimed aggregate
+# to `_AGGREGATE_KEYS` without pinning it fails `_assert_commitment_covers_claims` at build and at
+# validation, instead of quietly publishing an unsigned number.
+_COMMITMENT_ARM_KEYS = frozenset(_AGGREGATE_KEYS) - _ARM_CONFIGURATION_KEYS
+_COMMITMENT_CONTROL_EXPECTED: dict[str, Any] = {
     "boards_completed": 0,
     "negotiated_nets_completed": 0,
     "total_wire_length_nm": 0,
@@ -2411,10 +2607,47 @@ _COMMITMENT_CONTROL_EXPECTED = {
     "total_physical_checks": 11326,
     "total_iterations": 128,
     "total_ripups": 0,
-    "repair_published": 0,
-    "completed_with_repair": 0,
+    "outcome_breakdown": {
+        "cancelled": 0,
+        "completed_with_repair": 0,
+        "completed_without_repair": 0,
+        "envelope_construction": 4,
+        "invalid_request": 0,
+        "no_path_budget": 0,
+        "no_path_other": 0,
+        "no_path_physical_clearance": 16,
+        "no_path_search": 0,
+        "partial_budget": 0,
+    },
+    "refusal_breakdown": {
+        "cancelled": 0,
+        "envelope_construction": 4,
+        "invalid_request": 0,
+        "no_path_budget": 0,
+        "no_path_other": 0,
+        "no_path_physical_clearance": 16,
+        "no_path_search": 0,
+        "partial_budget": 0,
+    },
+    "repair_outcome_breakdown": {
+        "not_applicable_envelope_refused": 4,
+        "repair_not_published": 16,
+        "repair_published": 0,
+    },
+    "status_breakdown": {"no_path": 16, "not_run": 4},
+    "repair_work": {
+        "inherited_proximity_cost_nm": 0,
+        "inherited_proximity_steps": 0,
+        "inherited_search_expansions": 0,
+        "inherited_search_obstacle_checks": 0,
+        "published_repairs": 0,
+        "repair_local_expanded_states": 0,
+        "repair_projection_obstacle_checks": 0,
+        "repair_validator_edge_checks": 0,
+        "repair_validator_obstacle_checks": 0,
+    },
 }
-_COMMITMENT_TREATMENT_EXPECTED = {
+_COMMITMENT_TREATMENT_EXPECTED: dict[str, Any] = {
     "boards_completed": 1,
     "negotiated_nets_completed": 2,
     "total_wire_length_nm": 43750000,
@@ -2422,8 +2655,45 @@ _COMMITMENT_TREATMENT_EXPECTED = {
     "total_physical_checks": 18758,
     "total_iterations": 121,
     "total_ripups": 0,
-    "repair_published": 1,
-    "completed_with_repair": 1,
+    "outcome_breakdown": {
+        "cancelled": 0,
+        "completed_with_repair": 1,
+        "completed_without_repair": 0,
+        "envelope_construction": 4,
+        "invalid_request": 0,
+        "no_path_budget": 0,
+        "no_path_other": 0,
+        "no_path_physical_clearance": 15,
+        "no_path_search": 0,
+        "partial_budget": 0,
+    },
+    "refusal_breakdown": {
+        "cancelled": 0,
+        "envelope_construction": 4,
+        "invalid_request": 0,
+        "no_path_budget": 0,
+        "no_path_other": 0,
+        "no_path_physical_clearance": 15,
+        "no_path_search": 0,
+        "partial_budget": 0,
+    },
+    "repair_outcome_breakdown": {
+        "not_applicable_envelope_refused": 4,
+        "repair_not_published": 15,
+        "repair_published": 1,
+    },
+    "status_breakdown": {"completed": 1, "no_path": 15, "not_run": 4},
+    "repair_work": {
+        "inherited_proximity_cost_nm": 800000,
+        "inherited_proximity_steps": 16,
+        "inherited_search_expansions": 8276,
+        "inherited_search_obstacle_checks": 14269,
+        "published_repairs": 1,
+        "repair_local_expanded_states": 3526,
+        "repair_projection_obstacle_checks": 2070,
+        "repair_validator_edge_checks": 303,
+        "repair_validator_obstacle_checks": 3217,
+    },
 }
 _COMMITMENT_DIFFERENTIAL_KEYS = frozenset(_DIFFERENTIAL_KEYS)
 _COMMITMENT_DIFFERENTIAL_EXPECTED: dict[str, Any] = {
@@ -2437,28 +2707,64 @@ _COMMITMENT_DIFFERENTIAL_EXPECTED: dict[str, Any] = {
 }
 
 
-def _validate_commitment_arm(value: Any, expected: dict[str, int]) -> None:
+_COMMITMENT_ARM_PIN_ERROR = "the B-141 commitment arm pin is malformed"
+_COMMITMENT_COVERAGE_ERROR = "the B-141 commitment does not pin every claimed arm aggregate"
+
+
+def _assert_commitment_covers_claims() -> None:
+    """Fail the run when a claimed arm aggregate is not covered by the commitment's pins.
+
+    Enumerated from the report schema, not from memory: the configuration keys and the pinned keys
+    must partition the arm schema exactly, and both hard-coded arm pins must carry the whole pinned
+    key set.  If an aggregate is claimed, it is signed.
+    """
+
     if (
-        not isinstance(value, dict)
-        or set(value) != _COMMITMENT_ARM_KEYS
-        or any(type(item) is not int for item in value.values())
-        or value != expected
+        _ARM_CONFIGURATION_KEYS & _COMMITMENT_ARM_KEYS
+        or (_ARM_CONFIGURATION_KEYS | _COMMITMENT_ARM_KEYS) != _AGGREGATE_KEYS
+        or set(_COMMITMENT_CONTROL_EXPECTED) != _COMMITMENT_ARM_KEYS
+        or set(_COMMITMENT_TREATMENT_EXPECTED) != _COMMITMENT_ARM_KEYS
+        or not _AGGREGATE_TOTAL_KEYS.issubset(_COMMITMENT_ARM_KEYS)
+        or not set(_ARM_BREAKDOWN_PARTITIONS).issubset(_COMMITMENT_ARM_KEYS)
+        or "repair_work" not in _COMMITMENT_ARM_KEYS
     ):
-        raise NegotiatedDifferentialError("the B-141 commitment arm pin is malformed")
+        raise NegotiatedDifferentialError(_COMMITMENT_COVERAGE_ERROR)
+
+
+def _validate_commitment_arm(value: Any, expected: dict[str, Any]) -> None:
+    _assert_commitment_covers_claims()
+    if not isinstance(value, dict) or set(value) != _COMMITMENT_ARM_KEYS:
+        raise NegotiatedDifferentialError(_COMMITMENT_ARM_PIN_ERROR)
+    for key in _AGGREGATE_TOTAL_KEYS:
+        _require_nonnegative_int(value[key], _COMMITMENT_ARM_PIN_ERROR)
+    for key in (*sorted(_ARM_BREAKDOWN_PARTITIONS), "repair_work"):
+        _validate_nonnegative_integer_tree(value[key], _COMMITMENT_ARM_PIN_ERROR)
+    if value != expected:
+        raise NegotiatedDifferentialError(_COMMITMENT_ARM_PIN_ERROR)
+    # The companion carries breakdowns, so the companion is reconciled too: a commitment whose
+    # buckets contradict its own outcome taxonomy is refused before it can authenticate anything.
+    outcomes = value["outcome_breakdown"]
+    _reconcile_partitions(outcomes, value)
+    if (
+        value["repair_work"]["published_repairs"]
+        != value["repair_outcome_breakdown"]["repair_published"]
+    ):
+        raise NegotiatedDifferentialError(_COMMITMENT_ARM_PIN_ERROR)
+    if value["boards_completed"] != (
+        outcomes["completed_without_repair"] + outcomes["completed_with_repair"]
+    ):
+        raise NegotiatedDifferentialError(_COMMITMENT_ARM_PIN_ERROR)
 
 
 def _measurement_arm_pin(aggregate: Any) -> dict[str, Any]:
+    """Project the claimed aggregates of one published arm, exactly as the commitment pins them."""
+
     if not isinstance(aggregate, dict):
-        raise NegotiatedDifferentialError("the B-141 commitment arm pin is malformed")
-    repairs = aggregate.get("repair_outcome_breakdown")
-    outcomes = aggregate.get("outcome_breakdown")
-    if not isinstance(repairs, dict) or not isinstance(outcomes, dict):
-        raise NegotiatedDifferentialError("the B-141 commitment arm pin is malformed")
-    return {
-        **{key: aggregate.get(key) for key in _AGGREGATE_TOTAL_KEYS},
-        "repair_published": repairs.get("repair_published"),
-        "completed_with_repair": outcomes.get("completed_with_repair"),
-    }
+        raise NegotiatedDifferentialError(_COMMITMENT_ARM_PIN_ERROR)
+    _assert_commitment_covers_claims()
+    if not _COMMITMENT_ARM_KEYS.issubset(aggregate):
+        raise NegotiatedDifferentialError(_COMMITMENT_ARM_PIN_ERROR)
+    return {key: aggregate[key] for key in _COMMITMENT_ARM_KEYS}
 
 
 def _validate_commitment_differential(value: Any) -> None:
@@ -2635,6 +2941,7 @@ def _validate_authoritative_bindings(
     """Bind a generic report to the live runner, historical roots, corpus, and optional sidecar."""
 
     _validate_source_commit_runner_binding(document)
+    _validate_evidence_date_binding(document)
     configuration = document.get("configuration")
     if not isinstance(configuration, dict) or configuration != _configuration():
         raise NegotiatedDifferentialError("the B-141 source/configuration binding drifted")
