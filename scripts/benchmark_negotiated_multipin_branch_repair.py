@@ -99,10 +99,13 @@ _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 _DATE_UTC = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 _EVIDENCE_DATE_ERROR = "the B-141 evidence date is not its recorded commit's UTC date"
 # An absent object and a disagreeing object are different facts and get different verdicts.  A
-# repository that does not contain the recorded commit -- a shallow CI checkout, a fresh clone
-# before its first fetch, a consumer validating an artifact published from another fork -- has
-# observed no tampering whatsoever; saying it did would be a false claim about the artifact.  This
-# refusal therefore names what could not be resolved and where the runner looked for it.
+# repository that does not contain the recorded commit has observed no tampering whatsoever, and
+# saying it did would be a false claim about the artifact.  This is not hypothetical: a CI run
+# refused a valid revision this way because the commit was reachable only from an unrelated side
+# branch, so fetching the pull-request ref and its base never brought the object in -- `fetch-depth:
+# 0` does not help when nothing fetched reaches it.  A fresh clone before its first fetch, a shallow
+# checkout, and a consumer validating an artifact published from another fork are the same case.
+# This refusal therefore names what could not be resolved and that it was looked for here.
 _COMMIT_ABSENT_ERROR = (
     "the B-141 recorded source commit is not present in this repository, so its provenance could "
     "not be consulted"

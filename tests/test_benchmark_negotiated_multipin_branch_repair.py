@@ -2028,10 +2028,12 @@ def test_build_report_preserves_an_explicit_source_revision(
         },
     }
     # The evidence date is derived from the recorded commit, so the explicit revision must be one
-    # this repository actually has.  `B140_SOURCE_COMMIT` is real but is not present in a
-    # depth-1 CI checkout, which is what made this fail there; HEAD is present at any clone depth.
-    # Preservation is still pinned, because the probe is patched to report a *different* revision:
-    # a `build_report` that ignored its argument would record that one instead.
+    # this repository actually has.  `B140_SOURCE_COMMIT` is a real commit, but it is reachable
+    # only from an unrelated side branch: a CI checkout fetches the PR ref and its base, so even at
+    # `fetch-depth: 0` that object is absent and `git show` exits 128.  HEAD is an ancestor of
+    # whatever ref was checked out, so it resolves anywhere.  Preservation is still pinned, because
+    # the Git probe is patched to report a *different* revision: a `build_report` that ignored its
+    # argument would record that one instead.
     source_commit = benchmark._git_state()[0]
     monkeypatch.setattr(benchmark, "_git_state", lambda: ("b" * 40, ()))
     monkeypatch.setattr(
