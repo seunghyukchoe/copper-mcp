@@ -26,7 +26,7 @@ contain, so it cannot go stale unnoticed.
 | [Decision ledger](decision-ledger.md) | `D-` | `D-236` | `D-237` |
 | [Risk register](risk-register.md) | `R-` | `R-186` | `R-187` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-172` | `SEC-173` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-140` | `B-141` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-142` | `B-143` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -40,6 +40,11 @@ its identifiers remain spent under rule 2.
 The same wave reserved `B-125`–`B-127` for sibling lanes and `B-128` for M3 E4. B-128 is now
 consumed here; the sibling reservations remain unavailable until their lanes land or explicitly
 release them.
+
+`B-141` is held by open pull request [#239](https://github.com/seunghyukchoe/copper-mcp/pull/239)
+(`codex/b141-multipin-repair-differential`), which is further along in review than the lane that
+allocated `B-142`. `B-142` therefore steps over it under rule 1 rather than racing it. If #239 is
+abandoned, `B-141` remains spent under rule 2.
 
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`
