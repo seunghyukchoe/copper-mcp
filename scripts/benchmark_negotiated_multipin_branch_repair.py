@@ -98,6 +98,15 @@ _GIT_COMMIT = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 _DATE_UTC = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 _EVIDENCE_DATE_ERROR = "the B-141 evidence date is not its recorded commit's UTC date"
+# An absent object and a disagreeing object are different facts and get different verdicts.  A
+# repository that does not contain the recorded commit -- a shallow CI checkout, a fresh clone
+# before its first fetch, a consumer validating an artifact published from another fork -- has
+# observed no tampering whatsoever; saying it did would be a false claim about the artifact.  This
+# refusal therefore names what could not be resolved and where the runner looked for it.
+_COMMIT_ABSENT_ERROR = (
+    "the B-141 recorded source commit is not present in this repository, so its provenance could "
+    "not be consulted"
+)
 
 # How much of the contract a validation call actually established, weakest first.  This is returned
 # rather than left to the reader because "validate_report accepted it" is a weaker statement than
@@ -504,8 +513,49 @@ def _require_publishable_source(
     return commit
 
 
-def _validate_source_commit_runner_binding(document: dict[str, Any]) -> None:
-    """Require the report runner digest to come from its declared Git revision."""
+def _resolve_recorded_commit(commit: str) -> str | None:
+    """Resolve one recorded revision in this repository, or report that it is not here.
+
+    Returns the resolved commit, or ``None`` when this repository simply does not contain the
+    object.  ``None`` is not a verdict about the artifact: it means the check could not be
+    performed, which every caller must then decide what to do about.  Only a malformed revision or
+    an unusable Git raises, because those are failures of the input or the environment rather than
+    of the repository's contents.
+    """
+
+    if not isinstance(commit, str) or _GIT_COMMIT.fullmatch(commit) is None:
+        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)
+    git = shutil.which("git")
+    if git is None:
+        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)
+    try:
+        probe = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+            [git, "rev-parse", "--verify", "--quiet", f"{commit}^{{commit}}"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR) from error
+    resolved = probe.stdout.strip()
+    # `--verify --quiet` exits 1 with empty output for an object this repository does not have.
+    if probe.returncode != 0 or not resolved:
+        return None
+    if resolved != commit or _GIT_COMMIT.fullmatch(resolved) is None:
+        return None
+    return resolved
+
+
+def _validate_source_commit_runner_binding(
+    document: dict[str, Any], *, allow_absent_commit: bool = False
+) -> bool:
+    """Require the report runner digest to come from its declared Git revision.
+
+    Returns whether the repository was actually consulted.  ``False`` means the recorded commit is
+    not in this repository and the caller allowed that; it never means the binding held.
+    """
 
     source_commit = document.get("source_commit")
     configuration = document.get("configuration")
@@ -524,17 +574,15 @@ def _validate_source_commit_runner_binding(document: dict[str, Any]) -> None:
         raise NegotiatedDifferentialError(
             "the B-141 source commit/runner binding could not be verified"
         )
+    resolved = _resolve_recorded_commit(source_commit)
+    if resolved is None:
+        # Absent, not disagreeing.  Nothing about the binding has been observed either way.
+        if allow_absent_commit:
+            return False
+        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)
     try:
-        resolved = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
-            [git, "rev-parse", "--verify", "--quiet", f"{source_commit}^{{commit}}"],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        ).stdout.strip()
-        if resolved != source_commit or _GIT_COMMIT.fullmatch(resolved) is None:
-            raise ValueError
+        # The commit is here, so a failure past this point is a real binding failure: the revision
+        # does not carry the runner it is bound to.
         runner_bytes = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
             [git, "show", f"{resolved}:{SCRIPT_PATH}"],
             cwd=ROOT,
@@ -542,7 +590,7 @@ def _validate_source_commit_runner_binding(document: dict[str, Any]) -> None:
             capture_output=True,
             timeout=5,
         ).stdout
-    except (OSError, subprocess.SubprocessError, ValueError):
+    except (OSError, subprocess.SubprocessError):
         raise NegotiatedDifferentialError(
             "the B-141 source commit/runner binding could not be verified"
         ) from None
@@ -550,6 +598,7 @@ def _validate_source_commit_runner_binding(document: dict[str, Any]) -> None:
         raise NegotiatedDifferentialError(
             "the B-141 source commit/runner binding could not be verified"
         )
+    return True
 
 
 def _commit_utc_date(commit: str) -> str:
@@ -561,14 +610,17 @@ def _commit_utc_date(commit: str) -> str:
     recorded revision makes the chronology of the audit record checkable rather than asserted.
     """
 
-    if not isinstance(commit, str) or _GIT_COMMIT.fullmatch(commit) is None:
-        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
+    resolved = _resolve_recorded_commit(commit)
+    if resolved is None:
+        # A date cannot be derived from an object this repository does not have, and inventing one
+        # -- or blaming the artifact for the absence -- is exactly the conflation this avoids.
+        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)
     git = shutil.which("git")
     if git is None:
-        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
+        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)
     try:
         committed = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
-            [git, "show", "--no-patch", "--format=%cI", f"{commit}^{{commit}}"],
+            [git, "show", "--no-patch", "--format=%cI", f"{resolved}^{{commit}}"],
             cwd=ROOT,
             check=True,
             capture_output=True,
@@ -583,8 +635,15 @@ def _commit_utc_date(commit: str) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%d")
 
 
-def _validate_evidence_date_binding(document: dict[str, Any]) -> None:
-    """Require the published evidence date to be the recorded commit's own UTC date."""
+def _validate_evidence_date_binding(
+    document: dict[str, Any], *, allow_absent_commit: bool = False
+) -> bool:
+    """Require the published evidence date to be the recorded commit's own UTC date.
+
+    Returns whether the repository was actually consulted.  A recorded commit this repository does
+    not contain yields ``_COMMIT_ABSENT_ERROR`` or ``False`` -- never the tampering refusal, which
+    would assert a disagreement nobody observed.
+    """
 
     recorded = document.get("date_utc")
     source_commit = document.get("source_commit")
@@ -594,8 +653,13 @@ def _validate_evidence_date_binding(document: dict[str, Any]) -> None:
         or not isinstance(source_commit, str)
     ):
         raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
+    if _resolve_recorded_commit(source_commit) is None:
+        if allow_absent_commit:
+            return False
+        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)
     if recorded != _commit_utc_date(source_commit):
         raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
+    return True
 
 
 def _load_object(path: Path, *, label: str) -> dict[str, Any]:
@@ -2959,15 +3023,29 @@ def _validate_authoritative_bindings(
     corpus: Path = b140.CORPUS,
     artifact_path: Path | None = None,
     require_commitment: bool = False,
+    allow_absent_source_commit: bool = False,
 ) -> GuaranteeLevel:
     """Bind a generic report to the live runner, historical roots, corpus, and optional sidecar.
 
     Returns the guarantee reached: ``repository_bound`` without a companion, ``companion_bound``
     with one.
+
+    ``allow_absent_source_commit`` is the answer to "what if this clone does not have the recorded
+    commit?".  By default that refuses, because every current call site invokes validation for its
+    exception rather than its return value, and a silent downgrade would hand such a caller an
+    artifact whose provenance was never checked.  A caller that knows it may be working in a
+    shallow checkout or against another fork's artifact can opt in instead, and is told what was
+    actually established: the return drops to ``offline``, which by construction claims no
+    repository binding at all.  Neither branch ever reports tampering that was not observed.
     """
 
-    _validate_source_commit_runner_binding(document)
-    _validate_evidence_date_binding(document)
+    runner_bound = _validate_source_commit_runner_binding(
+        document, allow_absent_commit=allow_absent_source_commit
+    )
+    date_bound = _validate_evidence_date_binding(
+        document, allow_absent_commit=allow_absent_source_commit
+    )
+    provenance_consulted = runner_bound and date_bound
     configuration = document.get("configuration")
     if not isinstance(configuration, dict) or configuration != _configuration():
         raise NegotiatedDifferentialError("the B-141 source/configuration binding drifted")
@@ -2993,6 +3071,10 @@ def _validate_authoritative_bindings(
     _validate_population_binding_shape(population_binding)
     if population_binding != expected_population_binding:
         raise NegotiatedDifferentialError("the B-141 corpus manifest binding drifted")
+    if not provenance_consulted:
+        # Everything checkable without the recorded commit has been checked, and none of it
+        # establishes provenance.  `offline` is the strongest honest answer.
+        return GUARANTEE_OFFLINE
     if not require_commitment:
         return GUARANTEE_REPOSITORY_BOUND
     candidate = DEFAULT_OUTPUT if artifact_path is None else Path(artifact_path).expanduser()
@@ -3027,6 +3109,7 @@ def validate_report(
     corpus: Path = b140.CORPUS,
     verify_live_bindings: bool = False,
     require_semantics: bool = True,
+    allow_absent_source_commit: bool = False,
 ) -> GuaranteeLevel:
     """Validate a report to a stated guarantee level, and return the level actually reached.
 
@@ -3053,6 +3136,13 @@ def validate_report(
     **NEVER checked by this function, at any argument** -- the companion commitment and the exact
     measurement pins. A self-consistent re-signing that moves a headline total is accepted by
     ``validate_report`` alone; only the companion refuses it.
+
+    **When the recorded commit is not in this repository** -- a shallow checkout, a fresh clone
+    before its first fetch, an artifact published from another fork -- nothing about its provenance
+    has been observed, so it is never reported as a date or binding disagreement. By default that
+    refuses with ``_COMMIT_ABSENT_ERROR``, naming what could not be resolved. With
+    ``allow_absent_source_commit`` it instead downgrades: the checks that do not need the commit
+    still run, and the level returned drops to ``offline``.
 
     The authoritative entry point is :func:`load_artifact`, which reaches
     ``LOAD_ARTIFACT_GUARANTEE``. A caller that needs provenance should use it, or branch on the
@@ -3100,7 +3190,9 @@ def validate_report(
         }:
             raise NegotiatedDifferentialError("the B-141 reference baseline binding drifted")
     if verify_live_bindings:
-        return _validate_authoritative_bindings(document, corpus=corpus)
+        return _validate_authoritative_bindings(
+            document, corpus=corpus, allow_absent_source_commit=allow_absent_source_commit
+        )
     return GUARANTEE_OFFLINE if require_semantics else GUARANTEE_SHAPE_ONLY
 
 

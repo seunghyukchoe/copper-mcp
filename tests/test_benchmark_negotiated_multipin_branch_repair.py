@@ -2027,9 +2027,13 @@ def test_build_report_preserves_an_explicit_source_revision(
             "nets_attempted": 117,
         },
     }
-    # A real historical revision, not a synthetic hex: the evidence date is derived from the
-    # recorded commit, so a revision that names nothing cannot produce a report at all.
-    source_commit = benchmark.B140_SOURCE_COMMIT
+    # The evidence date is derived from the recorded commit, so the explicit revision must be one
+    # this repository actually has.  `B140_SOURCE_COMMIT` is real but is not present in a
+    # depth-1 CI checkout, which is what made this fail there; HEAD is present at any clone depth.
+    # Preservation is still pinned, because the probe is patched to report a *different* revision:
+    # a `build_report` that ignored its argument would record that one instead.
+    source_commit = benchmark._git_state()[0]
+    monkeypatch.setattr(benchmark, "_git_state", lambda: ("b" * 40, ()))
     monkeypatch.setattr(
         benchmark,
         "run_differential",
@@ -2047,12 +2051,17 @@ def test_build_report_preserves_an_explicit_source_revision(
     report = benchmark.build_report(repetitions=2, source_commit=source_commit)
 
     assert report["source_commit"] == source_commit
+    assert report["source_commit"] != "b" * 40
     assert report["date_utc"] == benchmark._commit_utc_date(source_commit)
     assert report["run_id"] == _canonical_digest(
         {key: value for key, value in report.items() if key != "run_id"}
     )
 
-    with pytest.raises(benchmark.NegotiatedDifferentialError, match="evidence date"):
+    # A revision this repository does not have is refused as absent, not as a date disagreement:
+    # no date was ever read, so no disagreement was ever observed.
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
+    ):
         benchmark.build_report(repetitions=2, source_commit="a" * 40)
 
 
@@ -2865,5 +2874,111 @@ def test_load_artifact_refuses_a_binding_that_did_not_reach_its_documented_guara
 
     with pytest.raises(
         benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._GUARANTEE_ERROR)
+    ):
+        benchmark.load_artifact()
+
+
+# --- An absent commit and a disagreeing commit are different facts --------------------------------
+
+
+def test_recorded_commit_resolution_separates_absent_from_present() -> None:
+    """`None` means "not here", which is not a verdict about the artifact."""
+
+    head = benchmark._git_state()[0]
+
+    assert benchmark._resolve_recorded_commit(head) == head
+    assert benchmark._resolve_recorded_commit("0" * 40) is None
+    # A malformed revision is an input failure, not a repository-contents failure.
+    with pytest.raises(benchmark.NegotiatedDifferentialError):
+        benchmark._resolve_recorded_commit("not-a-sha")
+
+
+def test_an_absent_commit_is_never_reported_as_a_date_disagreement() -> None:
+    """The CI defect: a real artifact in a clone without the object was blamed for tampering."""
+
+    absent = {"date_utc": "2026-09-01", "source_commit": "0" * 40}
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
+    ):
+        benchmark._validate_evidence_date_binding(absent)
+    # And specifically NOT the tampering refusal.
+    try:
+        benchmark._validate_evidence_date_binding(absent)
+    except benchmark.NegotiatedDifferentialError as error:
+        assert benchmark._EVIDENCE_DATE_ERROR not in str(error)
+
+
+def test_a_present_commit_with_a_wrong_date_keeps_the_tampering_refusal() -> None:
+    """The other branch is unchanged: a resolvable commit that disagrees is tampering."""
+
+    head = benchmark._git_state()[0]
+    published = benchmark._commit_utc_date(head)
+    year, month, day = published.split("-")
+    mismatched = {"date_utc": f"{int(year) + 1:04d}-{month}-{day}", "source_commit": head}
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._EVIDENCE_DATE_ERROR)
+    ):
+        benchmark._validate_evidence_date_binding(mismatched)
+
+
+def test_an_absent_commit_is_never_reported_as_a_runner_binding_failure() -> None:
+    """The same conflation lived in the runner binding and is separated there too."""
+
+    document = _artifact()
+    document["source_commit"] = "0" * 40
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
+    ):
+        benchmark._validate_source_commit_runner_binding(document)
+    assert (
+        benchmark._validate_source_commit_runner_binding(document, allow_absent_commit=True)
+        is False
+    )
+    # A commit that IS here and does not carry the bound runner still fails as a binding failure.
+    present = _artifact()
+    present["source_commit"] = benchmark.B088_SOURCE_COMMIT
+    if benchmark._resolve_recorded_commit(benchmark.B088_SOURCE_COMMIT) is not None:
+        with pytest.raises(benchmark.NegotiatedDifferentialError, match="binding could not be"):
+            benchmark._validate_source_commit_runner_binding(present)
+
+
+def test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request() -> None:
+    """Direction of error: never certify what could not be checked, never allege what was not seen.
+
+    This is the shallow-checkout case -- a genuine artifact validated in a clone that lacks its
+    recorded commit.  The default refuses rather than silently accepting, because every call site
+    in this repository uses validation for its exception.  A caller that opts in is told what was
+    actually established: `offline`, which claims no repository binding.
+    """
+
+    document = _artifact()
+    document["source_commit"] = "0" * 40
+    _retag_document(document)
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
+    ):
+        benchmark.validate_report(document, verify_live_bindings=True)
+
+    assert (
+        benchmark.validate_report(
+            document, verify_live_bindings=True, allow_absent_source_commit=True
+        )
+        == benchmark.GUARANTEE_OFFLINE
+    )
+
+
+def test_load_artifact_never_downgrades_for_an_absent_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The authoritative path stays fail-closed: it cannot opt in, and its level check backstops."""
+
+    monkeypatch.setattr(benchmark, "_resolve_recorded_commit", lambda _commit: None)
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
     ):
         benchmark.load_artifact()

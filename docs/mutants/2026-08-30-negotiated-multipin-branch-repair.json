@@ -310,8 +310,8 @@
     {
       "id": "B141-SOURCE02-source-revision-must-supply-the-pinned-runner-blob",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "    _validate_source_commit_runner_binding(document)\n",
-      "replacement": "    pass\n",
+      "anchor": "    runner_bound = _validate_source_commit_runner_binding(\n        document, allow_absent_commit=allow_absent_source_commit\n    )\n",
+      "replacement": "    runner_bound = True\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_load_rejects_a_self_resigned_source_without_its_pinned_runner_blob"
@@ -680,8 +680,8 @@
     {
       "id": "B141-DATE02-evidence-date-binding-must-run-on-authoritative-load",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "    _validate_evidence_date_binding(document)\n    configuration = document.get(\"configuration\")\n",
-      "replacement": "    configuration = document.get(\"configuration\")\n",
+      "anchor": "    date_bound = _validate_evidence_date_binding(\n        document, allow_absent_commit=allow_absent_source_commit\n    )\n",
+      "replacement": "    date_bound = True\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_load_rejects_a_self_resigned_evidence_date"
@@ -758,6 +758,47 @@
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_load_artifact_refuses_a_binding_that_did_not_reach_its_documented_guarantee"
+      ]
+    },
+    {
+      "id": "B141-ABSENT01-absent-commit-must-not-be-reported-as-a-date-disagreement",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if _resolve_recorded_commit(source_commit) is None:\n        if allow_absent_commit:\n            return False\n        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)\n",
+      "replacement": "    if _resolve_recorded_commit(source_commit) is None:\n        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_date_disagreement",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request"
+      ]
+    },
+    {
+      "id": "B141-ABSENT02-resolution-must-report-absence-rather-than-raise-a-verdict",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if probe.returncode != 0 or not resolved:\n        return None\n",
+      "replacement": "    if probe.returncode != 0 or not resolved:\n        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_recorded_commit_resolution_separates_absent_from_present"
+      ]
+    },
+    {
+      "id": "B141-ABSENT03-absent-commit-must-not-be-reported-as-a-runner-binding-failure",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        if allow_absent_commit:\n            return False\n        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)\n    try:\n",
+      "replacement": "        raise NegotiatedDifferentialError(\n            \"the B-141 source commit/runner binding could not be verified\"\n        )\n    try:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_runner_binding_failure"
+      ]
+    },
+    {
+      "id": "B141-ABSENT04-unconsulted-provenance-must-not-certify-repository-binding",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if not provenance_consulted:\n        # Everything checkable without the recorded commit has been checked, and none of it\n        # establishes provenance.  `offline` is the strongest honest answer.\n        return GUARANTEE_OFFLINE\n",
+      "replacement": "    if False:\n        return GUARANTEE_OFFLINE\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request"
       ]
     }
   ]
