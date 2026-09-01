@@ -179,23 +179,23 @@ guard verifies the actual Git runner blob SHA at the declared source commit and 
 historical `HEAD` movement without replacing that binding. The closed `total_ripups` bound is
 `70 * (8 - 1) = 490`; 490 is accepted and 491 is mutation-killed. The closed aggregate wire bound is
 `70 * 62,500,000,000 = 4,375,000,000,000 nm`; the exact bound is accepted and the `+1` boundary
-is mutation-killed. Focused validation passes **181/181** tests and the B-141 contract mutation
-harness kills **74/74** mutants with
+is mutation-killed. Focused validation passes **187/187** tests and the B-141 contract mutation
+harness kills **78/78** mutants with
 zero survivors or control failures; the **35/35** capability mutant result above belongs to #238 and
 is not counted again here. The measured population is **20 offered/imported, 16 admitted,
 4 envelope-refused and 70 submitted**. Control is **0 boards / 0 nets**, while treatment is
 **1 board / 2 nets** with one published repair and one `completed_with_repair`; the differential is
 **+1 / +2 / +7,432 physical checks / +43,750,000 nm wire**. The exact evidence pins are: source
-`e84522c267734c2f75a26083d7e0967147956a0d`; runner
-`sha256:d4e587531dbf0a3127311d9bf09f25f2d5e6722c43bcfeae1d79b9a9cc61758a`; configuration
-`sha256:e0ff04f15cff8a71889cc6e4bf550020dabec01bff1ee5c6c4114113b52eaf17`; whole-metrics digest
+`b7c71d4d643df155c7bdcee5bac25e7d943b7031`; runner
+`sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`; configuration
+`sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`; whole-metrics digest
 `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`; report raw
-`sha256:b0544e78ea6073a5516a72e521be78ed509e9043113b09035fe68a34749ebd92` with run
-`sha256:999a7cd5c13b80b352e16eae8b8b2360493e1692c51e439dd1aac9c791e48b69`; commitment raw
-`sha256:28daec78247218783c4ae8a29ddbcdbcd7819204fe510595856e869d403173bc` with run
-`sha256:e656ec2bf876605fd9276fecd59613b9ee3efc4035528132ffb3ad2a1fc54e5b`; and mutation spec
-`sha256:b1d545e7f37f6fc5259fb61c33cf1e52271574ea8bece9f7ea6c85a59ef1467c`. Mean arm timings
-of 48.634s and 44.528s are descriptive only. The commitment pins exact control and treatment
+`sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c` with run
+`sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3`; commitment raw
+`sha256:129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9` with run
+`sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397`; and mutation spec
+`sha256:e1f4a225f963385cba00af45109d0d8ae0a22ef228787c2b7e87707cf8108c85`. Mean arm timings
+of 40.574s and 41.039s are descriptive only. The commitment pins exact control and treatment
 arm totals plus the full differential, while the whole-metrics digest prevents a self-consistent
 re-signing from changing any other metric. This remains contract and completion evidence,
 not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor, hardware,

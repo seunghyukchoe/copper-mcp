@@ -310,11 +310,11 @@
     {
       "id": "B141-SOURCE02-source-revision-must-supply-the-pinned-runner-blob",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "    runner_bound = _validate_source_commit_runner_binding(\n        document, allow_absent_commit=allow_absent_source_commit\n    )\n",
-      "replacement": "    runner_bound = True\n",
+      "anchor": "    if \"sha256:\" + hashlib.sha256(runner_bytes).hexdigest() != configuration[\"runner_sha256\"]:\n        raise NegotiatedDifferentialError(\n            \"the B-141 source commit/runner binding could not be verified\"\n        )\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\n            \"the B-141 source commit/runner binding could not be verified\"\n        )\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_load_rejects_a_self_resigned_source_without_its_pinned_runner_blob"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_runner_binding_failure"
       ]
     },
     {
