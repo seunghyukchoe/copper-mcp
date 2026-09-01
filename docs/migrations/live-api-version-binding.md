@@ -66,6 +66,25 @@ number never checked against `Board.get_nets()`, and shipping an unverified coun
 callers trust is exactly the defect being fixed. If you need a real net count, convert to Board IR
 and read `object_counts["nets"]` there — that key is a genuine net collection and is unchanged.
 
+## 2b. The capability oracle's document also moves to `0.2.0`
+
+`probe_live_kicad_ipc` is a diagnostic, not an MCP tool, but its result is a document people
+store and compare — so this is caller-observable and worth a line of its own.
+
+`LIVE_IPC_ORACLE_SCHEMA_VERSION` goes `0.1.0` → `0.2.0`. The oracle republishes the observation's
+`compatibility`, and under `0.1.0` that field could only ever be `null` or `compatible`: the
+oracle passed no future-API override, so a drifted editor raised and was caught into a `refused`
+result. It can now also be `future_api_unverified` or `legacy_api_unverified`.
+
+**If you parse oracle output**, widen your accepted values along with the version, and treat
+`compatible` as the only one meaning the binding proved anything — the same rule as the other two
+documents. What `0.1.0` promised is recorded in code as `LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0` if
+you need to check an archived document against the version it was written under.
+
+`LiveIpcOracleResult` refuses any `schema_version` but the one your build emits — it always has,
+and it is not a decoder for stored documents. That refusal now says it is about the version;
+previously it shared the read-only check's message and reported the wrong reason.
+
 ## 3. Live apply is stricter than the read surfaces
 
 `apply_live_candidate` requires a **verified** binding and refuses both acceptances with

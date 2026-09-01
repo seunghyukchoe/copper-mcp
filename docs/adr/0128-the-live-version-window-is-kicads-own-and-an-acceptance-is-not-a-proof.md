@@ -149,6 +149,44 @@ because a read's worst case is an incomplete answer *accompanied by the verdict 
 hide behind: the board changes either way, and "the write went out against an API this build
 never verified" is not a caveat a caller can act on afterwards.
 
+### Widening the vocabulary moves three schema versions, not two
+
+The verdict vocabulary above is an **emitted accepted set**, so
+[ADR-0105](0105-a-schema-version-moves-with-its-accepted-set.md) applies to every document that
+publishes it. Three do, and the first draft of this decision moved two of them.
+
+`IPC_SCHEMA_VERSION` and `LIVE_EDITOR_CONTEXT_VERSION` both go `0.1.0` → `0.2.0`. So does
+**`LIVE_IPC_ORACLE_SCHEMA_VERSION`**, and the reason it is easy to miss is worth recording: the
+oracle does not compute a verdict, it *republishes* the observation's. Before this decision that
+republication was harmless, because the oracle called `capture_live_board` with no future-API
+override — a drifted editor raised `KicadIpcVersionError`, which the oracle caught into a
+`refused` result. **A published `0.1.0` oracle document could therefore carry only `null` or
+`compatible`.** It can now carry `future_api_unverified` and `legacy_api_unverified`, which is a
+consumer-visible widening of a diagnostic document, and a consumer pinned to `0.1.0` would receive
+values that version never promised.
+
+**The freeze is a fact, not bytes, and that is a real difference from the sibling cases.**
+ADR-0105's precedents (#181, #192) froze a *published* `schemas/**/*.json` file at its release
+bytes, gated by `scripts/check_schema_sets.py`. The oracle has **no published schema file** — it
+is a module constant on a dataclass — so there is nothing to byte-freeze and, importantly,
+**no exemption to declare in that gate**: adding one would name drift the checker cannot see and
+would be rejected as inapplicable. The equivalent that is available is to record what `0.1.0`
+promised as `LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0` and pin it in a test, so a reader holding a
+`0.1.0` document can tell what it was entitled to say without excavating git. B-142's artifact
+embeds exactly such a document, and it is correct that it does: an artifact binds the build that
+produced it and is not regenerated.
+
+**What this type does not do, stated so nobody assumes it.** `LiveIpcOracleResult` is
+strictly current-version and always has been: it refuses any `schema_version` but the one the
+build emits, and there is no path that decodes a stored document back into it. So "an old document
+still decodes as its own version" is not a property here, and no test claims it — the property
+that exists is the pin, and the pin is what is tested. Moving the version also split a refusal
+that had been sharing the read-only check's message: a document declaring a superseded version was
+refused with *"must remain read-only"*, a true refusal giving a false reason, which is
+[ADR-0123](0123-a-container-refusal-that-names-no-field-is-the-defect.md)'s defect and the one
+D-197 corrected on the codec's own version path. A pin that is load-bearing has to say what it
+checked.
+
 ### Two disclosures the same measurement forced
 
 **`object_counts["nets"]` is renamed to `net_declarations`.** B-138 measured it reporting `0`
@@ -179,9 +217,12 @@ file; this makes that refusal legible to a caller instead of leaving it in an AD
   in the safe direction and the deployer-visible one; the migration note carries it.
 - **`compatible` means less than it did, and now means something true.** A caller who checked
   `compatibility == "compatible"` will see it fire strictly less often.
-- **IPC schema moves to `0.2.0`** on both live contracts: the `compatibility` accepted set gains
-  a member and `document_binding` is added, which is [ADR-0105](0105-a-schema-version-moves-with-its-accepted-set.md)'s
-  rule applied to a Pydantic contract rather than a published JSON schema.
+- **Three schema versions move to `0.2.0`, not two**: `IPC_SCHEMA_VERSION`,
+  `LIVE_EDITOR_CONTEXT_VERSION` and `LIVE_IPC_ORACLE_SCHEMA_VERSION`. The first two gain a
+  `compatibility` member and `document_binding`; the third republishes the widened verdict.
+  This is [ADR-0105](0105-a-schema-version-moves-with-its-accepted-set.md)'s rule applied to
+  contracts that have no published JSON schema, so the freeze is a recorded accepted set
+  rather than frozen bytes. See the section above for why the oracle is the easy one to miss.
 - **`object_counts` consumers keyed on `nets` break loudly** with a `KeyError` rather than
   silently reading a number that meant something else.
 - **The binding-agreement check pins `kicad-python` 0.7.1's comparison semantics, deliberately

@@ -183,6 +183,48 @@
         "tests/test_live_version_binding.py::test_a_malformed_version_is_a_typed_refusal_not_a_crash",
         "tests/test_live_version_binding.py::test_the_malformed_version_refusal_names_which_side_was_malformed"
       ]
+    },
+    {
+      "id": "LVB18-the-oracle-schema-version-does-not-move-with-its-set",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "LIVE_IPC_ORACLE_SCHEMA_VERSION = \"0.2.0\"\n",
+      "replacement": "LIVE_IPC_ORACLE_SCHEMA_VERSION = \"0.1.0\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_oracle_schema_version_moved_with_its_accepted_set",
+        "tests/test_live_version_binding.py::test_the_new_verdicts_are_exactly_the_ones_0_1_0_never_promised"
+      ]
+    },
+    {
+      "id": "LVB19-a-superseded-version-document-is-accepted",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "        if self.schema_version != LIVE_IPC_ORACLE_SCHEMA_VERSION:\n            raise ValueError(\"live IPC oracle schema version is not the version this build emits\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_a_document_declaring_the_superseded_version_is_refused"
+      ]
+    },
+    {
+      "id": "LVB20-the-version-refusal-goes-back-to-the-false-read-only-reason",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "        if not self.read_only:\n            raise ValueError(\"live IPC oracle must remain read-only\")\n",
+      "replacement": "        if not self.read_only or self.schema_version != LIVE_IPC_ORACLE_SCHEMA_VERSION:\n            raise ValueError(\"live IPC oracle must remain read-only\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_version_refusal_no_longer_gives_the_read_only_reason"
+      ]
+    },
+    {
+      "id": "LVB21-the-0-1-0-freeze-is-widened-to-hide-the-move",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0 = frozenset({None, \"compatible\"})\n",
+      "replacement": "LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0 = frozenset(\n    {None, \"compatible\", \"future_api_unverified\", \"legacy_api_unverified\"}\n)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_frozen_0_1_0_set_is_a_strict_subset_of_what_this_build_emits",
+        "tests/test_live_version_binding.py::test_the_new_verdicts_are_exactly_the_ones_0_1_0_never_promised"
+      ]
     }
   ]
 }

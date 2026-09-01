@@ -160,8 +160,16 @@ All notable changes are documented here. The format follows
   caller. `B-138` measured the gap it names: 165,571 live bytes against 166,070 on disk
   (`ADR-0128`, `D-236`).
 - The live editor context now publishes `kicad_version`, `api_version` and `compatibility`,
-  which it previously computed and discarded. Both live contracts move to schema `0.2.0`
-  (`ADR-0128`, `ADR-0105`, `D-236`).
+  which it previously computed and discarded. **Three** live schema versions move to `0.2.0`
+  under `ADR-0105`'s accepted-set rule: the live observation, the live editor context, and
+  the capability oracle. The oracle is included because it *republishes* the observation's
+  verdict — under `0.1.0` that field could only be `null` or `compatible`, since the oracle
+  passed no future-API override and a drifted editor was caught into a `refused` result, so
+  a consumer pinned to `0.1.0` would otherwise receive values that version never promised.
+  Neither contract has a published JSON schema, so the freeze is a recorded accepted set
+  (`LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0`) rather than frozen bytes, and no
+  `check_schema_sets` exemption is declared because that gate governs `schemas/**/*.json`
+  only (`ADR-0128`, `ADR-0105`, `D-236`).
 
 ### Fixed
 

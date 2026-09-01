@@ -31,7 +31,21 @@ from copper_mcp.kicad_ipc import (
 )
 from copper_mcp.parse_budgets import parse_limits_for
 
-LIVE_IPC_ORACLE_SCHEMA_VERSION = "0.1.0"
+#: Moved ``0.1.0`` -> ``0.2.0`` by ADR-0128, under ADR-0105's rule that a schema version moves
+#: with its **accepted set**.  This document's ``compatibility`` field widened: before ADR-0128 the
+#: oracle called ``capture_live_board`` without any future-API override, so a drifted editor raised
+#: ``KicadIpcVersionError`` and was caught into a ``refused`` result -- meaning a *published*
+#: oracle document could only ever carry the two values frozen below.  It can now carry two more.
+LIVE_IPC_ORACLE_SCHEMA_VERSION = "0.2.0"
+#: What ``0.1.0`` promised, frozen as a fact rather than as bytes.
+#:
+#: ADR-0105's sibling cases (#181, #192) froze a *published* ``schemas/**/*.json`` file at its
+#: release bytes, and ``scripts/check_schema_sets.py`` gates those.  This document has no
+#: published schema file -- it is a module constant on a dataclass -- so there is nothing to
+#: byte-freeze and no exemption to declare in that gate.  The honest equivalent is to record the
+#: prior accepted set here and pin it in a test, so a reader of a ``0.1.0`` document (the B-142
+#: artifact embeds one) can tell what that version was entitled to say without excavating git.
+LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0 = frozenset({None, "compatible"})
 
 # A fixed, intentionally broad region and conservative ordinary-net constraints make the scene
 # digest reproducible.  These are diagnostic conversion inputs, not KiCad design-rule authority.
@@ -76,8 +90,15 @@ class LiveIpcOracleResult:
             raise ValueError("live IPC oracle status is invalid")
         if not self.capability or len(self.capability) > 96:
             raise ValueError("live IPC oracle capability is invalid")
-        if not self.read_only or self.schema_version != LIVE_IPC_ORACLE_SCHEMA_VERSION:
+        if not self.read_only:
             raise ValueError("live IPC oracle must remain read-only")
+        # Split from the read-only check above rather than sharing its message. The two were one
+        # condition, so a document declaring a superseded schema version was refused with
+        # "must remain read-only" -- a true refusal giving a false reason, which is the defect
+        # ADR-0123 names and D-197 corrected on the codec's own version path. The pin became
+        # load-bearing when ADR-0128 moved this version, so it now says what it checked.
+        if self.schema_version != LIVE_IPC_ORACLE_SCHEMA_VERSION:
+            raise ValueError("live IPC oracle schema version is not the version this build emits")
         # The oracle republishes the observation's verdict, so it must be one the observation
         # boundary could actually have produced. Without this, a widened verdict vocabulary
         # would reach callers through the oracle without passing any acceptance check.
@@ -335,4 +356,9 @@ def probe_live_kicad_ipc(
     )
 
 
-__all__ = ["LIVE_IPC_ORACLE_SCHEMA_VERSION", "LiveIpcOracleResult", "probe_live_kicad_ipc"]
+__all__ = [
+    "LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0",
+    "LIVE_IPC_ORACLE_SCHEMA_VERSION",
+    "LiveIpcOracleResult",
+    "probe_live_kicad_ipc",
+]

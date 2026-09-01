@@ -474,3 +474,72 @@ def test_the_malformed_version_refusal_names_which_side_was_malformed() -> None:
         classify_api_compatibility("nope", "10.0.1")
     with pytest.raises(KicadIpcVersionError, match=r"^kicad-python API version is not"):
         classify_api_compatibility("10.0.1", "nope")
+
+
+# --------------------------------------------------------------------------------------------
+# The oracle's schema version, moved with its accepted set (ADR-0105 via ADR-0128).
+#
+# The oracle republishes the observation's verdict, so widening that vocabulary widened what a
+# *published* oracle document may say. Before ADR-0128 the oracle called `capture_live_board`
+# with no future-API override, so a drifted editor raised and was caught into a `refused` result
+# -- a published document could carry only `None` or `compatible`. It can now carry two more.
+# --------------------------------------------------------------------------------------------
+
+
+def _oracle(**overrides: Any) -> Any:
+    values: dict[str, Any] = {
+        "status": "skipped",
+        "capability": "kicad_plugin_environment_absent",
+        "socket_configured": False,
+        "token_configured": False,
+    }
+    values.update(overrides)
+    return kicad_ipc_oracle.LiveIpcOracleResult(**values)
+
+
+def test_the_oracle_schema_version_moved_with_its_accepted_set() -> None:
+    assert kicad_ipc_oracle.LIVE_IPC_ORACLE_SCHEMA_VERSION == "0.2.0"
+    assert _oracle().to_dict()["schema_version"] == "0.2.0"
+
+
+def test_the_frozen_0_1_0_set_is_a_strict_subset_of_what_this_build_emits() -> None:
+    """The freeze earns its place only if the set actually grew; equality would mean no move."""
+
+    frozen = kicad_ipc_oracle.LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0
+    assert frozen == {None, "compatible"}
+    now = ACCEPTED_API_COMPATIBILITY | {None}
+    assert frozen < now
+    assert now - frozen == {"future_api_unverified", "legacy_api_unverified"}
+
+
+@pytest.mark.parametrize("verdict", ["future_api_unverified", "legacy_api_unverified"])
+def test_the_new_verdicts_are_exactly_the_ones_0_1_0_never_promised(verdict: str) -> None:
+    assert verdict not in kicad_ipc_oracle.LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0
+    result = _oracle(compatibility=verdict)
+    assert result.to_dict()["compatibility"] == verdict
+    # And they only ever appear alongside the version that promised them.
+    assert result.to_dict()["schema_version"] == "0.2.0"
+
+
+def test_a_document_declaring_the_superseded_version_is_refused() -> None:
+    """This type is strictly current-version, before and after the move.
+
+    It is *not* a decoder: there is no path that reads a stored 0.1.0 document back into this
+    dataclass, so the honest property to pin is the pin itself -- a document declaring any
+    version but the one this build emits is refused.
+    """
+
+    with pytest.raises(ValueError, match="schema version is not the version this build emits"):
+        _oracle(schema_version="0.1.0")
+
+
+def test_the_version_refusal_no_longer_gives_the_read_only_reason() -> None:
+    """A true refusal with a false why is the defect ADR-0123 names; these are two conditions."""
+
+    with pytest.raises(ValueError, match="schema version") as version_error:
+        _oracle(schema_version="0.1.0")
+    assert "read-only" not in str(version_error.value)
+
+    with pytest.raises(ValueError, match="read-only") as read_only_error:
+        _oracle(read_only=False)
+    assert "schema version" not in str(read_only_error.value)
