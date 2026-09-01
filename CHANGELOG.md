@@ -16,7 +16,7 @@ All notable changes are documented here. The format follows
   both arms. The control completes **0 boards / 0 nets**; treatment completes **1 board / 2 nets**
   with one published repair and one `completed_with_repair` outcome, a measured differential of
   **+1 board / +2 nets / +7,432 physical checks / +43,750,000 nm wire**. Mean arm times are
-  descriptive (**41.497s** control, **42.657s** treatment), not a performance claim. Per-reason
+  descriptive (**48.634s** control, **44.528s** treatment), not a performance claim. Per-reason
   refusal/outcome reconciliation is validated independently. The semantic guards require each
   arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
   `boards_unable_to_form_a_two_request_envelope` count (**4**); a disabled control
@@ -28,19 +28,19 @@ All notable changes are documented here. The format follows
   source commit and still accepts later historical `HEAD` movement without replacing that binding.
   The closed `total_ripups` bound is `70 * (8 - 1) = 490`; 490 is accepted and 491 is
   mutation-killed. The closed aggregate wire bound is `70 * 62,500,000,000 = 4,375,000,000,000 nm`;
-  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **174/174** focused tests and **71/71** killed
+  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **181/181** focused tests and **74/74** killed
   evidence-contract mutants with zero survivors or control failures; this is separate from the
   **35/35** capability mutants for #238. The
   self-digested report and companion commitment bind source
-  `74b5a5848abe463e69f0de396b905f13ac381a85`, runner
-  `sha256:be74ca9b2ea2b73c8973e1a797d180afd0320adca6f9f569fa818e22e3695c53`, configuration
-  `sha256:17442fe19c282ac85ba7786b580bbdd98e73c2660dc0eaa294aca67c967c1f60`, whole-metrics
+  `e84522c267734c2f75a26083d7e0967147956a0d`, runner
+  `sha256:d4e587531dbf0a3127311d9bf09f25f2d5e6722c43bcfeae1d79b9a9cc61758a`, configuration
+  `sha256:e0ff04f15cff8a71889cc6e4bf550020dabec01bff1ee5c6c4114113b52eaf17`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:ff291357727d8474fcd7cac86a6a93efff96ab343f6de30b036dcc45eea34879`, report raw
-  `sha256:c9fffca236946caa474864ac1f5f4b207aeca08e0a8fce6a6f435906d3ad6f1c`, commitment run
-  `sha256:830ab5d15bf80fbb9c219bd4e63758cd6c35617e3e39a3ac06e1efeb50025a10`, commitment raw
-  `sha256:25392b4a9aed2f52da77da17a2a8168a0f571bf142a2826fa9dba09d95edba33`, and mutation spec
-  `sha256:affa48803ee8a0aa817658b6ad32cddbc80abe2bbc70d95c11acf131e529fc4e`. The companion
+  `sha256:999a7cd5c13b80b352e16eae8b8b2360493e1692c51e439dd1aac9c791e48b69`, report raw
+  `sha256:b0544e78ea6073a5516a72e521be78ed509e9043113b09035fe68a34749ebd92`, commitment run
+  `sha256:e656ec2bf876605fd9276fecd59613b9ee3efc4035528132ffb3ad2a1fc54e5b`, commitment raw
+  `sha256:28daec78247218783c4ae8a29ddbcdbcd7819204fe510595856e869d403173bc`, and mutation spec
+  `sha256:b1d545e7f37f6fc5259fb61c33cf1e52271574ea8bece9f7ea6c85a59ef1467c`. The companion
   commitment pins exact control and treatment arm totals plus the full differential, while the
   whole-metrics digest prevents a self-consistent re-signing from changing any other metric. This is a
   deterministic completion differential, not held-out routing quality, KiCad DRC, electrical,
@@ -69,6 +69,17 @@ All notable changes are documented here. The format follows
   run. The republished evidence reproduced the retired artifact's whole-metrics digest
   `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly: the
   measurements were re-bound, not re-measured.
+- B-141's `validate_report` now returns the guarantee level it actually reached --
+  `shape_only`, `offline` or `repository_bound` -- instead of leaving a caller to read the
+  function name as the whole contract. Its docstring enumerates what is always checked, what
+  `require_semantics` adds, what only `verify_live_bindings` establishes, and what the
+  function never checks at any argument: the evidence date, the recorded source revision and
+  the companion's exact measurement pins are bound to the repository rather than to the
+  document. `_validate_authoritative_bindings` reports `repository_bound` or
+  `companion_bound` depending on whether the companion was consulted, and `load_artifact` --
+  the authoritative entry point -- checks that it reached `LOAD_ARTIFACT_GUARANTEE` rather
+  than asserting so in prose, so an edit that drops the companion binding fails the load.
+  Additive for callers: every existing call site invokes `validate_report` as a statement.
 - Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
   request's own lattice origin while retaining one common signal layer and grid step. Exact legacy
   two-pad identities remain pinned; malformed 1/33-pad requests refuse before router work; complete

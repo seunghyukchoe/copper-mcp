@@ -771,7 +771,7 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   uninstrumented control (`repair_settings: null`) completed **0 boards / 0 nets**; treatment with
   the default bounded repair profile completed **1 board / 2 nets**, publishing one repair and one
   `completed_with_repair` result. The measured differential is **+1 board / +2 nets / +7,432
-  physical checks / +43,750,000 nm wire**; mean arm times were **41.497s** and **42.657s** across
+  physical checks / +43,750,000 nm wire**; mean arm times were **48.634s** and **44.528s** across
   two deterministic repetitions. Per-reason refusal/outcome reconciliation is independently
   checked. The semantic guards require each arm's `outcome_breakdown["envelope_construction"]` to
   equal the fixed population's `boards_unable_to_form_a_two_request_envelope` count (**4**); a
@@ -779,16 +779,16 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   and every non-zero repair-work field; and all six status categories (`completed`, `no_path`,
   `partial`, `invalid_request`, `cancelled`, `not_run`) reconcile to the outcome taxonomy.
   The closed report and companion commitment are bound to source
-  `74b5a5848abe463e69f0de396b905f13ac381a85`, runner
-  `sha256:be74ca9b2ea2b73c8973e1a797d180afd0320adca6f9f569fa818e22e3695c53`, configuration
-  `sha256:17442fe19c282ac85ba7786b580bbdd98e73c2660dc0eaa294aca67c967c1f60`, whole-metrics
+  `e84522c267734c2f75a26083d7e0967147956a0d`, runner
+  `sha256:d4e587531dbf0a3127311d9bf09f25f2d5e6722c43bcfeae1d79b9a9cc61758a`, configuration
+  `sha256:e0ff04f15cff8a71889cc6e4bf550020dabec01bff1ee5c6c4114113b52eaf17`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:ff291357727d8474fcd7cac86a6a93efff96ab343f6de30b036dcc45eea34879`, report raw
-  `sha256:c9fffca236946caa474864ac1f5f4b207aeca08e0a8fce6a6f435906d3ad6f1c`, commitment run
-  `sha256:830ab5d15bf80fbb9c219bd4e63758cd6c35617e3e39a3ac06e1efeb50025a10`, commitment raw
-  `sha256:25392b4a9aed2f52da77da17a2a8168a0f571bf142a2826fa9dba09d95edba33`, and spec
-  `sha256:affa48803ee8a0aa817658b6ad32cddbc80abe2bbc70d95c11acf131e529fc4e`. Focused
-  evidence validation is **174/174 tests** and **71/71 evidence-contract mutants killed** with zero
+  `sha256:999a7cd5c13b80b352e16eae8b8b2360493e1692c51e439dd1aac9c791e48b69`, report raw
+  `sha256:b0544e78ea6073a5516a72e521be78ed509e9043113b09035fe68a34749ebd92`, commitment run
+  `sha256:e656ec2bf876605fd9276fecd59613b9ee3efc4035528132ffb3ad2a1fc54e5b`, commitment raw
+  `sha256:28daec78247218783c4ae8a29ddbcdbcd7819204fe510595856e869d403173bc`, and spec
+  `sha256:b1d545e7f37f6fc5259fb61c33cf1e52271574ea8bece9f7ea6c85a59ef1467c`. Focused
+  evidence validation is **181/181 tests** and **74/74 evidence-contract mutants killed** with zero
   survivors or control failures, distinct
   from #238's **35/35 capability mutants**. A later checkout or merge-ref movement may load this
   record without replacing its historically bound source commit. The source guard verifies the
