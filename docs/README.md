@@ -113,6 +113,11 @@ contract.
   land on 2.1 where refusals now keep their reason, eleven more `setup` and `footprint` heads
   accepted as typed non-claims so previously refused boards convert, and an `unmodelled_counts`
   map that grows from six entries to nine with one existing count widened in meaning.
+- [CopperMCP 0.12.0 migration](migrations/copper-mcp-0.12.0.md) — no schema version moves and no
+  snapshot is re-converted; what moves is Board IR accepting `Edge.Cuts` outline arcs and stray
+  footprint copper polygons so previously refused boards convert, an `unmodelled_counts` map that
+  grows from nine entries to eleven with one member that is a distance and one that discloses an
+  approximation, and `preview_placement` refusing a board whose outline is approximated.
 - [Public media assets](assets/README.md) — project media, with provenance; not routing or
   benchmark evidence.
 
