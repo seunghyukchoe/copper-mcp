@@ -23,13 +23,23 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-236` | `D-237` |
-| [Risk register](risk-register.md) | `R-` | `R-186` | `R-187` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-173` | `SEC-174` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-141` | `B-142` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-240` | `D-241` |
+| [Risk register](risk-register.md) | `R-` | `R-189` | `R-190` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-174` | `SEC-175` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-144` | `B-145` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
+
+The 2026-09-02 apply-v0.2 design lane took `D-240`/`R-189`/`SEC-174`/`B-144`/`ADR-0129`, every one
+of them **above** the next free number on `main`, because three branches were open on this same
+base and each holds a claim: [#242](https://github.com/seunghyukchoe/copper-mcp/pull/242) holds
+`D-237`/`R-187`/`B-142`/`ADR-0128`, the CI suite-speed lane holds `D-238`/`B-143`, and the
+vacuous-pass checker lane holds `D-239`/`R-188`. Stepping over all three is rule 1's other half
+rather than an exception to it, and `SEC-174` is *not* a step-over — no open branch claims it, so
+it is simply the next free number. Every stepped-over identifier is a **live claim, not a gap**;
+if any of those branches is abandoned its numbers become permanent gaps under rule 2, and this
+paragraph becomes the correction to make.
 
 The 2026-08-24 parallel closure wave pre-assigned `D-219`/`R-170`/`SEC-158`/`ADR-0119`
 to the authoritative-signoff lane and `D-220`/`R-171` to its sibling lane. This record therefore

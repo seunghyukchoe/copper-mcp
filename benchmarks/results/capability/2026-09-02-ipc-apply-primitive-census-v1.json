@@ -1,0 +1,478 @@
+{
+  "board_methods": {
+    "expected": {
+      "begin_commit": {
+        "file": "kipy/board.py",
+        "line": 310,
+        "present": true
+      },
+      "create_items": {
+        "file": "kipy/board.py",
+        "line": 341,
+        "present": true
+      },
+      "drop_commit": {
+        "file": "kipy/board.py",
+        "line": 334,
+        "present": true
+      },
+      "get_as_string": {
+        "file": "kipy/board.py",
+        "line": 575,
+        "present": true
+      },
+      "push_commit": {
+        "file": "kipy/board.py",
+        "line": 325,
+        "present": true
+      },
+      "remove_items": {
+        "file": "kipy/board.py",
+        "line": 613,
+        "present": true
+      },
+      "remove_items_by_id": {
+        "file": "kipy/board.py",
+        "line": 628,
+        "present": true
+      },
+      "revert": {
+        "file": "kipy/board.py",
+        "line": 304,
+        "present": true
+      },
+      "save": {
+        "file": "kipy/board.py",
+        "line": 285,
+        "present": true
+      },
+      "save_as": {
+        "file": "kipy/board.py",
+        "line": 290,
+        "present": true
+      },
+      "update_items": {
+        "file": "kipy/board.py",
+        "line": 586,
+        "present": true
+      }
+    },
+    "expected_absent": {
+      "get_board_as_of": {
+        "present": false
+      },
+      "get_generation": {
+        "present": false
+      },
+      "get_revision": {
+        "present": false
+      },
+      "get_undo_stack": {
+        "present": false
+      },
+      "is_dirty": {
+        "present": false
+      },
+      "is_modified": {
+        "present": false
+      },
+      "lock": {
+        "present": false
+      },
+      "redo": {
+        "present": false
+      },
+      "rollback_commit": {
+        "present": false
+      },
+      "undo": {
+        "present": false
+      },
+      "unlock": {
+        "present": false
+      },
+      "update_items_if_unchanged": {
+        "present": false
+      }
+    },
+    "public_method_count": 58,
+    "public_methods": [
+      "add_to_selection",
+      "begin_commit",
+      "check_padstack_presence_on_layers",
+      "clear_selection",
+      "create_items",
+      "drop_commit",
+      "expand_text_variables",
+      "get_active_layer",
+      "get_as_string",
+      "get_barcodes",
+      "get_connected_items",
+      "get_copper_layer_count",
+      "get_dimensions",
+      "get_editor_appearance_settings",
+      "get_enabled_layers",
+      "get_footprints",
+      "get_graphics_defaults",
+      "get_groups",
+      "get_item_bounding_box",
+      "get_items",
+      "get_items_by_id",
+      "get_items_by_net",
+      "get_items_by_netclass",
+      "get_layer_name",
+      "get_netclass_for_nets",
+      "get_nets",
+      "get_origin",
+      "get_pad_shapes_as_polygons",
+      "get_pads",
+      "get_project",
+      "get_reference_images",
+      "get_selection",
+      "get_selection_as_string",
+      "get_shapes",
+      "get_stackup",
+      "get_text",
+      "get_title_block_info",
+      "get_tracks",
+      "get_vias",
+      "get_visible_layers",
+      "get_zones",
+      "hit_test",
+      "interactive_move",
+      "push_commit",
+      "refill_zones",
+      "remove_from_selection",
+      "remove_items",
+      "remove_items_by_id",
+      "revert",
+      "save",
+      "save_as",
+      "set_active_layer",
+      "set_editor_appearance_settings",
+      "set_enabled_layers",
+      "set_origin",
+      "set_title_block_info",
+      "set_visible_layers",
+      "update_items"
+    ]
+  },
+  "client_observability": {
+    "check_version": {
+      "file": "kipy/kicad.py",
+      "line": 161,
+      "raises_only_for_newer_editor": true
+    },
+    "connect": {
+      "clears_connected_flag_on_dial_failure": true,
+      "file": "kipy/client.py",
+      "line": 37
+    },
+    "default_client_name": {
+      "file": "kipy/kicad.py",
+      "is_random_per_object": true,
+      "line": 59
+    },
+    "default_kicad_token": {
+      "file": "kipy/kicad.py",
+      "line": 62,
+      "returns_empty_string_when_env_absent": true
+    },
+    "error_class_count": 3,
+    "error_classes": [
+      "ApiError",
+      "ConnectionError",
+      "FutureVersionError"
+    ],
+    "kipy_root": "kipy",
+    "send": {
+      "adopts_server_token_when_client_token_empty": true,
+      "clears_connected_flag_on_transport_error": false,
+      "file": "kipy/client.py",
+      "line": 55,
+      "raises_single_connection_error_type": true
+    }
+  },
+  "commit_messages": {
+    "kiapi.common.commands.BeginCommit": [],
+    "kiapi.common.commands.BeginCommitResponse": [
+      "id"
+    ],
+    "kiapi.common.commands.EndCommit": [
+      "id",
+      "action",
+      "message"
+    ],
+    "kiapi.common.commands.EndCommitResponse": []
+  },
+  "environment": {
+    "bundled_kicad_api_version": "10.0.1-0-g2db9e5a72b",
+    "kicad_python_version": "0.7.1",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.12.13",
+    "site_packages": "/Users/seunghyukchoe/Desktop/12_PCB/.venv/lib/python3.12/site-packages"
+  },
+  "generated_at": "2026-09-01T23:05:36.627298+00:00",
+  "item_messages": {
+    "kiapi.common.ApiRequestHeader": [
+      "kicad_token",
+      "client_name"
+    ],
+    "kiapi.common.ApiResponseHeader": [
+      "kicad_token"
+    ],
+    "kiapi.common.commands.CreateItems": [
+      "header",
+      "items",
+      "container"
+    ],
+    "kiapi.common.commands.CreateItemsResponse": [
+      "header",
+      "status",
+      "created_items"
+    ],
+    "kiapi.common.commands.DeleteItems": [
+      "header",
+      "item_ids"
+    ],
+    "kiapi.common.commands.DeleteItemsResponse": [
+      "header",
+      "status",
+      "deleted_items"
+    ],
+    "kiapi.common.commands.GetItems": [
+      "header",
+      "types"
+    ],
+    "kiapi.common.commands.GetItemsResponse": [
+      "header",
+      "status",
+      "items"
+    ],
+    "kiapi.common.commands.UpdateItems": [
+      "header",
+      "items"
+    ],
+    "kiapi.common.commands.UpdateItemsResponse": [
+      "header",
+      "status",
+      "updated_items"
+    ],
+    "kiapi.common.types.DocumentSpecifier": [
+      "type",
+      "lib_id",
+      "sheet_path",
+      "board_filename",
+      "project"
+    ],
+    "kiapi.common.types.ItemHeader": [
+      "document",
+      "container",
+      "field_mask"
+    ]
+  },
+  "mutating_surface": {
+    "count": 10,
+    "methods": [
+      {
+        "commands": [
+          "BeginCommit"
+        ],
+        "file": "kipy/board.py",
+        "line": 310,
+        "method": "begin_commit"
+      },
+      {
+        "commands": [
+          "CreateItems"
+        ],
+        "file": "kipy/board.py",
+        "line": 341,
+        "method": "create_items"
+      },
+      {
+        "commands": [
+          "EndCommit"
+        ],
+        "file": "kipy/board.py",
+        "line": 334,
+        "method": "drop_commit"
+      },
+      {
+        "commands": [
+          "EndCommit"
+        ],
+        "file": "kipy/board.py",
+        "line": 325,
+        "method": "push_commit"
+      },
+      {
+        "commands": [
+          "DeleteItems"
+        ],
+        "file": "kipy/board.py",
+        "line": 613,
+        "method": "remove_items"
+      },
+      {
+        "commands": [
+          "DeleteItems"
+        ],
+        "file": "kipy/board.py",
+        "line": 628,
+        "method": "remove_items_by_id"
+      },
+      {
+        "commands": [
+          "RevertDocument"
+        ],
+        "file": "kipy/board.py",
+        "line": 304,
+        "method": "revert"
+      },
+      {
+        "commands": [
+          "SaveDocument"
+        ],
+        "file": "kipy/board.py",
+        "line": 285,
+        "method": "save"
+      },
+      {
+        "commands": [
+          "SaveCopyOfDocument"
+        ],
+        "file": "kipy/board.py",
+        "line": 290,
+        "method": "save_as"
+      },
+      {
+        "commands": [
+          "UpdateItems"
+        ],
+        "file": "kipy/board.py",
+        "line": 586,
+        "method": "update_items"
+      }
+    ]
+  },
+  "per_item_status": {
+    "methods": [
+      {
+        "discards_the_response_entirely": false,
+        "file": "kipy/board.py",
+        "line": 341,
+        "method": "create_items",
+        "reads_a_status_attribute": false,
+        "reads_per_item_results": true
+      },
+      {
+        "discards_the_response_entirely": false,
+        "file": "kipy/board.py",
+        "line": 586,
+        "method": "update_items",
+        "reads_a_status_attribute": false,
+        "reads_per_item_results": true
+      },
+      {
+        "discards_the_response_entirely": true,
+        "file": "kipy/board.py",
+        "line": 613,
+        "method": "remove_items",
+        "reads_a_status_attribute": false,
+        "reads_per_item_results": false
+      },
+      {
+        "discards_the_response_entirely": true,
+        "file": "kipy/board.py",
+        "line": 628,
+        "method": "remove_items_by_id",
+        "reads_a_status_attribute": false,
+        "reads_per_item_results": false
+      }
+    ]
+  },
+  "proto_surface": {
+    "field_count": 891,
+    "file_count": 17,
+    "files": [
+      "board/board.proto",
+      "board/board_commands.proto",
+      "board/board_jobs.proto",
+      "board/board_types.proto",
+      "common/commands/base_commands.proto",
+      "common/commands/editor_commands.proto",
+      "common/commands/project_commands.proto",
+      "common/envelope.proto",
+      "common/types/base_types.proto",
+      "common/types/enums.proto",
+      "common/types/generators.proto",
+      "common/types/jobs.proto",
+      "common/types/project_settings.proto",
+      "common/types/wizards.proto",
+      "schematic/schematic_commands.proto",
+      "schematic/schematic_jobs.proto",
+      "schematic/schematic_types.proto"
+    ],
+    "message_count": 253,
+    "state_token_hit_count": 7,
+    "state_token_hits": [
+      {
+        "field": "version",
+        "message": "kiapi.board.jobs.RunBoardJobExportIpc2581"
+      },
+      {
+        "field": "bom_revision",
+        "message": "kiapi.board.jobs.RunBoardJobExportIpc2581"
+      },
+      {
+        "field": "kicad_token",
+        "message": "kiapi.common.ApiRequestHeader"
+      },
+      {
+        "field": "kicad_token",
+        "message": "kiapi.common.ApiResponseHeader"
+      },
+      {
+        "field": "version",
+        "message": "kiapi.common.commands.GetVersionResponse"
+      },
+      {
+        "field": "full_version",
+        "message": "kiapi.common.types.KiCadVersion"
+      },
+      {
+        "field": "revision",
+        "message": "kiapi.common.types.TitleBlockInfo"
+      }
+    ],
+    "state_token_substrings": [
+      "revision",
+      "dirty",
+      "modified",
+      "version",
+      "generation",
+      "sequence",
+      "serial",
+      "etag",
+      "timestamp",
+      "stamp",
+      "mtime",
+      "saved",
+      "expect",
+      "if_match",
+      "precondition",
+      "token"
+    ]
+  },
+  "provenance": {
+    "binds": "content_digests_only",
+    "commit_identifier": null,
+    "measured_package_file_count": 67,
+    "measured_package_manifest_sha256": "sha256:9ac4d24d794ee7585dbc7c334d742e173ced552f7a8fd0fbeccf59af8a14302d",
+    "runner_sha256": "sha256:16706229a2a7221fbd9b40584a45ed8e9ce5518e8eb18a195c4e46d828bf1530",
+    "why_no_commit_identifier": "A branch commit does not survive a squash merge; B-141 recorded one and it stopped resolving. Content digests are checkable without the history that produced them."
+  },
+  "run_id": "sha256:16b32ee78ce9844f05d92e2d7a44fe0f8735d3cd6ce4f08dddd59e9a71babec8",
+  "schema_version": "0.1.0"
+}

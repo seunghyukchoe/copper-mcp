@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0128**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0130**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -21,6 +21,14 @@ a file that does not exist, and when the advertised next unused number above is 
 allocated plus one. Gaps are reported as information and never fail. Keeping the next number on one
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
+
+**0128 is a live claim, not a gap.** It is held by [#242](https://github.com/seunghyukchoe/copper-mcp/pull/242),
+open on this same base, so ADR-0129 stepped over it rather than racing it — rule 1 of the
+[ledger ID convention](../ledgers/README.md#allocating-ids) applied to ADR numbers, and the fourth
+consecutive round in which stepping over a live claim costs nothing when the claim lands. The
+advertised next unused number is **0130** for the same reason: if #242 lands first it will have
+written **0129** on that one line, and Git will refuse the merge textually instead of accepting
+two ADRs numbered 0129. If #242 is abandoned, 0128 becomes a permanent gap under rule 2.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086. Every
 one of them is **spent, not free**. Recycling a number would silently repoint every external citation of the
@@ -204,6 +212,7 @@ never silently widens it.
 | [0125](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md) | Stray footprint copper is bounded by a box because no fill rule is written down | Accepted |
 | [0126](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md) | Negotiated routing admits bounded multi-pin nets on request-local lattices | Accepted (multi-pin repair deferral satisfied by 0127) |
 | [0127](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md) | Multi-pin local repair replaces one proven responsible branch | Accepted |
+| [0129](0129-a-live-apply-proves-a-matched-digest-not-exclusive-access.md) | A live apply proves a matched digest, not exclusive access | Proposed |
 
 One hundred and twenty-seven numbers allocated, one hundred and twenty-two records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
@@ -227,7 +236,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - **Circuit Intent and schematic verification** — 0014, 0015, 0056, 0071, 0084.
 - **Placement** — 0024, 0034, 0057, 0058, 0059, 0061, 0062, 0065, 0067, 0075, 0097, 0110.
 - **Circuit Scene and rendering** — 0010, 0022, 0023, 0028, 0088.
-- **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069, 0074.
+- **Live KiCad IPC** — 0029, 0030, 0031, 0032, 0033, 0044, 0063, 0069, 0074, 0129.
 - **Durable jobs and persistence** — 0043, 0046, 0047, 0048.
 - **Mutation and authorization** — 0001, 0025, 0059, 0074.
 - **Evidence, evaluation, and review boundaries** — 0041, 0052, 0054, 0098, 0102, 0105, 0107, 0109,
@@ -355,3 +364,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0125: Stray footprint copper is bounded by a box because no fill rule is written down](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md)
 - [ADR-0126: Negotiated routing admits bounded multi-pin nets on request-local lattices](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md)
 - [ADR-0127: Multi-pin local repair replaces one proven responsible branch](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md)
+- [ADR-0129: A live apply proves a matched digest, not exclusive access](0129-a-live-apply-proves-a-matched-digest-not-exclusive-access.md)
