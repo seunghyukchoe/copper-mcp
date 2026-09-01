@@ -23,7 +23,7 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-236` | `D-237` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-241` | `D-242` |
 | [Risk register](risk-register.md) | `R-` | `R-186` | `R-187` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-173` | `SEC-174` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-141` | `B-142` |

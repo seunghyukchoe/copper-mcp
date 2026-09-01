@@ -179,22 +179,22 @@ guard verifies the actual Git runner blob SHA at the declared source commit and 
 historical `HEAD` movement without replacing that binding. The closed `total_ripups` bound is
 `70 * (8 - 1) = 490`; 490 is accepted and 491 is mutation-killed. The closed aggregate wire bound is
 `70 * 62,500,000,000 = 4,375,000,000,000 nm`; the exact bound is accepted and the `+1` boundary
-is mutation-killed. Focused validation passes **187/187** tests and the B-141 contract mutation
+is mutation-killed. Focused validation passes **189/189** tests and the B-141 contract mutation
 harness kills **78/78** mutants with
 zero survivors or control failures; the **35/35** capability mutant result above belongs to #238 and
 is not counted again here. The measured population is **20 offered/imported, 16 admitted,
 4 envelope-refused and 70 submitted**. Control is **0 boards / 0 nets**, while treatment is
 **1 board / 2 nets** with one published repair and one `completed_with_repair`; the differential is
 **+1 / +2 / +7,432 physical checks / +43,750,000 nm wire**. The exact evidence pins are: source
-`b7c71d4d643df155c7bdcee5bac25e7d943b7031`; runner
+`86634180e5a3f0956cf2ede4168710f1fce8fbcb`; runner
 `sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`; configuration
 `sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`; whole-metrics digest
 `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`; report raw
-`sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c` with run
-`sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3`; commitment raw
-`sha256:129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9` with run
-`sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397`; and mutation spec
-`sha256:e1f4a225f963385cba00af45109d0d8ae0a22ef228787c2b7e87707cf8108c85`. Mean arm timings
+`sha256:32ec7b3f489d006940f0ab6b05987b943bf8263f7ded07ef27085b57d7368e7f` with run
+`sha256:237d4ddfd4ce403aa3bb2ea19e4229aa0833f667501127fd5acd223e62173021`; commitment raw
+`sha256:c190e5d8ca5066fa3ff09695841dde266907ebfb32252fa91c84dceccd93df12` with run
+`sha256:6ce94a530ef55ecb1690a0a19eb5b148607e7c30bd80bc0ded87a038b1c74efd`; and mutation spec
+`sha256:d7098924ad05c9a9ad6b15f508b330ba25dcd87a8829461ac51310dc282a9c14`. Mean arm timings
 of 40.574s and 41.039s are descriptive only. The commitment pins exact control and treatment
 arm totals plus the full differential, while the whole-metrics digest prevents a self-consistent
 re-signing from changing any other metric. This remains contract and completion evidence,
@@ -226,3 +226,61 @@ floors.
   same-net branch twice, remain globally connected and still close a copper loop.
 - **Publish before the final whole-set pass.** Rejected because local and Board IR validity do not
   prove pairwise clearance against the rest of the negotiated allocation.
+
+## Amendment, 2026-09-02 — an artifact's recorded revision must be one the default branch carries
+
+B-141's evidence binds `source_commit` and verifies the runner blob at that revision. A pull
+request publishes from a branch commit, and squash-merging discards it: #239's artifact recorded
+`b7c71d4d643df155c7bdcee5bac25e7d943b7031`, the squash landed as
+`86634180e5a3f0956cf2ede4168710f1fce8fbcb`, and every fresh clone of the default branch then
+refused the artifact because the recorded revision named nothing. The refusal was correct. The
+recorded value was not.
+
+The artifact is rebound to the squash commit, which the default branch carries and every clone
+fetches. Two alternatives were weighed and rejected on evidence rather than taste:
+
+- **Bind the tree instead of the commit.** Refuted by measurement: the branch tree
+  (`792bd419e043955f0f44978158008aef34495645`) and the squash tree
+  (`b2e1edac893a8cdbda5e6a944f52871bfd34a00e`) differ, because the default branch advanced between
+  publication and merge. A squash preserves file *content*, not the tree. The blob binding that
+  does survive is `runner_sha256`, and it was already bound.
+- **Accept content-only provenance as `repository_bound`.** Rejected because the artifact claims it
+  was produced at a *named revision*. When no clone can check that claim, certifying it green is
+  precisely the failure this contract exists to refuse. `offline` remains the honest answer, and
+  `load_artifact` stays fail-closed.
+
+**Under linear history a commit SHA is not a durable identifier for anything a pull request
+produces.** `main` sets `required_linear_history=true`: branch protection refuses merge commits, and
+both remaining strategies rewrite history — squash collapses the branch to one new commit, rebase
+replays every commit under new SHAs. No strategy available to this repository preserves a branch
+commit's SHA. An artifact published on a branch therefore cannot bind its own revision and survive
+its own merge. The only commit that can be bound durably is one that is *already* on the default
+branch when the artifact is written, which is why this rebinding names the squash commit of the pull
+request that introduced the artifact rather than any commit of the branch performing the repair.
+
+That makes the present fix a valid unblock but not a general answer: it must be repeated on every
+future runner change. The structural answer is to bind provenance to what survives every strategy —
+**the runner blob**, whose hash is already bound as `runner_sha256`, verifiable with no history at
+all — and to stop requiring a resolvable commit for the strongest guarantee. Two facts constrain that
+design and are recorded here so the follow-up does not rediscover them:
+
+- **The tree does not survive, only the blob does.** Measured on this very merge: branch tree
+  `792bd419e043955f0f44978158008aef34495645`, squash tree
+  `b2e1edac893a8cdbda5e6a944f52871bfd34a00e`. They differ because the default branch advanced
+  between publication and merge, so a squash rewrites the root tree even when it preserves every
+  byte of the file in question. Binding the tree would fail exactly as binding the commit did.
+- **A commit-derived date cannot be fixed at publication time.** Deriving the evidence date from
+  `git log --first-parent main` for the first commit carrying the runner blob is durable *after* the
+  merge, but at publication the blob is not yet on the default branch, so the value would change at
+  merge and break the artifact's self-digest. The follow-up must either drop the date from the
+  verified set — recording it as informational under `offline` — or accept a post-merge derivation.
+
+The follow-up is a separate change because it is mutually exclusive with this one: implementing it
+edits the runner, which moves `runner_sha256`, which is precisely what would stop
+`86634180e5a3f0956cf2ede4168710f1fce8fbcb` from carrying the bound bytes. One pull request cannot
+both bind that commit and change the runner.
+
+Until then the residue is a process obligation — the correct revision is only knowable after the
+merge — and it is mechanized rather than documented as a habit:
+`test_published_artifact_records_a_commit_this_repository_can_resolve` fails on the default branch
+the moment a future squash orphans a recorded revision, and names the repair in its message.

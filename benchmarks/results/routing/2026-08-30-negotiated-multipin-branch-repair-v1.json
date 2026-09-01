@@ -325,13 +325,13 @@
     "nets_submitted": 70
   },
   "repair_work_definition": "Inherited search and proximity fields are read from a published repaired candidate's unchanged candidate metrics and cost. Local expansions, Board-IR projection checks, validator checks, and repair responsibility/final physical work are separate. Refused transactions publish no repair evidence; their consumed physical work remains in total_physical_checks and is not fabricated into success-only fields.",
-  "run_id": "sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3",
+  "run_id": "sha256:237d4ddfd4ce403aa3bb2ea19e4229aa0833f667501127fd5acd223e62173021",
   "schema": "copper-mcp/benchmark/negotiated-multipin-branch-repair-differential/v1",
-  "source_commit": "b7c71d4d643df155c7bdcee5bac25e7d943b7031",
+  "source_commit": "86634180e5a3f0956cf2ede4168710f1fce8fbcb",
   "timing": {
     "mean_wall_seconds": {
-      "control": 40.574,
-      "treatment": 41.039
+      "control": 39.224,
+      "treatment": 40.042
     },
     "repetitions": 2
   }

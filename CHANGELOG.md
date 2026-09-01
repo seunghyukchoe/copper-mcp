@@ -6,6 +6,29 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- B-141's committed artifact is rebound to the squash-merge commit
+  `86634180e5a3f0956cf2ede4168710f1fce8fbcb` that the default branch carries, replacing the
+  branch commit `b7c71d4d643df155c7bdcee5bac25e7d943b7031` that squash-merging discarded. In
+  any fresh clone of main the artifact refused to load, naming its recorded source commit as
+  absent -- the correct verdict about an incorrect recorded value, and the v0.5.0 orphaned-SHA
+  class recurring. Binding the tree instead was considered and refuted by measurement: the
+  branch and squash trees differ because main advanced between publication and merge, so a
+  squash preserves file content but not the tree. Accepting content-only provenance as
+  `repository_bound` was rejected as certifying a claim no clone can check; `load_artifact`
+  stays fail-closed. The rerun reproduced the pinned whole-metrics digest
+  `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly, so this
+  is a re-binding and not a re-measurement, and the runner file is byte-identical to the one
+  the squash commit carries. A new test fails on the default branch the moment a future squash
+  orphans a recorded revision, naming the repair, so the class cannot recur silently. `main`
+  sets `required_linear_history=true`, so no merge strategy this repository allows preserves
+  a branch commit's SHA -- an artifact cannot bind its own revision and survive its own
+  merge, and this fix binds a commit already on the default branch rather than any of its
+  own. The structural successor, binding the runner blob that every strategy preserves, is a
+  separate change: implementing it edits the runner and moves `runner_sha256`, which is what
+  would stop the squash commit from carrying the bound bytes (`D-241`, `B-141`, `ADR-0127`).
+
 ## [0.12.0] - 2026-09-01
 
 Upgrading from 0.11.0: see the
@@ -44,19 +67,19 @@ negotiated routing gains bounded multi-pin nets and one-branch local repair behi
   source commit and still accepts later historical `HEAD` movement without replacing that binding.
   The closed `total_ripups` bound is `70 * (8 - 1) = 490`; 490 is accepted and 491 is
   mutation-killed. The closed aggregate wire bound is `70 * 62,500,000,000 = 4,375,000,000,000 nm`;
-  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **187/187** focused tests and **78/78** killed
+  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **189/189** focused tests and **78/78** killed
   evidence-contract mutants with zero survivors or control failures; this is separate from the
   **35/35** capability mutants for #238. The
   self-digested report and companion commitment bind source
-  `b7c71d4d643df155c7bdcee5bac25e7d943b7031`, runner
+  `86634180e5a3f0956cf2ede4168710f1fce8fbcb`, runner
   `sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`, configuration
   `sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3`, report raw
-  `sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c`, commitment run
-  `sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397`, commitment raw
-  `sha256:129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9`, and mutation spec
-  `sha256:e1f4a225f963385cba00af45109d0d8ae0a22ef228787c2b7e87707cf8108c85`. The companion
+  `sha256:237d4ddfd4ce403aa3bb2ea19e4229aa0833f667501127fd5acd223e62173021`, report raw
+  `sha256:32ec7b3f489d006940f0ab6b05987b943bf8263f7ded07ef27085b57d7368e7f`, commitment run
+  `sha256:6ce94a530ef55ecb1690a0a19eb5b148607e7c30bd80bc0ded87a038b1c74efd`, commitment raw
+  `sha256:c190e5d8ca5066fa3ff09695841dde266907ebfb32252fa91c84dceccd93df12`, and mutation spec
+  `sha256:d7098924ad05c9a9ad6b15f508b330ba25dcd87a8829461ac51310dc282a9c14`. The companion
   commitment pins exact control and treatment arm totals plus the full differential, while the
   whole-metrics digest prevents a self-consistent re-signing from changing any other metric. This is a
   deterministic completion differential, not held-out routing quality, KiCad DRC, electrical,

@@ -1,7 +1,7 @@
 {
   "artifact_path": "benchmarks/results/routing/2026-08-30-negotiated-multipin-branch-repair-v1.json",
-  "artifact_run_id": "sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3",
-  "artifact_sha256": "sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c",
+  "artifact_run_id": "sha256:237d4ddfd4ce403aa3bb2ea19e4229aa0833f667501127fd5acd223e62173021",
+  "artifact_sha256": "sha256:32ec7b3f489d006940f0ab6b05987b943bf8263f7ded07ef27085b57d7368e7f",
   "configuration_sha256": "sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3",
   "control": {
     "boards_completed": 0,
@@ -75,10 +75,10 @@
     "submitted_nets_the_reference_routed": 70
   },
   "repetitions": 2,
-  "run_id": "sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397",
+  "run_id": "sha256:6ce94a530ef55ecb1690a0a19eb5b148607e7c30bd80bc0ded87a038b1c74efd",
   "runner_sha256": "sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1",
   "schema": "copper-mcp/benchmark-commitment/negotiated-multipin-branch-repair/v1",
-  "source_commit": "b7c71d4d643df155c7bdcee5bac25e7d943b7031",
+  "source_commit": "86634180e5a3f0956cf2ede4168710f1fce8fbcb",
   "treatment": {
     "boards_completed": 1,
     "negotiated_nets_completed": 2,

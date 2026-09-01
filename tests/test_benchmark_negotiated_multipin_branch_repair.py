@@ -2994,3 +2994,67 @@ def test_load_artifact_never_downgrades_for_an_absent_commit(
         benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
     ):
         benchmark.load_artifact()
+
+
+# --- The squash-merge orphan class -----------------------------------------------------------
+
+
+def test_published_artifact_records_a_commit_this_repository_can_resolve() -> None:
+    """The durable rule, mechanized: a recorded revision that no clone carries is not provenance.
+
+    A pull request publishes its artifact from a branch commit.  Squash-merging discards that
+    commit, so on the default branch the recorded revision names nothing and `load_artifact`
+    refuses -- correctly, but only after the merge, where it reads as a mysterious break.  This
+    fails in the same place with an actionable message instead, and it is why the committed
+    artifact binds the squash commit on the default branch rather than the branch commit that
+    produced it.
+    """
+
+    document = _artifact()
+    recorded = document["source_commit"]
+
+    assert benchmark._resolve_recorded_commit(recorded) == recorded, (
+        "the recorded B-141 source commit is not in this repository. If this branch was "
+        "squash-merged, republish the artifact bound to the squash commit on the default branch; "
+        "see the B-141 amendment in docs/ledgers/benchmark-ledger.md."
+    )
+
+
+def test_a_squash_orphaned_source_commit_stays_fail_closed_even_though_the_runner_survives() -> (
+    None
+):
+    """A squash keeps the runner blob and discards the commit; content is not revision provenance.
+
+    This is the situation a squash actually produces, reconstructed: the recorded revision is
+    unreachable while the exact runner bytes it bound are still present in this repository.  The
+    design deliberately does not treat that as `repository_bound` -- the artifact claims it was
+    produced at a named revision, and no clone can check that claim, so certifying it green is the
+    failure this benchmark exists to refuse.  It refuses, and downgrades only when asked.
+    """
+
+    document = _artifact()
+    live_runner = document["configuration"]["runner_sha256"]
+    document["source_commit"] = "0" * 40
+    _retag_document(document)
+
+    # The runner bytes the orphaned revision bound are still here: a squash preserves file
+    # content.  Content survival is what makes this case tempting to wave through.
+    assert benchmark._file_digest(benchmark.ROOT / benchmark.SCRIPT_PATH) == live_runner
+    assert benchmark._resolve_recorded_commit(document["source_commit"]) is None
+
+    # Offline, the document is entirely self-consistent and says so.
+    assert benchmark.validate_report(document) == benchmark.GUARANTEE_OFFLINE
+
+    # Consulting the repository refuses, naming absence rather than alleging a disagreement.
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
+    ):
+        benchmark.validate_report(document, verify_live_bindings=True)
+
+    # And a caller that knowingly accepts the weaker claim is told exactly what it got.
+    assert (
+        benchmark.validate_report(
+            document, verify_live_bindings=True, allow_absent_source_commit=True
+        )
+        == benchmark.GUARANTEE_OFFLINE
+    )
