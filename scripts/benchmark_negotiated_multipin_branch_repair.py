@@ -37,7 +37,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from copper_mcp.routing import AStarRouter
 from copper_mcp.routing.congestion import (
@@ -98,6 +98,28 @@ _GIT_COMMIT = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 _DATE_UTC = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 _EVIDENCE_DATE_ERROR = "the B-141 evidence date is not its recorded commit's UTC date"
+
+# How much of the contract a validation call actually established, weakest first.  This is returned
+# rather than left to the reader because "validate_report accepted it" is a weaker statement than
+# the name suggests, and an unstated weakness is exactly the failure class this benchmark exists to
+# refuse.  A caller that needs repository-bound provenance can branch on the level instead of
+# assuming the strongest reading of a function name.
+GuaranteeLevel = Literal["shape_only", "offline", "repository_bound", "companion_bound"]
+GUARANTEE_SHAPE_ONLY: GuaranteeLevel = "shape_only"
+GUARANTEE_OFFLINE: GuaranteeLevel = "offline"
+GUARANTEE_REPOSITORY_BOUND: GuaranteeLevel = "repository_bound"
+GUARANTEE_COMPANION_BOUND: GuaranteeLevel = "companion_bound"
+# Ordered weakest to strongest; the position of a level in this tuple is its strength.
+GUARANTEE_LEVELS: tuple[GuaranteeLevel, ...] = (
+    GUARANTEE_SHAPE_ONLY,
+    GUARANTEE_OFFLINE,
+    GUARANTEE_REPOSITORY_BOUND,
+    GUARANTEE_COMPANION_BOUND,
+)
+# The strongest level any single entry point reaches, named so the docstring claim is checked
+# rather than asserted in prose.
+LOAD_ARTIFACT_GUARANTEE: GuaranteeLevel = GUARANTEE_COMPANION_BOUND
+_GUARANTEE_ERROR = "the B-141 validation did not reach the guarantee its caller requires"
 
 # These codes are the only refusal values the public differential may contain.  A raw production
 # diagnostic is intentionally used only by the private classifier, never by the artifact.
@@ -2937,8 +2959,12 @@ def _validate_authoritative_bindings(
     corpus: Path = b140.CORPUS,
     artifact_path: Path | None = None,
     require_commitment: bool = False,
-) -> None:
-    """Bind a generic report to the live runner, historical roots, corpus, and optional sidecar."""
+) -> GuaranteeLevel:
+    """Bind a generic report to the live runner, historical roots, corpus, and optional sidecar.
+
+    Returns the guarantee reached: ``repository_bound`` without a companion, ``companion_bound``
+    with one.
+    """
 
     _validate_source_commit_runner_binding(document)
     _validate_evidence_date_binding(document)
@@ -2968,7 +2994,7 @@ def _validate_authoritative_bindings(
     if population_binding != expected_population_binding:
         raise NegotiatedDifferentialError("the B-141 corpus manifest binding drifted")
     if not require_commitment:
-        return
+        return GUARANTEE_REPOSITORY_BOUND
     candidate = DEFAULT_OUTPUT if artifact_path is None else Path(artifact_path).expanduser()
     if candidate.is_symlink() or candidate.resolve(strict=False) != DEFAULT_OUTPUT.resolve():
         raise NegotiatedDifferentialError("the B-141 commitment artifact path is malformed")
@@ -2992,6 +3018,7 @@ def _validate_authoritative_bindings(
         raise NegotiatedDifferentialError("the B-141 treatment commitment pin drifted")
     if document["metrics"]["differential"] != commitment["differential"]:
         raise NegotiatedDifferentialError("the B-141 differential commitment pin drifted")
+    return GUARANTEE_COMPANION_BOUND
 
 
 def validate_report(
@@ -3000,8 +3027,39 @@ def validate_report(
     corpus: Path = b140.CORPUS,
     verify_live_bindings: bool = False,
     require_semantics: bool = True,
-) -> None:
-    """Validate generic report structure/semantics; live authorities are opt-in."""
+) -> GuaranteeLevel:
+    """Validate a report to a stated guarantee level, and return the level actually reached.
+
+    The name of this function promises more than its default arguments deliver, so the promise is
+    spelled out here and returned to the caller rather than left to be inferred.
+
+    **Always checked** -- the closed public key set and value shapes, the report's own self-digest,
+    the configuration's nested digest, and the absence of private identity fields.
+
+    **Checked when ``require_semantics`` (the default)** -- the population projection, both arms'
+    closed taxonomies, every declared count/breakdown partition, the closed aggregate ceilings, the
+    iteration floor, the control arm's inability to publish repairs, and the differential.
+
+    **NOT checked unless ``verify_live_bindings``** -- everything whose truth lives in the
+    repository rather than in the document:
+
+    * that ``date_utc`` is the UTC committer date of the revision the report records, so a
+      re-signed artifact may name a day the run did not happen on;
+    * that ``source_commit`` resolves to a commit that exists and whose runner blob is the one the
+      report binds, so a well-formed 40-hex value naming nothing is accepted here;
+    * that the configuration matches the live runner, and that the B-140/B-088 roots and the corpus
+      manifest are the pinned authorities.
+
+    **NEVER checked by this function, at any argument** -- the companion commitment and the exact
+    measurement pins. A self-consistent re-signing that moves a headline total is accepted by
+    ``validate_report`` alone; only the companion refuses it.
+
+    The authoritative entry point is :func:`load_artifact`, which reaches
+    ``LOAD_ARTIFACT_GUARANTEE``. A caller that needs provenance should use it, or branch on the
+    level returned here rather than treating acceptance as the whole contract.
+
+    :returns: one of ``GUARANTEE_LEVELS`` -- ``shape_only``, ``offline``, or ``repository_bound``.
+    """
 
     document = _validate_report_shape(document)
     recorded = document["run_id"]
@@ -3042,19 +3100,30 @@ def validate_report(
         }:
             raise NegotiatedDifferentialError("the B-141 reference baseline binding drifted")
     if verify_live_bindings:
-        _validate_authoritative_bindings(document, corpus=corpus)
+        return _validate_authoritative_bindings(document, corpus=corpus)
+    return GUARANTEE_OFFLINE if require_semantics else GUARANTEE_SHAPE_ONLY
 
 
 def load_artifact(path: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
-    """Load a B-141 artifact with generic checks plus authoritative companion binding."""
+    """Load a B-141 artifact to ``LOAD_ARTIFACT_GUARANTEE`` -- the authoritative entry point.
+
+    This is the call that establishes everything :func:`validate_report` documents as out of its
+    own scope: the recorded revision resolves and supplies the bound runner blob, the evidence date
+    is that revision's own UTC date, the live authorities and corpus manifest are the pinned ones,
+    and the companion commitment's exact measurement pins hold.  The level reached is checked here
+    rather than described, so a future edit that drops the companion binding fails the load instead
+    of quietly weakening what a caller was promised.
+    """
 
     document = _load_object(path, label="B-141")
     validate_report(document)
-    _validate_authoritative_bindings(
+    reached = _validate_authoritative_bindings(
         document,
         artifact_path=path,
         require_commitment=True,
     )
+    if reached != LOAD_ARTIFACT_GUARANTEE:
+        raise NegotiatedDifferentialError(_GUARANTEE_ERROR)
     return document
 
 

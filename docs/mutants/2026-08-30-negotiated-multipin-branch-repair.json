@@ -727,6 +727,38 @@
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_untrusted_artifact_bytes_are_capped_before_any_parse"
       ]
+    },
+    {
+      "id": "B141-LEVEL01-validate-report-must-report-the-level-it-reached",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    return GUARANTEE_OFFLINE if require_semantics else GUARANTEE_SHAPE_ONLY\n",
+      "replacement": "    return GUARANTEE_REPOSITORY_BOUND\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_validate_report_returns_the_guarantee_level_it_reached",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_the_offline_guarantee_does_not_cover_repository_bound_provenance"
+      ]
+    },
+    {
+      "id": "B141-LEVEL02-repository-bound-must-not-claim-the-companion",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        return GUARANTEE_REPOSITORY_BOUND\n",
+      "replacement": "        return GUARANTEE_COMPANION_BOUND\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_bindings_report_whether_the_companion_was_consulted",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_validate_report_returns_the_guarantee_level_it_reached"
+      ]
+    },
+    {
+      "id": "B141-LEVEL03-load-artifact-must-reach-its-documented-guarantee",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if reached != LOAD_ARTIFACT_GUARANTEE:\n        raise NegotiatedDifferentialError(_GUARANTEE_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(_GUARANTEE_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_load_artifact_refuses_a_binding_that_did_not_reach_its_documented_guarantee"
+      ]
     }
   ]
 }

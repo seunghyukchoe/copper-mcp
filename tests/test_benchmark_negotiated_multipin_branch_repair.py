@@ -2757,3 +2757,113 @@ def test_declared_bucket_names_must_be_the_published_taxonomy(
         match=re.escape(benchmark._PARTITION_DECLARATION_ERROR),
     ):
         benchmark._assert_declared_partitions()
+
+
+# --- The guarantee a validation call actually reached is returned, not left to be inferred -------
+
+
+def test_guarantee_levels_are_ordered_weakest_to_strongest() -> None:
+    """The tuple's order is the strength order, so a caller can compare by index."""
+
+    assert benchmark.GUARANTEE_LEVELS == (
+        benchmark.GUARANTEE_SHAPE_ONLY,
+        benchmark.GUARANTEE_OFFLINE,
+        benchmark.GUARANTEE_REPOSITORY_BOUND,
+        benchmark.GUARANTEE_COMPANION_BOUND,
+    )
+    assert benchmark.LOAD_ARTIFACT_GUARANTEE == benchmark.GUARANTEE_LEVELS[-1]
+
+
+def test_validate_report_returns_the_guarantee_level_it_reached() -> None:
+    """`validate_report` accepting a document is a weaker statement at weaker arguments."""
+
+    document = _artifact()
+
+    assert (
+        benchmark.validate_report(document, require_semantics=False)
+        == benchmark.GUARANTEE_SHAPE_ONLY
+    )
+    assert benchmark.validate_report(document) == benchmark.GUARANTEE_OFFLINE
+    assert (
+        benchmark.validate_report(document, verify_live_bindings=True)
+        == benchmark.GUARANTEE_REPOSITORY_BOUND
+    )
+
+
+def _repository_bound_tampers() -> dict[str, dict[str, Any]]:
+    """Three re-signed documents whose lie lives in the repository, not in the document."""
+
+    date_tamper = _artifact()
+    published = benchmark._commit_utc_date(date_tamper["source_commit"])
+    year, month, day = published.split("-")
+    date_tamper["date_utc"] = f"{int(year) + 1:04d}-{month}-{day}"
+    _retag_document(date_tamper)
+
+    commit_tamper = _artifact()
+    commit_tamper["source_commit"] = "0" * 40
+    _retag_document(commit_tamper)
+
+    total_tamper = _artifact()
+    total_tamper["metrics"]["treatment"]["total_physical_checks"] += 1000
+    total_tamper["metrics"]["differential"]["total_physical_checks_delta"] += 1000
+    _retag_document(total_tamper)
+
+    return {
+        "evidence_date": date_tamper,
+        "source_commit": commit_tamper,
+        "headline_total": total_tamper,
+    }
+
+
+@pytest.mark.parametrize("case", ("evidence_date", "source_commit", "headline_total"))
+def test_the_offline_guarantee_does_not_cover_repository_bound_provenance(case: str) -> None:
+    """The docstring's stated gap is real, and `load_artifact` is what closes it.
+
+    This pins the *content* of the weaker guarantee rather than its wording: at the offline level
+    each of these re-signed documents is accepted, and each is refused once the repository is
+    consulted.  If a future edit silently strengthened or weakened either side, this fails.
+    """
+
+    tampered = _repository_bound_tampers()[case]
+
+    # Accepted at the level `validate_report` actually reaches, and it says so.
+    assert benchmark.validate_report(tampered) == benchmark.GUARANTEE_OFFLINE
+
+    # Refused once the repository is consulted, which is what `load_artifact` does.
+    with pytest.raises(benchmark.NegotiatedDifferentialError):
+        benchmark._validate_authoritative_bindings(
+            tampered, artifact_path=EXPECTED_ARTIFACT, require_commitment=True
+        )
+
+
+def test_authoritative_bindings_report_whether_the_companion_was_consulted() -> None:
+    """`repository_bound` and `companion_bound` are different guarantees and are named apart."""
+
+    document = _artifact()
+
+    assert (
+        benchmark._validate_authoritative_bindings(document) == benchmark.GUARANTEE_REPOSITORY_BOUND
+    )
+    assert (
+        benchmark._validate_authoritative_bindings(
+            document, artifact_path=EXPECTED_ARTIFACT, require_commitment=True
+        )
+        == benchmark.LOAD_ARTIFACT_GUARANTEE
+    )
+
+
+def test_load_artifact_refuses_a_binding_that_did_not_reach_its_documented_guarantee(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A future edit that drops the companion binding fails the load, not the docstring."""
+
+    monkeypatch.setattr(
+        benchmark,
+        "_validate_authoritative_bindings",
+        lambda *_args, **_kwargs: benchmark.GUARANTEE_REPOSITORY_BOUND,
+    )
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._GUARANTEE_ERROR)
+    ):
+        benchmark.load_artifact()
