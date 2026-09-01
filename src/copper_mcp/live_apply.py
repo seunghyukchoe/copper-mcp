@@ -38,6 +38,7 @@ from copper_mcp.apply.tokens import ApplyTokenAuthority, ApplyTokenError, LiveAp
 from copper_mcp.board_ir import NetClass, PointNM
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import (
+    VERIFIED_API_COMPATIBILITY,
     KicadIpcConfigurationError,
     KicadIpcConnectionError,
     KicadIpcDeadlineError,
@@ -589,6 +590,23 @@ def apply_live_candidate(
         )
 
     board_revision = captured.observation.board_digest
+    # ADR-0128 tiers the window by what a surface can do, not by what it reads. A *read* across
+    # an unverified binding is safe to publish because it carries the verdict that says so, and
+    # its worst case is an incomplete answer. A mutation has no such disclosure to hide behind:
+    # the board changes either way, and "the write was issued against an API this build never
+    # verified" is not a caveat a caller can act on afterwards. So apply takes the strict half of
+    # the window -- an exact version match -- and refuses every acceptance the read paths allow.
+    if captured.observation.compatibility not in VERIFIED_API_COMPATIBILITY:
+        return _refuse(
+            LiveApplyFailureCode.UNSUPPORTED_KICAD_VERSION,
+            "live apply requires a verified KiCad API binding; this session is "
+            f"{captured.observation.compatibility} "
+            f"(KiCad {captured.observation.kicad_version} against API "
+            f"{captured.observation.api_version})",
+            request=request,
+            verified=verified,
+            board_revision_before=board_revision,
+        )
     captured_session = captured.session_revision
     if captured_session is None or not hmac.compare_digest(
         captured_session, request.expect_session_revision

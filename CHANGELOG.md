@@ -8,6 +8,34 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- The live KiCad IPC surfaces now bind to a **declared major-version compatibility window**
+  instead of consuming `kicad-python`'s `check_version()` boolean, and an acceptance is
+  structurally distinguishable from a proof. `B-138` measured three of four live surfaces
+  refusing a real KiCad 10.0.5 editor; reading the binding's source found the other half, which
+  is that `check_version()` is **asymmetric** — it raises only for a strictly newer editor and
+  returns `True` for every older one, so the shipped surface refused a KiCad one patch ahead of
+  its binding while silently reporting `compatible` for one two majors behind it. The window is
+  the major version because that is where KiCad's own guarantees lapse: within a major, new
+  releases "will not modify the meaning of existing messages and fields" and deprecated fields
+  survive at least one major. `compatible` now means an **exact** `major.minor.patch` match and
+  nothing weaker, because KiCad annotates added API fields `// Since: 9.0.1` and ships new IPC
+  commands in patch releases. Inside the window every pair is observed and typed
+  `future_api_unverified` or `legacy_api_unverified`; across a major boundary the surface refuses
+  and names both versions. Read surfaces accept all three verdicts; **live apply requires a
+  verified binding** and refuses both acceptances. `allow_future_api` is **retired** rather than
+  re-defaulted — it was the direct cause of `inspect_live_editor_context` refusing an editor
+  `inspect_live_board` could observe, and removing it makes that bug class impossible. A
+  capability probe was refused on measurement: KiCad's command protos carry no feature-discovery
+  message, and `kipy` collapses the status codes that would substitute for one
+  (`ADR-0128`, `D-236`, `R-186`, `B-138`, issue #68).
+- `object_counts["nets"]` on the live observation is renamed **`net_declarations`**. It counts
+  top-level `(net …)` declarations, which a KiCad 10 document does not carry — `B-138` measured
+  it reporting `0` against an editor holding 15 nets. The count was always correct and its name
+  was not. **No derived cardinality replaces it**: counting distinct net names off item
+  references would be an unverified parity claim against `Board.get_nets()`. Board IR's own
+  `object_counts["nets"]` is a genuine net collection and is unchanged (`ADR-0128`, `D-236`).
+
+
 - Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
   request's own lattice origin while retaining one common signal layer and grid step. Exact legacy
   two-pad identities remain pinned; malformed 1/33-pad requests refuse before router work; complete
@@ -121,6 +149,19 @@ All notable changes are documented here. The format follows
   No artifact or benchmark row is added, and this does not accept a zone field or change any
   production, schema, MCP, CLI, routing, DRC, apply, or board-write behavior (`D-232`, `R-183`,
   [issue #231](https://github.com/seunghyukchoe/copper-mcp/issues/231)).
+
+### Added
+
+- Live observations and the live editor context now publish
+  **`document_binding: in_memory_unsaved_state_unobservable`**, stating that `board_digest` binds
+  KiCad's in-memory document and never a file on disk. It is deliberately **not** a dirty flag —
+  `kipy` 0.7.1's `Board` exposes no modified state, so a save-state field would be fabricated —
+  and it makes `ADR-0074`'s existing refusal to bind a live read to the on-disk file legible to a
+  caller. `B-138` measured the gap it names: 165,571 live bytes against 166,070 on disk
+  (`ADR-0128`, `D-236`).
+- The live editor context now publishes `kicad_version`, `api_version` and `compatibility`,
+  which it previously computed and discarded. Both live contracts move to schema `0.2.0`
+  (`ADR-0128`, `ADR-0105`, `D-236`).
 
 ### Fixed
 

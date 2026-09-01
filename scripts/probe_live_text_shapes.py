@@ -200,7 +200,7 @@ def bind_live_revision(settings: Settings) -> dict[str, str]:
     that reopened the same unmodified file.
     """
 
-    observation = inspect_live_board(settings, allow_future_api=True, timeout_ms=_TIMEOUT_MS)
+    observation = inspect_live_board(settings, timeout_ms=_TIMEOUT_MS)
     return {
         "board_digest": observation.board_digest,
         "session_revision": observation.session_revision or "unavailable",
@@ -279,16 +279,19 @@ def _copper_mcp_surfaces(settings: Settings, budget: Budget) -> dict[str, Any]:
             "message": str(error),
         }
 
-    # 2. The same surface through the documented, deliberately non-MCP development escape hatch.
+    # 2. The same surface again.  Before ADR-0128 this second probe used the non-MCP
+    #    `allow_future_api` escape hatch and was the ONLY surface that observed anything.
+    #    The flag is retired: the declared window now governs both probes, so 1 and 2 differ
+    #    only in that this one is charged against the budget after the first has run.
     budget.check("the default observation surface", "three remaining live surfaces")
     try:
-        observation = inspect_live_board(settings, allow_future_api=True, timeout_ms=_TIMEOUT_MS)
-        surfaces["inspect_live_board_allow_future_api"] = {
+        observation = inspect_live_board(settings, timeout_ms=_TIMEOUT_MS)
+        surfaces["inspect_live_board_policy_window"] = {
             "verdict": "observed",
             "observation": observation.to_dict(),
         }
     except KicadIpcError as error:
-        surfaces["inspect_live_board_allow_future_api"] = {
+        surfaces["inspect_live_board_policy_window"] = {
             "verdict": "refused",
             "error_type": type(error).__name__,
             "message": str(error),
@@ -305,10 +308,8 @@ def _copper_mcp_surfaces(settings: Settings, budget: Budget) -> dict[str, Any]:
     # 4. The editor-context surface: internal capture, then the MCP-shaped compare-and-swap.
     budget.check("observation and oracle surfaces", "the editor-context surface")
     try:
-        snapshot = capture_live_editor_context(
-            settings, allow_future_api=True, timeout_ms=_TIMEOUT_MS
-        )
-        surfaces["capture_live_editor_context_allow_future_api"] = {
+        snapshot = capture_live_editor_context(settings, timeout_ms=_TIMEOUT_MS)
+        surfaces["capture_live_editor_context_policy_window"] = {
             "verdict": "observed",
             "board_revision": snapshot.board_digest,
             "board_bytes": snapshot.board_bytes,
@@ -318,7 +319,7 @@ def _copper_mcp_surfaces(settings: Settings, budget: Budget) -> dict[str, Any]:
         }
         revision = snapshot.board_digest
     except KicadIpcError as error:
-        surfaces["capture_live_editor_context_allow_future_api"] = {
+        surfaces["capture_live_editor_context_policy_window"] = {
             "verdict": "refused",
             "error_type": type(error).__name__,
             "message": str(error),

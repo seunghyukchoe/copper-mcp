@@ -19,6 +19,7 @@ from copper_mcp.adapters import parse_kicad_bytes
 from copper_mcp.circuit_scene import _observe_board_scene, parse_circuit_scene_request
 from copper_mcp.config import ConfigurationError, Settings
 from copper_mcp.kicad_ipc import (
+    ACCEPTED_API_COMPATIBILITY,
     KicadIpcConfigurationError,
     KicadIpcConnectionError,
     KicadIpcDeadlineError,
@@ -77,6 +78,11 @@ class LiveIpcOracleResult:
             raise ValueError("live IPC oracle capability is invalid")
         if not self.read_only or self.schema_version != LIVE_IPC_ORACLE_SCHEMA_VERSION:
             raise ValueError("live IPC oracle must remain read-only")
+        # The oracle republishes the observation's verdict, so it must be one the observation
+        # boundary could actually have produced. Without this, a widened verdict vocabulary
+        # would reach callers through the oracle without passing any acceptance check.
+        if self.compatibility is not None and self.compatibility not in ACCEPTED_API_COMPATIBILITY:
+            raise ValueError("live IPC oracle compatibility is invalid")
         digests = (
             self.board_digest,
             self.board_ir_snapshot_digest,

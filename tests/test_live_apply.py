@@ -57,10 +57,19 @@ def _fake_kicad_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(kicad_ipc, "_SESSION_REVISION_SALT", b"\x42" * 32)
 
 
+class FutureVersionError(Exception):
+    """Stands in for ``kipy.errors.FutureVersionError``.
+
+    The name is load-bearing: the adapter matches this exception by class *name* because
+    ``kicad-python`` is an optional dependency that cannot be imported for an isinstance check.
+    """
+
+
 class _FakeVersion:
-    major = 10
-    minor = 0
-    patch = 5
+    def __init__(self, major: int = 10, minor: int = 0, patch: int = 5) -> None:
+        self.major = major
+        self.minor = minor
+        self.patch = patch
 
 
 class _FakeLiveBoard:
@@ -84,28 +93,44 @@ class _FakeKipyClient:
 
 
 class _FakeLiveKiCad:
-    def __init__(self, source: str, instance_token: str = EDITOR_INSTANCE_TOKEN) -> None:
+    def __init__(
+        self,
+        source: str,
+        instance_token: str = EDITOR_INSTANCE_TOKEN,
+        kicad: tuple[int, int, int] = (10, 0, 5),
+        api: tuple[int, int, int] = (10, 0, 5),
+    ) -> None:
         self._board = _FakeLiveBoard(source)
         self._client = _FakeKipyClient(instance_token)
+        self._kicad = kicad
+        self._api = api
 
     def get_version(self) -> _FakeVersion:
-        return _FakeVersion()
+        return _FakeVersion(*self._kicad)
 
     def get_api_version(self) -> _FakeVersion:
-        return _FakeVersion()
+        return _FakeVersion(*self._api)
 
     def check_version(self) -> bool:
+        # Reproduces kipy 0.7.1's asymmetry: raises only for a strictly newer editor.
+        if self._kicad > self._api:
+            raise FutureVersionError()
         return True
 
     def get_board(self) -> _FakeLiveBoard:
         return self._board
 
 
-def _client_factory(source: bytes, instance_token: str = EDITOR_INSTANCE_TOKEN) -> Any:
+def _client_factory(
+    source: bytes,
+    instance_token: str = EDITOR_INSTANCE_TOKEN,
+    kicad: tuple[int, int, int] = (10, 0, 5),
+    api: tuple[int, int, int] = (10, 0, 5),
+) -> Any:
     text = source.decode("utf-8")
 
     def factory(**_: object) -> _FakeLiveKiCad:
-        return _FakeLiveKiCad(text, instance_token)
+        return _FakeLiveKiCad(text, instance_token, kicad, api)
 
     return factory
 
@@ -193,6 +218,8 @@ def _apply(
     authority: ApplyTokenAuthority,
     settings: Settings | None = None,
     source: bytes | None = None,
+    kicad: tuple[int, int, int] = (10, 0, 5),
+    api: tuple[int, int, int] = (10, 0, 5),
 ) -> dict[str, Any]:
     live_source = source if source is not None else FIXTURE.read_bytes()
     return dict(
@@ -200,9 +227,63 @@ def _apply(
             request,
             settings if settings is not None else _enabled(tmp_path),
             authority,
-            client_factory=_client_factory(live_source),
+            client_factory=_client_factory(live_source, kicad=kicad, api=api),
         )
     )
+
+
+@pytest.mark.parametrize(
+    ("kicad", "api", "verdict"),
+    [
+        ((10, 0, 5), (10, 0, 1), "future_api_unverified"),
+        ((10, 0, 0), (10, 0, 1), "legacy_api_unverified"),
+    ],
+)
+def test_live_apply_refuses_every_acceptance_the_read_paths_allow(
+    tmp_path: Path,
+    kicad: tuple[int, int, int],
+    api: tuple[int, int, int],
+    verdict: str,
+) -> None:
+    """ADR-0128 tiers the window: a read may publish an unverified verdict, a mutation may not.
+
+    Both pairs here are *observable* on every read surface. Apply refuses them anyway, because
+    a caller cannot act on a disclosure attached to a board that has already changed.
+    """
+
+    authority = ApplyTokenAuthority()
+    result = _apply(
+        tmp_path,
+        _authorized_request(_preview(tmp_path, authority)),
+        authority,
+        kicad=kicad,
+        api=api,
+    )
+    diagnostic = result["diagnostic"]
+    assert isinstance(diagnostic, dict)
+    assert diagnostic["code"] == LiveApplyFailureCode.UNSUPPORTED_KICAD_VERSION.value
+    assert verdict in diagnostic["message"]
+    assert ".".join(str(part) for part in kicad) in diagnostic["message"]
+    assert ".".join(str(part) for part in api) in diagnostic["message"]
+    assert result["status"] == "refused"
+    assert result["mutation_attempted"] is False
+    assert result["board_revision_after"] is None
+
+
+def test_live_apply_still_reaches_its_boundary_on_a_verified_binding(tmp_path: Path) -> None:
+    """Not vacuous: the version gate refuses drift and nothing else."""
+
+    authority = ApplyTokenAuthority()
+    result = _apply(
+        tmp_path,
+        _authorized_request(_preview(tmp_path, authority)),
+        authority,
+        kicad=(10, 0, 1),
+        api=(10, 0, 1),
+    )
+    diagnostic = result["diagnostic"]
+    assert isinstance(diagnostic, dict)
+    assert diagnostic["code"] == LiveApplyFailureCode.CAPABILITY_NOT_IMPLEMENTED.value
 
 
 # --------------------------------------------------------------------------------------------

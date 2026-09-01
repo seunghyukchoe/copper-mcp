@@ -386,11 +386,15 @@ class SourceToBoardParityToolResponse(_ClosedContract):
 class LiveBoardObservationToolResponse(_ClosedContract):
     """Redacted, read-only summary returned by the optional KiCad IPC observer."""
 
-    schema_version: Literal["0.1.0"]
+    schema_version: Literal["0.2.0"]
     source: Literal["kicad-ipc-live"]
     kicad_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
     api_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
-    compatibility: Literal["compatible", "future_api_unverified"]
+    #: Exactly one of these means the binding proved compatibility. ``compatible`` requires an
+    #: exact version match; the other two are acceptances under ADR-0128's declared window and
+    #: name the direction of the drift. A caller that collapses them has discarded the only
+    #: signal distinguishing a verified read from an unverified one.
+    compatibility: Literal["compatible", "future_api_unverified", "legacy_api_unverified"]
     board_digest: Digest
     board_bytes: Annotated[int, Field(ge=1, le=64 * 1024 * 1024)]
     object_counts: Annotated[
@@ -401,6 +405,9 @@ class LiveBoardObservationToolResponse(_ClosedContract):
         Field(max_length=32),
     ]
     socket_kind: Literal["default-local-ipc", "configured-local-ipc"]
+    #: ``board_digest`` is the digest of KiCad's in-memory document, never of any file on disk.
+    #: The API exposes no dirty flag, so this states the binding and makes no save-state claim.
+    document_binding: Literal["in_memory_unsaved_state_unobservable"]
     session_revision: SessionRevision | None
     read_only: Literal[True]
 
@@ -465,7 +472,7 @@ class LiveEditorContextToolResponse(_ClosedContract):
     """Read-only active-layer and selection context bound to one live revision."""
 
     schema_: Literal["copper.live-editor-context"] = Field(alias="schema")
-    schema_version: Literal["0.1.0"]
+    schema_version: Literal["0.2.0"]
     source: Literal["kicad-ipc-live"]
     board_revision: Digest
     snapshot_digest: Digest
@@ -473,6 +480,13 @@ class LiveEditorContextToolResponse(_ClosedContract):
     active_layer: LiveEditorLayerContract
     selection: Annotated[list[LiveEditorSelectionContract], Field(max_length=256)]
     selection_count: Annotated[int, Field(ge=0, le=256)]
+    kicad_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
+    api_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
+    #: Same three-member vocabulary as the board observation, and required for the same reason:
+    #: this surface reads a live editor, so a caller must be able to tell a verified read from
+    #: an accepted-unverified one here too.
+    compatibility: Literal["compatible", "future_api_unverified", "legacy_api_unverified"]
+    document_binding: Literal["in_memory_unsaved_state_unobservable"]
     read_only: Literal[True]
 
 

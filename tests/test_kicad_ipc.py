@@ -138,18 +138,30 @@ class _Board:
 
 
 class _KiCad:
-    def __init__(self, board: _Board | None = None, future: bool = False) -> None:
+    def __init__(
+        self,
+        board: _Board | None = None,
+        future: bool = False,
+        kicad: tuple[int, int, int] = (10, 0, 5),
+        api: tuple[int, int, int] = (10, 0, 5),
+    ) -> None:
         self.board = board or _Board()
         self.future = future
+        self.kicad = kicad
+        self.api = api
 
     def get_version(self) -> _Version:
-        return _Version(10, 0, 5)
+        return _Version(*self.kicad)
 
     def get_api_version(self) -> _Version:
-        return _Version(10, 0, 5)
+        return _Version(*self.api)
 
     def check_version(self) -> bool:
-        if self.future:
+        # Mirrors `kipy.KiCad.check_version` exactly, including its asymmetry: it raises only
+        # when the editor is strictly newer on the (major, minor, patch) tuple, and returns True
+        # for every older editor no matter how far behind. `future=True` forces the raise for
+        # callers that set no explicit version pair.
+        if self.future or self.kicad > self.api:
             raise FutureVersionError()
         return True
 
@@ -271,7 +283,7 @@ class KicadIpcTests(unittest.TestCase):
         self.assertEqual(
             first.board_digest, f"sha256:{hashlib.sha256(_Board().source.encode()).hexdigest()}"
         )
-        self.assertEqual(first.object_counts["nets"], 1)
+        self.assertEqual(first.object_counts["net_declarations"], 1)
         self.assertEqual(first.object_counts["pads"], 0)
         self.assertEqual(first.object_counts["tracks"], 0)
         self.assertEqual(first.socket_kind, "default-local-ipc")
@@ -298,15 +310,16 @@ class KicadIpcTests(unittest.TestCase):
             with self.assertRaises(KicadIpcConfigurationError):
                 inspect_live_board(_settings(), client_factory=lambda **_: _KiCad())
 
-    def test_future_api_is_fail_closed_but_explicit_read_only_probe_can_opt_in(self) -> None:
+    def test_a_future_editor_is_observed_with_a_typed_disclosure_and_no_flag(self) -> None:
+        """ADR-0128: the case B-138 hit. No escape hatch is needed and none exists."""
+
         def factory(**_: object) -> _KiCad:
-            return _KiCad(future=True)
+            return _KiCad(kicad=(10, 0, 5), api=(10, 0, 1), future=True)
 
-        with self.assertRaises(KicadIpcVersionError):
-            inspect_live_board(_settings(), client_factory=factory)
-
-        observation = inspect_live_board(_settings(), client_factory=factory, allow_future_api=True)
+        observation = inspect_live_board(_settings(), client_factory=factory)
         self.assertEqual(observation.compatibility, "future_api_unverified")
+        self.assertEqual(observation.kicad_version, "10.0.5")
+        self.assertEqual(observation.api_version, "10.0.1")
 
     def test_false_version_check_is_fail_closed(self) -> None:
         class FalseVersionKiCad(_KiCad):
@@ -332,7 +345,7 @@ class KicadIpcTests(unittest.TestCase):
                 "dimensions": 1,
                 "footprints": 1,
                 "groups": 1,
-                "nets": 1,
+                "net_declarations": 1,
                 "pads": 1,
                 "shapes": 2,
                 "text": 1,
@@ -816,7 +829,15 @@ class LiveObservationRedactionTests(unittest.TestCase):
         """Guard the guard: a fixture whose objects were never counted proves nothing."""
 
         counts = self._observe()["object_counts"]
-        for name in ("nets", "footprints", "pads", "text", "zones", "groups", "vias"):
+        for name in (
+            "net_declarations",
+            "footprints",
+            "pads",
+            "text",
+            "zones",
+            "groups",
+            "vias",
+        ):
             with self.subTest(kind=name):
                 self.assertGreaterEqual(counts[name], 1, f"{name} was never read from the fixture")
 
