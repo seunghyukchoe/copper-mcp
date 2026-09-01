@@ -16,7 +16,7 @@ All notable changes are documented here. The format follows
   both arms. The control completes **0 boards / 0 nets**; treatment completes **1 board / 2 nets**
   with one published repair and one `completed_with_repair` outcome, a measured differential of
   **+1 board / +2 nets / +7,432 physical checks / +43,750,000 nm wire**. Mean arm times are
-  descriptive (**38.540s** control, **37.416s** treatment), not a performance claim. Per-reason
+  descriptive (**41.497s** control, **42.657s** treatment), not a performance claim. Per-reason
   refusal/outcome reconciliation is validated independently. The semantic guards require each
   arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
   `boards_unable_to_form_a_two_request_envelope` count (**4**); a disabled control
@@ -28,19 +28,19 @@ All notable changes are documented here. The format follows
   source commit and still accepts later historical `HEAD` movement without replacing that binding.
   The closed `total_ripups` bound is `70 * (8 - 1) = 490`; 490 is accepted and 491 is
   mutation-killed. The closed aggregate wire bound is `70 * 62,500,000,000 = 4,375,000,000,000 nm`;
-  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **151/151** focused tests and **59/59** killed
+  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **174/174** focused tests and **71/71** killed
   evidence-contract mutants with zero survivors or control failures; this is separate from the
   **35/35** capability mutants for #238. The
   self-digested report and companion commitment bind source
-  `d76a465e2e18e906b70f98724d20bbd5111b87ad`, runner
-  `sha256:e266dd889b97a4597188cabd9962d71d3ddb52e7a1a6135e7816bdd88a5711a7`, configuration
-  `sha256:227890b981528286b7d443d8ceab0c65730140d15860d531b3869e444cf86d9e`, whole-metrics
+  `74b5a5848abe463e69f0de396b905f13ac381a85`, runner
+  `sha256:be74ca9b2ea2b73c8973e1a797d180afd0320adca6f9f569fa818e22e3695c53`, configuration
+  `sha256:17442fe19c282ac85ba7786b580bbdd98e73c2660dc0eaa294aca67c967c1f60`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:bd0d47f660d77c9d273314d8599c06bc385f862aae9a543998c61fa2596ac7f0`, report raw
-  `sha256:086904a00e3f74100193a3a641e5e4205f791128ad136ab81f072b8685ff6eef`, commitment run
-  `sha256:3225f6b4e325e945955805ba06c1d1cc6610e623f60b57eb5e64ec05f896b712`, commitment raw
-  `sha256:a6f95d366c329eb9ecc9da2594678778241093c0de57d736433543df8010b6a1`, and mutation spec
-  `sha256:ef1254c11aeeb3149252d57848be86e839df1a1ef7fee110e76ab7fd041b4bc1`. The companion
+  `sha256:ff291357727d8474fcd7cac86a6a93efff96ab343f6de30b036dcc45eea34879`, report raw
+  `sha256:c9fffca236946caa474864ac1f5f4b207aeca08e0a8fce6a6f435906d3ad6f1c`, commitment run
+  `sha256:830ab5d15bf80fbb9c219bd4e63758cd6c35617e3e39a3ac06e1efeb50025a10`, commitment raw
+  `sha256:25392b4a9aed2f52da77da17a2a8168a0f571bf142a2826fa9dba09d95edba33`, and mutation spec
+  `sha256:affa48803ee8a0aa817658b6ad32cddbc80abe2bbc70d95c11acf131e529fc4e`. The companion
   commitment pins exact control and treatment arm totals plus the full differential, while the
   whole-metrics digest prevents a self-consistent re-signing from changing any other metric. This is a
   deterministic completion differential, not held-out routing quality, KiCad DRC, electrical,
@@ -51,6 +51,24 @@ All notable changes are documented here. The format follows
   links, open the final exact regular file nonblocking, and use a 64 KiB max+1 probe before
   decode/JSON. FIFO and other special files refuse with fixed, non-echoing diagnostics, recursion
   fails closed, and no path is exposed; this is not a quality, physics or generalisation claim.
+- B-141's self-digest validator now authenticates the decomposition, the denominators and the
+  provenance of what it publishes, not only the totals. Every published breakdown declares
+  which run-outcome codes each of its buckets stands for; the declaration is checked for
+  total, disjoint coverage and each bucket is reconciled against the codes it partitions, in
+  the report **and** in the companion, so an item moved between buckets with the totals
+  patched up is refused and a code that lands in no bucket at all fails the run instead of
+  being published as a quiet zero. The `total_overflow_units` ceiling is derived as
+  `70 * 250,000 = 17,500,000` from the submitted nets and the grid each may occupy, replacing
+  `admitted * iterations * submitted**2` = **627,200**, which multiplied two population-wide
+  aggregates by a per-board repeat count and was small enough to refuse a truthful
+  measurement from one dense board. `date_utc` is derived from the committer date of the
+  recorded revision and checked against Git on authoritative load, rather than pinned as a
+  literal. The commitment's arm key set is derived from the report's own arm schema, so
+  `total_physical_checks`, `total_wire_length_nm`, every breakdown and every repair-work
+  counter are pinned by name, and a claimed aggregate added later without a pin fails the
+  run. The republished evidence reproduced the retired artifact's whole-metrics digest
+  `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly: the
+  measurements were re-bound, not re-measured.
 - Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
   request's own lattice origin while retaining one common signal layer and grid step. Exact legacy
   two-pad identities remain pinned; malformed 1/33-pad requests refuse before router work; complete

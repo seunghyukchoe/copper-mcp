@@ -208,8 +208,8 @@
     {
       "id": "B141-SEM02-refusal-reasons-must-match-outcomes",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "_REFUSAL_OUTCOME_PARTITION: tuple[tuple[str, tuple[str, ...]], ...] = tuple(\n    (code, (code,)) for code in REFUSAL_TAXONOMY\n)\n",
-      "replacement": "_REFUSAL_OUTCOME_PARTITION: tuple[tuple[str, tuple[str, ...]], ...] = tuple(\n    (code, () if code == \"no_path_search\" else (code,)) for code in REFUSAL_TAXONOMY\n)\n",
+      "anchor": "    for name, partition in _ARM_BREAKDOWN_PARTITIONS.items():\n        message = _PARTITION_RECONCILIATION_ERRORS[name]\n",
+      "replacement": "    for name, partition in _ARM_BREAKDOWN_PARTITIONS.items():\n        if name == \"refusal_breakdown\":\n            continue\n        message = _PARTITION_RECONCILIATION_ERRORS[name]\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_same_total_refusal_reason_swap_is_rejected"
@@ -284,7 +284,7 @@
       "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"the B-141 metrics digest pin is malformed\")\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_exact_pins_reject_non_headline_metric_without_metrics_digest_recompute"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_exact_pins_reject_repair_work_detail_by_name_and_by_metrics_digest"
       ]
     },
     {
@@ -621,7 +621,7 @@
       "replacement": "        if False:\n            raise NegotiatedDifferentialError(_PARTITION_DECLARATION_ERROR)\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_a_partition_that_stops_covering_its_taxonomy_fails_the_run"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_declared_bucket_names_must_be_the_published_taxonomy"
       ]
     },
     {

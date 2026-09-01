@@ -2728,3 +2728,32 @@ def test_authoritative_load_rejects_a_self_resigned_evidence_date() -> None:
         benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._EVIDENCE_DATE_ERROR)
     ):
         benchmark._validate_authoritative_bindings(document)
+
+
+def test_declared_bucket_names_must_be_the_published_taxonomy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bucket the published taxonomy does not contain is a declaration error, not a zero."""
+
+    partition = benchmark._ARM_BREAKDOWN_PARTITIONS["status_breakdown"]
+    bucket = partition.buckets[0][0]
+    # Every run-outcome code stays assigned exactly once, so the totality check cannot object and
+    # only the bucket-name check can: the declaration now names a status the report cannot publish.
+    renamed = tuple(
+        ("a_status_the_report_cannot_publish" if name == bucket else name, assigned)
+        for name, assigned in partition.buckets
+    )
+    monkeypatch.setitem(
+        benchmark._ARM_BREAKDOWN_PARTITIONS,
+        "status_breakdown",
+        benchmark._DeclaredPartition(buckets=renamed, total=partition.total),
+    )
+    assert {code for _bucket, codes in renamed for code in codes} == set(
+        benchmark.RUN_OUTCOME_TAXONOMY
+    )
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._PARTITION_DECLARATION_ERROR),
+    ):
+        benchmark._assert_declared_partitions()
