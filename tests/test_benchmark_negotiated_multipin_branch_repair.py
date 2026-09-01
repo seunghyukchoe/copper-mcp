@@ -1114,7 +1114,9 @@ def test_authoritative_load_rejects_a_self_resigned_source_without_its_pinned_ru
     _retag_commitment(commitment)
 
     # Both documents remain independently well-formed and self-consistent.  The authoritative
-    # check must reject because this revision cannot provide the report's pinned runner bytes.
+    # check must still reject: a revision nobody can resolve cannot make anything authoritative.
+    # The refusal names absence rather than alleging a runner mismatch nobody looked for -- this
+    # revision names no object, so no runner blob was ever compared against it.
     benchmark.validate_report(tampered)
     benchmark.validate_commitment(commitment)
     monkeypatch.setattr(benchmark, "load_b140_artifact", lambda: {})
@@ -1129,7 +1131,9 @@ def test_authoritative_load_rejects_a_self_resigned_source_without_its_pinned_ru
             tampered["population_binding"]["corpus_manifest_sha256"],
         ),
     )
-    with pytest.raises(benchmark.NegotiatedDifferentialError, match="source commit/runner"):
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
+    ):
         benchmark._validate_authoritative_bindings(tampered)
 
 
@@ -2588,9 +2592,10 @@ def test_evidence_date_must_be_the_recorded_commits_utc_date() -> None:
         ):
             benchmark._validate_evidence_date_binding({**document, "date_utc": wrong})
 
-    # A well-formed hex that names no commit cannot supply a date at all.
+    # A well-formed hex that names no commit cannot supply a date at all -- and is reported as
+    # absent, not as a disagreement, because no date was ever read to disagree with.
     with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._EVIDENCE_DATE_ERROR)
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
     ):
         benchmark._validate_evidence_date_binding({**document, "source_commit": "0" * 40})
 
@@ -2925,7 +2930,9 @@ def test_a_present_commit_with_a_wrong_date_keeps_the_tampering_refusal() -> Non
         benchmark._validate_evidence_date_binding(mismatched)
 
 
-def test_an_absent_commit_is_never_reported_as_a_runner_binding_failure() -> None:
+def test_an_absent_commit_is_never_reported_as_a_runner_binding_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The same conflation lived in the runner binding and is separated there too."""
 
     document = _artifact()
@@ -2939,12 +2946,15 @@ def test_an_absent_commit_is_never_reported_as_a_runner_binding_failure() -> Non
         benchmark._validate_source_commit_runner_binding(document, allow_absent_commit=True)
         is False
     )
-    # A commit that IS here and does not carry the bound runner still fails as a binding failure.
+
+    # The other branch, without depending on any commit's reachability: point the binding at a
+    # different tracked file that HEAD certainly carries.  The revision resolves, the blob is
+    # fetched, and its digest is not the pinned runner's -- a real binding failure, named as one.
     present = _artifact()
-    present["source_commit"] = benchmark.B088_SOURCE_COMMIT
-    if benchmark._resolve_recorded_commit(benchmark.B088_SOURCE_COMMIT) is not None:
-        with pytest.raises(benchmark.NegotiatedDifferentialError, match="binding could not be"):
-            benchmark._validate_source_commit_runner_binding(present)
+    present["source_commit"] = benchmark._git_state()[0]
+    monkeypatch.setattr(benchmark, "SCRIPT_PATH", "scripts/mutation_harness.py")
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="source commit/runner"):
+        benchmark._validate_source_commit_runner_binding(present)
 
 
 def test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request() -> None:
