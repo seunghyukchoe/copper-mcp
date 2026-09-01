@@ -8,7 +8,10 @@
   [ADR-0117](0117-local-exact-repair-is-an-opt-in-verified-transaction.md),
   [ADR-0126](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md),
   [D-235](../ledgers/decision-ledger.md), [R-185](../ledgers/risk-register.md),
-  [SEC-171](../ledgers/security-ledger.md), and [B-140](../ledgers/benchmark-ledger.md)
+  [SEC-171](../ledgers/security-ledger.md), [B-140](../ledgers/benchmark-ledger.md), and the
+  B-141 differential records [D-236](../ledgers/decision-ledger.md),
+  [R-186](../ledgers/risk-register.md), [SEC-173](../ledgers/security-ledger.md),
+  [B-141](../ledgers/benchmark-ledger.md)
 
 ## Context
 
@@ -112,6 +115,18 @@ non-echoing; no path, coordinate, pad, net or board content is added to a result
 - B-140 motivated this capability but did not run it. Issue #90 remains open until the exact B-140
   population is replayed with repair enabled and a predeclared held-out differential demonstrates
   deterministic improvement without weakening any work or physical gate.
+- B-141 is that repair-enabled replay and records a positive **completion** differential on the
+  exact immutable population: treatment completes one board and two nets where the uninstrumented
+  control completes none. The result is evidence that the private transaction was reached and
+  published once under its existing gates; it is not, by itself, a routing-quality or
+  generalisation result. Per-reason refusal/outcome reconciliation is part of the evidence
+  contract. Its semantic guards additionally forbid a disabled control (`repair_settings: null`)
+  from claiming `completed_with_repair`, `repair_published`, or any non-zero repair work, and
+  require all six status categories (`completed`, `no_path`, `partial`, `invalid_request`,
+  `cancelled`, `not_run`) to reconcile to the outcome taxonomy. A later checkout or merge-ref
+  movement may load the artifact without replacing its historically recorded source commit. Issue
+  #90 therefore remains open for human review and calibration of the benchmark interpretation and
+  for any further held-out quality decision.
 
 ## Evidence and limits
 
@@ -146,6 +161,55 @@ successful untouched-work totals or evidence.
 
 This is contract and synthetic capability evidence, not held-out routing-quality evidence. It is
 not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor or hardware evidence.
+
+B-141 then exercised the production runner's closed differential contract over the exact B-140
+population. The two-arm run used Python 3.12.13 on Darwin/arm64, two repetitions, and an
+uninstrumented control with `repair_settings: null` beside treatment using the default bounded
+repair settings. The report is self-digested and the companion commitment independently binds the
+source commit, runner bytes, configuration, artifact bytes, and exact corpus population. It
+contains no board, net, candidate, path or geometry payload. Per-reason refusal/outcome
+reconciliation is independently checked. The semantic guards require each arm's
+`outcome_breakdown["envelope_construction"]` to equal the fixed population's
+`boards_unable_to_form_a_two_request_envelope` count (**4**); forbid the disabled control from
+claiming `completed_with_repair`, `repair_published`, or any non-zero repair-work field; and
+require all six status categories (`completed`, `no_path`, `partial`, `invalid_request`,
+`cancelled`, `not_run`) to reconcile to the outcome taxonomy. The loader accepts the record after a
+merge-ref or later checkout moves `HEAD` while retaining the historical source binding. The source
+guard verifies the actual Git runner blob SHA at the declared source commit and accepts later
+historical `HEAD` movement without replacing that binding. The closed `total_ripups` bound is
+`70 * (8 - 1) = 490`; 490 is accepted and 491 is mutation-killed. The closed aggregate wire bound is
+`70 * 62,500,000,000 = 4,375,000,000,000 nm`; the exact bound is accepted and the `+1` boundary
+is mutation-killed. Focused validation passes **187/187** tests and the B-141 contract mutation
+harness kills **78/78** mutants with
+zero survivors or control failures; the **35/35** capability mutant result above belongs to #238 and
+is not counted again here. The measured population is **20 offered/imported, 16 admitted,
+4 envelope-refused and 70 submitted**. Control is **0 boards / 0 nets**, while treatment is
+**1 board / 2 nets** with one published repair and one `completed_with_repair`; the differential is
+**+1 / +2 / +7,432 physical checks / +43,750,000 nm wire**. The exact evidence pins are: source
+`b7c71d4d643df155c7bdcee5bac25e7d943b7031`; runner
+`sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`; configuration
+`sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`; whole-metrics digest
+`sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`; report raw
+`sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c` with run
+`sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3`; commitment raw
+`sha256:129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9` with run
+`sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397`; and mutation spec
+`sha256:e1f4a225f963385cba00af45109d0d8ae0a22ef228787c2b7e87707cf8108c85`. Mean arm timings
+of 40.574s and 41.039s are descriptive only. The commitment pins exact control and treatment
+arm totals plus the full differential, while the whole-metrics digest prevents a self-consistent
+re-signing from changing any other metric. This remains contract and completion evidence,
+not KiCad DRC, electrical, SI/PI/EMC, thermal, DFM, fabrication, apply, editor, hardware,
+general-corpus or human-calibration evidence; #90 remains open.
+
+Closure for caller-selected B-141 report and sidecar reads is bounded: every parent directory is
+opened fd-relatively without following links, and the final component is opened nonblocking and
+must be an exact regular file. A 64 KiB max+1 probe precedes decode/JSON; FIFO and other special
+files refuse with fixed, non-echoing diagnostics, and recursion is mapped to a fail-closed refusal.
+This adds no quality, physics or generalisation claim.
+The corpus closure additionally uses an fd-relative no-follow walk, a 36-entry/20-board closed
+manifest, bounded manifest/license and sample reads, raw-manifest and sample size/digest checks,
+special-file and traversal refusal, declared-size preflight, and per-board and aggregate iteration
+floors.
 
 ## Alternatives considered
 

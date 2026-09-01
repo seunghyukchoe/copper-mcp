@@ -24,6 +24,87 @@ negotiated routing gains bounded multi-pin nets and one-branch local repair behi
 
 ### Changed
 
+- B-141 now records the first repair-enabled differential for the multi-pin branch-repair
+  capability on the exact B-140/B-088 population. The control keeps `repair_settings: null`; the
+  treatment uses the default bounded repair profile; both arms run twice and replay
+  deterministically. All **20** boards are imported/offered, **16** form a constructible envelope,
+  **4** refuse envelope construction, and the same **70** reference-routed nets are submitted to
+  both arms. The control completes **0 boards / 0 nets**; treatment completes **1 board / 2 nets**
+  with one published repair and one `completed_with_repair` outcome, a measured differential of
+  **+1 board / +2 nets / +7,432 physical checks / +43,750,000 nm wire**. Mean arm times are
+  descriptive (**40.574s** control, **41.039s** treatment), not a performance claim. Per-reason
+  refusal/outcome reconciliation is validated independently. The semantic guards require each
+  arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
+  `boards_unable_to_form_a_two_request_envelope` count (**4**); a disabled control
+  (`repair_settings: null`) cannot contain `completed_with_repair`, `repair_published`, or any
+  non-zero repair-work field; and all six status categories (`completed`, `no_path`, `partial`,
+  `invalid_request`, `cancelled`, `not_run`) must reconcile to the outcome taxonomy. The report
+  remains portable when a merge ref moves `HEAD` because its historical source binding is retained
+  rather than replaced. The source guard verifies the actual Git runner blob SHA at the declared
+  source commit and still accepts later historical `HEAD` movement without replacing that binding.
+  The closed `total_ripups` bound is `70 * (8 - 1) = 490`; 490 is accepted and 491 is
+  mutation-killed. The closed aggregate wire bound is `70 * 62,500,000,000 = 4,375,000,000,000 nm`;
+  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **187/187** focused tests and **78/78** killed
+  evidence-contract mutants with zero survivors or control failures; this is separate from the
+  **35/35** capability mutants for #238. The
+  self-digested report and companion commitment bind source
+  `b7c71d4d643df155c7bdcee5bac25e7d943b7031`, runner
+  `sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`, configuration
+  `sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`, whole-metrics
+  digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
+  `sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3`, report raw
+  `sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c`, commitment run
+  `sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397`, commitment raw
+  `sha256:129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9`, and mutation spec
+  `sha256:e1f4a225f963385cba00af45109d0d8ae0a22ef228787c2b7e87707cf8108c85`. The companion
+  commitment pins exact control and treatment arm totals plus the full differential, while the
+  whole-metrics digest prevents a self-consistent re-signing from changing any other metric. This is a
+  deterministic completion differential, not held-out routing quality, KiCad DRC, electrical,
+  SI/PI/EMC, thermal, DFM, fabrication, apply, editor or hardware evidence; #90 remains open for
+  human review/calibration, and the next agent-only direction is #91's private surrogate ranking
+  with authoritative signoff (`ADR-0127`, `D-236`, `R-186`, `SEC-173`, `B-141`).
+  Caller-selected report/sidecar reads walk every parent directory fd-relatively without following
+  links, open the final exact regular file nonblocking, and use a 64 KiB max+1 probe before
+  decode/JSON. FIFO and other special files refuse with fixed, non-echoing diagnostics, recursion
+  fails closed, and no path is exposed; this is not a quality, physics or generalisation claim.
+- B-141's self-digest validator now authenticates the decomposition, the denominators and the
+  provenance of what it publishes, not only the totals. Every published breakdown declares
+  which run-outcome codes each of its buckets stands for; the declaration is checked for
+  total, disjoint coverage and each bucket is reconciled against the codes it partitions, in
+  the report **and** in the companion, so an item moved between buckets with the totals
+  patched up is refused and a code that lands in no bucket at all fails the run instead of
+  being published as a quiet zero. The `total_overflow_units` ceiling is derived as
+  `70 * 250,000 = 17,500,000` from the submitted nets and the grid each may occupy, replacing
+  `admitted * iterations * submitted**2` = **627,200**, which multiplied two population-wide
+  aggregates by a per-board repeat count and was small enough to refuse a truthful
+  measurement from one dense board. `date_utc` is derived from the committer date of the
+  recorded revision and checked against Git on authoritative load, rather than pinned as a
+  literal. The commitment's arm key set is derived from the report's own arm schema, so
+  `total_physical_checks`, `total_wire_length_nm`, every breakdown and every repair-work
+  counter are pinned by name, and a claimed aggregate added later without a pin fails the
+  run. The republished evidence reproduced the retired artifact's whole-metrics digest
+  `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly: the
+  measurements were re-bound, not re-measured.
+- B-141's `validate_report` now returns the guarantee level it actually reached --
+  `shape_only`, `offline` or `repository_bound` -- instead of leaving a caller to read the
+  function name as the whole contract. Its docstring enumerates what is always checked, what
+  `require_semantics` adds, what only `verify_live_bindings` establishes, and what the
+  function never checks at any argument: the evidence date, the recorded source revision and
+  the companion's exact measurement pins are bound to the repository rather than to the
+  document. `_validate_authoritative_bindings` reports `repository_bound` or
+  `companion_bound` depending on whether the companion was consulted, and `load_artifact` --
+  the authoritative entry point -- checks that it reached `LOAD_ARTIFACT_GUARANTEE` rather
+  than asserting so in prose, so an edit that drops the companion binding fails the load.
+  Additive for callers: every existing call site invokes `validate_report` as a statement.
+- B-141's provenance check no longer reports an absent commit as a lying one. A repository
+  that does not contain the recorded revision -- reachable only from an unrelated branch, a
+  shallow checkout, a fresh clone, or a consumer holding another fork's artifact -- has
+  observed no disagreement, and is now told the commit could not be resolved rather than that
+  the evidence date is wrong. The same conflation was present in the runner binding and is
+  separated there too. An unresolvable commit refuses by default, and downgrades to the
+  `offline` guarantee only when a caller passes `allow_absent_source_commit`; `load_artifact`
+  cannot opt in, so the authoritative path stays fail-closed. Found by CI, which refused a
+  valid revision this way.
 - Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
   request's own lattice origin while retaining one common signal layer and grid step. Exact legacy
   two-pad identities remain pinned; malformed 1/33-pad requests refuse before router work; complete

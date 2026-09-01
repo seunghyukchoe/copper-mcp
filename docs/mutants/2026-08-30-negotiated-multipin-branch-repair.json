@@ -1,0 +1,805 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "B141-CTRL01-control-must-not-enable-repair",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        else:\n            settings = None\n",
+      "replacement": "        else:\n            settings = RepairTransactionSettings()\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_control_passes_none_and_never_reaches_the_actual_repair_entry_point"
+      ]
+    },
+    {
+      "id": "B141-TREAT01-treatment-must-wire-repair",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            settings = RepairTransactionSettings()\n",
+      "replacement": "            settings = None\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_treatment_reaches_actual_repair_entry_point_even_when_no_repair_is_published"
+      ]
+    },
+    {
+      "id": "B141-POP01-both-arms-must-match-population",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if (\n        _population_projection(control) != expected_population\n        or _population_projection(treatment) != expected_population\n    ):",
+      "replacement": "    if False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_run_differential_rejects_same_count_arm_population_drift"
+      ]
+    },
+    {
+      "id": "B141-POP02-exact-corpus-membership-must-be-verified",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    _assert_exact_corpus_membership(samples, authority_by_board)\n",
+      "replacement": "    pass\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_prepare_population_refuses_a_duplicate_omitted_board_with_same_population_counts"
+      ]
+    },
+    {
+      "id": "B141-REPLAY01-replay-projection-must-be-equal",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        elif measurement != first:",
+      "replacement": "        elif False:",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_run_differential_refuses_a_second_run_with_a_changed_immutable_projection"
+      ]
+    },
+    {
+      "id": "B141-REPAIR01-repair-classification-requires-final-completion",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if result.status is NegotiatedRoutingStatus.COMPLETED and evidence is not None:\n",
+      "replacement": "    if evidence is not None:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_completed_with_repair_requires_a_final_completed_result"
+      ]
+    },
+    {
+      "id": "B141-DIGEST01-report-self-digest-must-be-checked",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if recorded != _digest(body):\n        raise NegotiatedDifferentialError(\"the B-141 report fails its own self-digest\")",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"the B-141 report fails its own self-digest\")",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_load_artifact_rejects_a_payload_tamper_before_accepting_it"
+      ]
+    },
+    {
+      "id": "B141-DIGEST02-runner-bytes-must-bind-configuration",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        \"runner_sha256\": _file_digest(ROOT / SCRIPT_PATH),",
+      "replacement": "        \"runner_sha256\": \"sha256:\" + \"0\" * 64,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_current_configuration_digest_binds_the_current_runner_bytes"
+      ]
+    },
+    {
+      "id": "B141-BIND01-current-authority-bindings-must-be-checked",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if not isinstance(configuration, dict) or configuration != _configuration():\n",
+      "replacement": "    if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_load_artifact_rejects_a_current_runner_digest_drift"
+      ]
+    },
+    {
+      "id": "B141-SEM01-differential-totals-must-reconcile",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        _validate_differential(metrics, control, treatment)\n",
+      "replacement": "        pass\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_validate_and_load_reject_a_self_consistent_semantic_tamper[delta]"
+      ]
+    },
+    {
+      "id": "B141-SOURCE01-explicit-source-revision-must-be-recorded",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        \"source_commit\": captured_commit,",
+      "replacement": "        \"source_commit\": \"f\" * 40,",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_build_report_preserves_an_explicit_source_revision"
+      ]
+    },
+    {
+      "id": "B141-REPLAY02-repetitions-must-be-exactly-two-before-measurement",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    \"\"\"Run control and treatment repeatedly, comparing complete immutable results.\"\"\"\n\n    if repetitions != BENCHMARK_REPETITIONS:\n        raise ValueError(\"B-141 requires exactly two repetitions\")\n",
+      "replacement": "    \"\"\"Run control and treatment repeatedly, comparing complete immutable results.\"\"\"\n\n    if repetitions > BENCHMARK_REPETITIONS:\n        raise ValueError(\"B-141 requires exactly two repetitions\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_invalid_repetition_counts_fail_before_measurement_or_publication[1]"
+      ]
+    },
+    {
+      "id": "B141-BOUND01-repair-work-must-use-per-published-repair-ceilings",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if any(\n        work[key] > published_repairs * per_repair_bounds[key]\n        for key in _REPAIR_WORK_KEYS\n        if key != \"published_repairs\"\n    ):\n        raise NegotiatedDifferentialError(\"the B-141 repair work exceeds its per-repair bound\")\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"the B-141 repair work exceeds its per-repair bound\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_published_repair_work_accepts_exact_transaction_budget_and_rejects_one_more[repair_local_expanded_states-max_local_expansions]"
+      ]
+    },
+    {
+      "id": "B141-BOUND02-projection-obstacle-ceiling-must-include-validator-checks",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        \"repair_projection_obstacle_checks\": (\n            _DEFAULT_REPAIR_SETTINGS[\"max_attempts\"]\n            * (\n                _DEFAULT_REPAIR_SETTINGS[\"max_projection_cells\"]\n                + _DEFAULT_REPAIR_SETTINGS[\"max_validator_obstacle_checks\"]\n            )\n        ),\n",
+      "replacement": "        \"repair_projection_obstacle_checks\": (\n            _DEFAULT_REPAIR_SETTINGS[\"max_attempts\"]\n            * _DEFAULT_REPAIR_SETTINGS[\"max_projection_cells\"]\n        ),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_published_repair_work_accepts_exact_transaction_budget_and_rejects_one_more[repair_projection_obstacle_checks-projection_plus_obstacles]"
+      ]
+    },
+    {
+      "id": "B141-BOUND03-zero-completion-must-have-zero-nets",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if completed_total == 0:\n        valid_completion_net_range = completed_nets == 0\n",
+      "replacement": "    if completed_total == 0:\n        valid_completion_net_range = True\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_completion_nets_must_be_zero_when_no_board_completes"
+      ]
+    },
+    {
+      "id": "B141-COMMIT01-authoritative-commitment-binding-must-not-be-bypassed",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    commitment = load_commitment()\n    if (\n        commitment[\"artifact_path\"] != DEFAULT_OUTPUT.relative_to(ROOT).as_posix()\n        or commitment[\"artifact_sha256\"] != _bounded_file_digest(candidate, label=\"B-141\")\n        or commitment[\"artifact_run_id\"] != document.get(\"run_id\")\n        or commitment[\"source_commit\"] != document.get(\"source_commit\")\n        or commitment[\"runner_sha256\"] != configuration.get(\"runner_sha256\")\n        or commitment[\"configuration_sha256\"] != configuration.get(\"configuration_sha256\")\n        or commitment[\"metrics_sha256\"] != _digest(document.get(\"metrics\"))\n        or commitment[\"repetitions\"] != BENCHMARK_REPETITIONS\n        or commitment[\"population\"] != _B141_POPULATION_EXPECTED\n    ):\n        raise NegotiatedDifferentialError(\"the B-141 commitment binding drifted\")\n",
+      "replacement": "    commitment = load_commitment()\n    if False:\n        raise NegotiatedDifferentialError(\"the B-141 commitment binding drifted\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_load_rejects_tampered_commitment_fields[artifact_sha256]"
+      ]
+    },
+    {
+      "id": "B141-COMMIT02-sidecar-failure-must-rollback-new-artifact",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            except Exception:\n                _remove_created_file(output, output_signature)\n                raise\n",
+      "replacement": "            except Exception:\n                pass\n                raise\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_second_commitment_write_race_rolls_back_only_the_new_artifact"
+      ]
+    },
+    {
+      "id": "B141-SHAPE01-public-report-objects-must-be-closed",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    document = _validate_report_shape(document)\n",
+      "replacement": "    document = document\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_extra_and_missing_keys_are_rejected_in_every_public_object"
+      ]
+    },
+    {
+      "id": "B141-SHAPE02-public-static-values-must-be-canonical",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        or record[\"repair_work_definition\"] != REPAIR_WORK_DEFINITION\n",
+      "replacement": "        or False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_public_static_definitions_and_allowed_string_containers_cannot_be_rewritten"
+      ]
+    },
+    {
+      "id": "B141-SHAPE03-environment-identifiers-must-stay-in-the-closed-set",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if (\n        type(os_family) is not str\n        or os_family not in SUPPORTED_OS_FAMILIES\n        or type(architecture) is not str\n        or architecture not in SUPPORTED_ARCHITECTURES\n    ):\n        raise NegotiatedDifferentialError(\"the B-141 environment record is malformed\")\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"the B-141 environment record is malformed\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_environment_identifiers_reject_board_identity"
+      ]
+    },
+    {
+      "id": "B141-SEM02-refusal-reasons-must-match-outcomes",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    for name, partition in _ARM_BREAKDOWN_PARTITIONS.items():\n        message = _PARTITION_RECONCILIATION_ERRORS[name]\n",
+      "replacement": "    for name, partition in _ARM_BREAKDOWN_PARTITIONS.items():\n        if name == \"refusal_breakdown\":\n            continue\n        message = _PARTITION_RECONCILIATION_ERRORS[name]\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_same_total_refusal_reason_swap_is_rejected"
+      ]
+    },
+    {
+      "id": "B141-SEM03-envelope-outcome-must-match-population",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if (\n        outcomes[\"envelope_construction\"]\n        != population[\"boards_unable_to_form_a_two_request_envelope\"]\n    ):\n        raise NegotiatedDifferentialError(\n            \"the B-141 envelope refusal count drifted from the fixed population\"\n        )\n",
+      "replacement": "    pass\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_envelope_outcome_must_match_fixed_population"
+      ]
+    },
+    {
+      "id": "B141-SEM04-control-arm-must-not-claim-repair",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if not treatment and (\n        outcomes[\"completed_with_repair\"]\n        or repair_outcomes[\"repair_published\"]\n        or any(work[key] for key in _REPAIR_WORK_KEYS)\n    ):\n        raise NegotiatedDifferentialError(_CONTROL_REPAIR_CLAIMS_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(_CONTROL_REPAIR_CLAIMS_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_control_cannot_claim_repair_or_repair_work"
+      ]
+    },
+    {
+      "id": "B141-SEM05-status-categories-must-match-outcomes",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            if _require_nonnegative_int(published.get(bucket, 0), message) != expected:\n                raise NegotiatedDifferentialError(message)\n",
+      "replacement": "            if False:\n                raise NegotiatedDifferentialError(message)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_status_categories_must_match_outcome_categories",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_repair_outcome_bucket_swap_is_rejected"
+      ]
+    },
+    {
+      "id": "B141-SHAPE04-report-date-must-match-measurement-date",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if recorded != _commit_utc_date(source_commit):\n        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_evidence_date_must_be_the_recorded_commits_utc_date",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_load_rejects_a_self_resigned_evidence_date"
+      ]
+    },
+    {
+      "id": "B141-PUBLISH01-tracked-allowlisted-paths-must-be-refused",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if not isinstance(dirty_paths, bool) and any(\n        _git_path_is_tracked(path) for path in dirty_paths if path in allowed_dirty\n    ):\n        raise NegotiatedDifferentialError(\"artifact publication requires an unchanged source tree\")\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"artifact publication requires an unchanged source tree\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_publishable_source_refuses_a_tracked_allowlisted_output_or_sidecar"
+      ]
+    },
+    {
+      "id": "B141-PUBLISH02-post-measure-source-must-be-rechecked",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        _require_publishable_source(\n            expected_commit=captured_commit,\n            allowed_dirty=frozenset(allowed_dirty),\n        )\n",
+      "replacement": "        assert captured_commit is not None\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_post_measurement_runner_drift_is_refused_before_publication"
+      ]
+    },
+    {
+      "id": "B141-METRICS01-whole-metrics-digest-must-be-pinned",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if _digest(metrics) != B141_METRICS_SHA256:\n        raise NegotiatedDifferentialError(\"the B-141 metrics digest pin is malformed\")\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"the B-141 metrics digest pin is malformed\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_exact_pins_reject_repair_work_detail_by_name_and_by_metrics_digest"
+      ]
+    },
+    {
+      "id": "B141-COMMIT03-treatment-arm-pin-must-not-self-bind",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    _validate_commitment_arm(\n        _measurement_arm_pin(metrics.get(\"treatment\")), _COMMITMENT_TREATMENT_EXPECTED\n    )\n",
+      "replacement": "    _validate_commitment_arm(\n        _measurement_arm_pin(metrics.get(\"treatment\")),\n        _measurement_arm_pin(metrics.get(\"treatment\")),\n    )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_exact_pins_reject_self_resigned_treatment_total_with_patched_metrics_digest"
+      ]
+    },
+    {
+      "id": "B141-COMMIT04-differential-pin-must-not-self-bind",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if value != _COMMITMENT_DIFFERENTIAL_EXPECTED:\n        raise NegotiatedDifferentialError(\"the B-141 commitment differential pin is malformed\")\n",
+      "replacement": "    if value != value:\n        raise NegotiatedDifferentialError(\"the B-141 commitment differential pin is malformed\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_exact_pins_reject_self_resigned_differential_with_patched_metrics_digest"
+      ]
+    },
+    {
+      "id": "B141-SOURCE02-source-revision-must-supply-the-pinned-runner-blob",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if \"sha256:\" + hashlib.sha256(runner_bytes).hexdigest() != configuration[\"runner_sha256\"]:\n        raise NegotiatedDifferentialError(\n            \"the B-141 source commit/runner binding could not be verified\"\n        )\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\n            \"the B-141 source commit/runner binding could not be verified\"\n        )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_runner_binding_failure"
+      ]
+    },
+    {
+      "id": "B141-BOUND04-ripups-must-use-net-retry-gap-bound",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    max_ripups = submitted * (iterations - 1)\n",
+      "replacement": "    max_ripups = submitted * iterations\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_total_ripups_uses_the_exact_490_transaction_boundary[491-False]"
+      ]
+    },
+    {
+      "id": "B141-BOUND05-wire-length-must-use-submitted-net-bound",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            \"total_wire_length_nm\": submitted * max_grid_path_length_nm,\n",
+      "replacement": "            \"total_wire_length_nm\": admitted * submitted * max_grid_path_length_nm,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_total_wire_length_uses_the_exact_submitted_net_boundary[4375000000001-False]"
+      ]
+    },
+    {
+      "id": "B141-SIZE01-bounded-reader-must-not-read-unbounded",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            payload = stream.read(MAX_JSON_ARTIFACT_BYTES + 1)\n",
+      "replacement": "            payload = stream.read()\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_bounded_reader_requests_only_one_byte_beyond_the_limit"
+      ]
+    },
+    {
+      "id": "B141-SIZE02-reader-must-refuse-over-limit-payload",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if len(payload) > MAX_JSON_ARTIFACT_BYTES:\n        raise NegotiatedDifferentialError(f\"the {label} artifact exceeds 64 KiB\")\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(f\"the {label} artifact exceeds 64 KiB\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_public_loaders_reject_oversized_valid_json_before_parsing[report]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_public_loaders_reject_oversized_valid_json_before_parsing[commitment]"
+      ]
+    },
+    {
+      "id": "B141-SIZE03-commitment-builder-must-refuse-direct-over-limit-bytes",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if len(artifact_bytes) > MAX_JSON_ARTIFACT_BYTES:\n        raise NegotiatedDifferentialError(\"the B-141 artifact exceeds 64 KiB\")\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"the B-141 artifact exceeds 64 KiB\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_commitment_builder_rejects_direct_oversized_bytes_before_json_work"
+      ]
+    },
+    {
+      "id": "B141-SIZE04-json-recursion-must-map-to-unreadable",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    except (RecursionError, UnicodeError, ValueError) as error:\n",
+      "replacement": "    except (UnicodeError, ValueError) as error:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_json_recursion_error_maps_to_fixed_unreadable_diagnostic"
+      ]
+    },
+    {
+      "id": "B141-SIZE05-number-recursion-must-map-to-unsafe-numbers",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    except (RecursionError, ValueError) as error:\n",
+      "replacement": "    except ValueError as error:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_numeric_recursion_error_maps_to_fixed_unsafe_numbers_diagnostic"
+      ]
+    },
+    {
+      "id": "B141-ARTIFACT01-final-open-must-be-nonblocking",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        descriptor = os.open(\n            absolute.name,\n            os.O_RDONLY | nofollow | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n            dir_fd=parent_fd,\n        )\n",
+      "replacement": "        descriptor = os.open(\n            absolute.name,\n            os.O_RDONLY | nofollow | getattr(os, \"O_CLOEXEC\", 0),\n            dir_fd=parent_fd,\n        )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_fifo_refuses_promptly_without_blocking[B-141]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_fifo_refuses_promptly_without_blocking[B-141 commitment]"
+      ]
+    },
+    {
+      "id": "B141-ARTIFACT02-parent-components-must-be-no-follow-fd-relative",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    directory_flags = os.O_RDONLY | nofollow | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0)\n",
+      "replacement": "    directory_flags = os.O_RDONLY | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_rejects_a_symlinked_parent_without_echoing_path[B-141]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_rejects_a_symlinked_parent_without_echoing_path[B-141 commitment]"
+      ]
+    },
+    {
+      "id": "B141-ARTIFACT03-parent-components-must-be-opened-fd-relative",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        parent_fd = os.open(absolute.anchor, directory_flags)\n        for component in absolute.parts[1:-1]:\n            child_fd = os.open(component, directory_flags, dir_fd=parent_fd)\n            os.close(parent_fd)\n            parent_fd = child_fd\n",
+      "replacement": "        parent_fd = os.open(absolute.parent, directory_flags)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_rejects_a_symlinked_parent_without_echoing_path[B-141]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_caller_selected_artifact_rejects_a_symlinked_parent_without_echoing_path[B-141 commitment]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS01-local-loader-must-not-delegate-to-B140",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        root_fd = _open_corpus_directory(corpus)\n",
+      "replacement": "        manifest, samples = b140.reference.load_corpus(corpus)\n        return manifest, samples, \"sha256:\" + \"0\" * 64\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_does_not_call_historical_corpus_loader"
+      ]
+    },
+    {
+      "id": "B141-CORPUS02-all-declared-sizes-must-preflight-before-sample-open",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if any(entry[\"bytes\"] > MAX_CORPUS_SAMPLE_BYTES for entry in entries):\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_preflights_declared_sample_size_before_license_or_sample_reads"
+      ]
+    },
+    {
+      "id": "B141-CORPUS03-manifest-must-be-bounded-before-json-parsing",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        manifest_bytes = _read_bounded_at(\n            root_fd,\n            \"manifest.json\",\n            max_bytes=MAX_CORPUS_DESCRIPTOR_BYTES,\n        )\n",
+      "replacement": "        manifest_bytes = _read_bounded_at(\n            root_fd,\n            \"manifest.json\",\n            max_bytes=MAX_CORPUS_SAMPLE_BYTES,\n        )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_oversized_manifest_before_json_parsing"
+      ]
+    },
+    {
+      "id": "B141-CORPUS04-manifest-must-declare-exactly-36-entries",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if type(files) is not list or len(files) != CORPUS_UPSTREAM_SAMPLE_COUNT:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "replacement": "    if type(files) is not list:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[too_few_entries]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[too_many_entries]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS05-manifest-entry-schema-must-be-closed",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            set(entry) != {\"bytes\", \"committed\", \"name\", \"sha256\"}\n",
+      "replacement": "            False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[extra_entry_key]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS06-backslash-traversal-must-be-rejected",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            or \"\\\\\" in name\n",
+      "replacement": "            or False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[backslash_traversal]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS07-corpus-path-components-must-not-follow-symlinks",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    flags = os.O_RDONLY | nofollow | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0)\n",
+      "replacement": "    flags = os.O_RDONLY | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_symlinked_directory_components[corpus]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS08-samples-directory-must-not-follow-symlinks",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            os.O_RDONLY | nofollow | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "replacement": "            os.O_RDONLY | directory | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_symlinked_directory_components[samples]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS09-sample-file-must-not-follow-symlinks",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            name,\n            os.O_RDONLY | nofollow | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "replacement": "            name,\n            os.O_RDONLY | nonblock | getattr(os, \"O_CLOEXEC\", 0),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_a_symlinked_sample_file"
+      ]
+    },
+    {
+      "id": "B141-CORPUS10-sample-descriptor-must-be-an-exact-regular-file",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            dir_fd=directory_fd,\n        )\n        metadata = os.fstat(descriptor)\n        if not stat.S_ISREG(metadata.st_mode):\n            raise OSError\n",
+      "replacement": "            dir_fd=directory_fd,\n        )\n        metadata = os.fstat(descriptor)\n        if False:\n            raise OSError\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_corpus_reader_rejects_fifo_before_reading"
+      ]
+    },
+    {
+      "id": "B141-CORPUS11-sample-read-must-use-the-256-KiB-ceiling",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "                max_bytes=MAX_CORPUS_SAMPLE_BYTES,\n",
+      "replacement": "                max_bytes=MAX_CORPUS_SAMPLE_BYTES * 2,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_passes_the_sample_ceiling_to_every_sample_read"
+      ]
+    },
+    {
+      "id": "B141-CORPUS12-sample-length-and-digest-must-match-the-manifest",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "            if (\n                len(sample) != entry[\"bytes\"]\n                or hashlib.sha256(sample).hexdigest() != entry[\"sha256\"]\n            ):\n                raise ValueError\n",
+      "replacement": "            if False:\n                raise ValueError\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_declared_sample_mismatch_at_the_read_boundary[length]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_declared_sample_mismatch_at_the_read_boundary[digest]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS13-population-binding-must-digest-the-validated-raw-manifest-bytes",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        manifest_sha256 = \"sha256:\" + hashlib.sha256(manifest_bytes).hexdigest()\n",
+      "replacement": "        manifest_sha256 = _digest(manifest)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_returns_the_digest_of_the_exact_manifest_bytes_read"
+      ]
+    },
+    {
+      "id": "B141-CORPUS14-root-manifest-schema-must-be-closed",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if set(manifest) != {*expected, \"files\"} or any(\n        manifest.get(key) != value for key, value in expected.items()\n    ):\n",
+      "replacement": "    if any(manifest.get(key) != value for key, value in expected.items()):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[extra_manifest_key]"
+      ]
+    },
+    {
+      "id": "B141-CORPUS15-license-must-match-the-pinned-digest-before-sample-access",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        if hashlib.sha256(license_bytes).hexdigest() != CORPUS_LICENSE_SHA256:\n            raise ValueError\n",
+      "replacement": "        if False:\n            raise ValueError\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_loader_rejects_license_digest_drift_before_sample_reads"
+      ]
+    },
+    {
+      "id": "B141-CORPUS16-exactly-20-manifest-entries-must-be-committed",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if len(committed) != CORPUS_COMMITTED_COUNT:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(CORPUS_MANIFEST_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_manifest_preflight_rejects_noncanonical_entry_sets[wrong_committed_count]"
+      ]
+    },
+    {
+      "id": "B141-ITER01-admitted-arms-must-report-at-least-one-iteration-each",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if aggregate[\"total_iterations\"] < aggregate[\"boards_admitted_by_the_coordinator\"]:\n        raise NegotiatedDifferentialError(\"the B-141 arm iteration floor is not met\")\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\"the B-141 arm iteration floor is not met\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_iteration_floor_accepts_exact_and_refuses_shortfall[15]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_iteration_floor_accepts_exact_and_refuses_shortfall[0]"
+      ]
+    },
+    {
+      "id": "B141-ITER02-each-admitted-board-must-report-an-iteration",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        if result.iterations < 1:\n            raise NegotiatedDifferentialError(\"the B-141 admitted board returned zero iterations\")\n",
+      "replacement": "        if False:\n            raise NegotiatedDifferentialError(\"the B-141 admitted board returned zero iterations\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_b141_measurement_rejects_zero_iteration_on_one_of_two_admitted_boards"
+      ]
+    },
+    {
+      "id": "B141-PART01-declared-partitions-must-cover-the-outcome-taxonomy",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        if partition.total and set(assigned) != set(RUN_OUTCOME_TAXONOMY):\n            raise NegotiatedDifferentialError(_PARTITION_DECLARATION_ERROR)\n",
+      "replacement": "        if False:\n            raise NegotiatedDifferentialError(_PARTITION_DECLARATION_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_a_partition_that_stops_covering_its_taxonomy_fails_the_run"
+      ]
+    },
+    {
+      "id": "B141-PART02-declared-bucket-names-must-be-the-published-taxonomy",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        if len(buckets) != len(set(buckets)) or set(buckets) != _PARTITION_TAXONOMIES[name]:\n            raise NegotiatedDifferentialError(_PARTITION_DECLARATION_ERROR)\n",
+      "replacement": "        if False:\n            raise NegotiatedDifferentialError(_PARTITION_DECLARATION_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_declared_bucket_names_must_be_the_published_taxonomy"
+      ]
+    },
+    {
+      "id": "B141-PART03-published-buckets-must-not-exceed-their-declaration",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        if sum(published.values()) != declared_total:\n            raise NegotiatedDifferentialError(message)\n",
+      "replacement": "        if False:\n            raise NegotiatedDifferentialError(message)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_companion_breakdown_may_not_carry_a_bucket_its_declaration_does_not_name"
+      ]
+    },
+    {
+      "id": "B141-PART04-arm-breakdowns-must-be-reconciled-at-all",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    _reconcile_partitions(outcomes, aggregate)\n",
+      "replacement": "    _assert_declared_partitions()\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_same_total_refusal_reason_swap_is_rejected",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_status_categories_must_match_outcome_categories",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_self_resigned_repair_outcome_bucket_swap_is_rejected"
+      ]
+    },
+    {
+      "id": "B141-BOUND06-overflow-must-use-the-submitted-net-grid-bound",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    max_overflow_units = submitted * b140.ROUTER_LIMITS[\"max_grid_nodes\"]\n",
+      "replacement": "    max_overflow_units = admitted * iterations * submitted * submitted\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_total_overflow_units_uses_the_submitted_net_grid_boundary",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_every_completion_ceiling_states_a_denominator_that_applies_to_it"
+      ]
+    },
+    {
+      "id": "B141-COVER01-commitment-must-pin-every-claimed-arm-aggregate",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        or (_ARM_CONFIGURATION_KEYS | _COMMITMENT_ARM_KEYS) != _AGGREGATE_KEYS\n",
+      "replacement": "        or False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_a_claimed_aggregate_added_without_a_pin_fails_the_run"
+      ]
+    },
+    {
+      "id": "B141-COVER02-commitment-arm-keys-must-be-derived-from-the-arm-schema",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "_COMMITMENT_ARM_KEYS = frozenset(_AGGREGATE_KEYS) - _ARM_CONFIGURATION_KEYS\n",
+      "replacement": "_COMMITMENT_ARM_KEYS = frozenset(_AGGREGATE_TOTAL_KEYS)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_commitment_pins_every_claimed_arm_aggregate"
+      ]
+    },
+    {
+      "id": "B141-DATE02-evidence-date-binding-must-run-on-authoritative-load",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    date_bound = _validate_evidence_date_binding(\n        document, allow_absent_commit=allow_absent_source_commit\n    )\n",
+      "replacement": "    date_bound = True\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_load_rejects_a_self_resigned_evidence_date"
+      ]
+    },
+    {
+      "id": "B141-DATE03-published-date-must-be-derived-not-written",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        \"date_utc\": captured_date_utc,\n",
+      "replacement": "        \"date_utc\": \"2026-08-31\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_build_report_preserves_an_explicit_source_revision"
+      ]
+    },
+    {
+      "id": "B141-COMMIT05-companion-arms-must-reconcile-their-own-breakdowns",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    _reconcile_partitions(outcomes, value)\n",
+      "replacement": "    _assert_declared_partitions()\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_companion_arm_breakdowns_are_reconciled_against_their_own_outcome_taxonomy",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_companion_breakdown_may_not_carry_a_bucket_its_declaration_does_not_name"
+      ]
+    },
+    {
+      "id": "B141-COMMIT06-companion-published-repairs-must-match-its-repair-outcome",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if (\n        value[\"repair_work\"][\"published_repairs\"]\n        != value[\"repair_outcome_breakdown\"][\"repair_published\"]\n    ):\n        raise NegotiatedDifferentialError(_COMMITMENT_ARM_PIN_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(_COMMITMENT_ARM_PIN_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_companion_published_repairs_must_match_its_own_repair_outcome"
+      ]
+    },
+    {
+      "id": "B141-SIZE06-untrusted-bytes-must-be-capped-before-the-parser",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        value = json.loads(\n            _read_bounded_bytes(path, label=label).decode(\"utf-8\"),\n",
+      "replacement": "        value = json.loads(\n            path.read_text(encoding=\"utf-8\"),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_untrusted_artifact_bytes_are_capped_before_any_parse"
+      ]
+    },
+    {
+      "id": "B141-LEVEL01-validate-report-must-report-the-level-it-reached",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    return GUARANTEE_OFFLINE if require_semantics else GUARANTEE_SHAPE_ONLY\n",
+      "replacement": "    return GUARANTEE_REPOSITORY_BOUND\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_validate_report_returns_the_guarantee_level_it_reached",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_the_offline_guarantee_does_not_cover_repository_bound_provenance"
+      ]
+    },
+    {
+      "id": "B141-LEVEL02-repository-bound-must-not-claim-the-companion",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        return GUARANTEE_REPOSITORY_BOUND\n",
+      "replacement": "        return GUARANTEE_COMPANION_BOUND\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_bindings_report_whether_the_companion_was_consulted",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_validate_report_returns_the_guarantee_level_it_reached"
+      ]
+    },
+    {
+      "id": "B141-LEVEL03-load-artifact-must-reach-its-documented-guarantee",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if reached != LOAD_ARTIFACT_GUARANTEE:\n        raise NegotiatedDifferentialError(_GUARANTEE_ERROR)\n",
+      "replacement": "    if False:\n        raise NegotiatedDifferentialError(_GUARANTEE_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_load_artifact_refuses_a_binding_that_did_not_reach_its_documented_guarantee"
+      ]
+    },
+    {
+      "id": "B141-ABSENT01-absent-commit-must-not-be-reported-as-a-date-disagreement",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if _resolve_recorded_commit(source_commit) is None:\n        if allow_absent_commit:\n            return False\n        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)\n",
+      "replacement": "    if _resolve_recorded_commit(source_commit) is None:\n        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_date_disagreement",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request"
+      ]
+    },
+    {
+      "id": "B141-ABSENT02-resolution-must-report-absence-rather-than-raise-a-verdict",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if probe.returncode != 0 or not resolved:\n        return None\n",
+      "replacement": "    if probe.returncode != 0 or not resolved:\n        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_recorded_commit_resolution_separates_absent_from_present"
+      ]
+    },
+    {
+      "id": "B141-ABSENT03-absent-commit-must-not-be-reported-as-a-runner-binding-failure",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        if allow_absent_commit:\n            return False\n        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)\n    try:\n",
+      "replacement": "        raise NegotiatedDifferentialError(\n            \"the B-141 source commit/runner binding could not be verified\"\n        )\n    try:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_runner_binding_failure"
+      ]
+    },
+    {
+      "id": "B141-ABSENT04-unconsulted-provenance-must-not-certify-repository-binding",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    if not provenance_consulted:\n        # Everything checkable without the recorded commit has been checked, and none of it\n        # establishes provenance.  `offline` is the strongest honest answer.\n        return GUARANTEE_OFFLINE\n",
+      "replacement": "    if False:\n        return GUARANTEE_OFFLINE\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request"
+      ]
+    }
+  ]
+}
