@@ -2146,21 +2146,34 @@ def test_exact_pins_reject_self_resigned_treatment_total_with_patched_metrics_di
         benchmark._validate_exact_measurement_pins(tampered)
 
 
-def test_exact_pins_reject_non_headline_metric_without_metrics_digest_recompute() -> None:
-    """Repair-work detail is outside the headline pins but remains covered by the metrics digest."""
+def test_exact_pins_reject_repair_work_detail_by_name_and_by_metrics_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repair-work detail is a claim, so it is pinned by name -- and by the whole-metrics digest."""
 
     tampered = _artifact()
     tampered["metrics"]["treatment"]["repair_work"]["repair_local_expanded_states"] += 1
     _retag_document(tampered)
 
-    # Keep the report semantically valid and prove that only a non-headline metric changed before
-    # using the narrow commitment helper; the source-owned whole-metrics digest must refuse it.
+    # The report is still semantically valid and the differential is untouched: only a repair-work
+    # counter moved.  It used to sit outside the enumerated pins and be caught by the digest alone.
     benchmark.validate_report(tampered)
-    assert benchmark._measurement_arm_pin(tampered["metrics"]["treatment"]) == (
-        benchmark._COMMITMENT_TREATMENT_EXPECTED
-    )
     assert tampered["metrics"]["differential"] == benchmark._COMMITMENT_DIFFERENTIAL_EXPECTED
+    assert (
+        benchmark._measurement_arm_pin(tampered["metrics"]["treatment"])
+        != benchmark._COMMITMENT_TREATMENT_EXPECTED
+    )
 
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="commitment arm"):
+        benchmark._validate_exact_measurement_pins(tampered)
+
+    # The whole-metrics digest remains an independent second guard: even with the named arm pin
+    # re-pinned to the tampered value, the source-owned digest still refuses it.
+    monkeypatch.setattr(
+        benchmark,
+        "_COMMITMENT_TREATMENT_EXPECTED",
+        benchmark._measurement_arm_pin(tampered["metrics"]["treatment"]),
+    )
     with pytest.raises(benchmark.NegotiatedDifferentialError, match="metrics digest"):
         benchmark._validate_exact_measurement_pins(tampered)
 
