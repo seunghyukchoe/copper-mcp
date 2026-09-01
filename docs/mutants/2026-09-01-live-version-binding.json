@@ -139,7 +139,38 @@
       "replacement": "",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_kicad_ipc.py::KicadIpcTests::test_observation_is_redacted_and_repeatable"
+        "tests/test_live_version_binding.py::test_an_observation_refuses_a_verdict_outside_the_accepted_set",
+        "tests/test_live_version_binding.py::test_every_accepted_verdict_actually_constructs"
+      ]
+    },
+    {
+      "id": "LVB14-the-observation-accepts-any-document-binding",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "        if self.document_binding != DOCUMENT_BINDING_IN_MEMORY:\n            raise KicadIpcError(\"live observation document binding is invalid\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_an_observation_refuses_a_document_binding_it_did_not_declare"
+      ]
+    },
+    {
+      "id": "LVB15-the-editor-snapshot-accepts-an-unaccepted-verdict",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "        if self.compatibility not in ACCEPTED_API_COMPATIBILITY:\n            raise KicadIpcPayloadError(\"live editor compatibility is invalid\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_editor_snapshot_refuses_a_verdict_outside_the_accepted_set"
+      ]
+    },
+    {
+      "id": "LVB16-the-oracle-republishes-a-verdict-it-never-checked",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "        if self.compatibility is not None and self.compatibility not in ACCEPTED_API_COMPATIBILITY:\n            raise ValueError(\"live IPC oracle compatibility is invalid\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_oracle_refuses_a_verdict_the_observation_boundary_could_not_produce"
       ]
     }
   ]

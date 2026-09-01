@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 
 import copper_mcp.kicad_ipc as kicad_ipc
+import copper_mcp.kicad_ipc_oracle as kicad_ipc_oracle
 from copper_mcp.config import Settings
 from copper_mcp.kicad_ipc import (
     ACCEPTED_API_COMPATIBILITY,
@@ -362,3 +363,73 @@ def test_no_live_surface_publishes_a_saved_state_claim() -> None:
     forbidden = ("saved", "dirty", "modified", "unsaved_changes", "file_digest", "board_path")
     for name in forbidden:
         assert name not in observation, f"{name} would claim something the API cannot report"
+
+
+# --------------------------------------------------------------------------------------------
+# The acceptance guards, made load-bearing.
+#
+# These three constructors are the last place a verdict can be checked before it reaches a
+# caller. Nothing in normal operation builds an invalid one -- the classifier only ever returns
+# members of the accepted set -- so without these tests the guards are unexercised, and a
+# mutation run says so by surviving their removal. They exist for the widening that has not
+# happened yet: a fourth verdict added to one surface and not to the others.
+# --------------------------------------------------------------------------------------------
+
+
+def _observation(**overrides: Any) -> Any:
+    values: dict[str, Any] = {
+        "kicad_version": "10.0.1",
+        "api_version": "10.0.1",
+        "compatibility": "compatible",
+        "board_digest": "sha256:" + "0" * 64,
+        "board_bytes": 32,
+        "object_counts": {"net_declarations": 0},
+        "socket_kind": "default-local-ipc",
+    }
+    values.update(overrides)
+    return kicad_ipc.LiveBoardObservation(**values)
+
+
+@pytest.mark.parametrize(
+    "verdict", ["definitely_compatible", "unverified", "", "COMPATIBLE", "future_api"]
+)
+def test_an_observation_refuses_a_verdict_outside_the_accepted_set(verdict: str) -> None:
+    with pytest.raises(kicad_ipc.KicadIpcError, match="compatibility is invalid"):
+        _observation(compatibility=verdict)
+
+
+def test_an_observation_refuses_a_document_binding_it_did_not_declare() -> None:
+    with pytest.raises(kicad_ipc.KicadIpcError, match="document binding is invalid"):
+        _observation(document_binding="saved_and_clean")
+
+
+def test_every_accepted_verdict_actually_constructs() -> None:
+    """Not vacuous: the guard rejects what is outside the set and nothing that is inside it."""
+
+    for verdict in ACCEPTED_API_COMPATIBILITY:
+        assert _observation(compatibility=verdict).compatibility == verdict
+
+
+def test_the_editor_snapshot_refuses_a_verdict_outside_the_accepted_set() -> None:
+    with pytest.raises(kicad_ipc.KicadIpcPayloadError, match="compatibility is invalid"):
+        kicad_ipc.LiveEditorContextSnapshot(
+            board_digest="sha256:" + "0" * 64,
+            board_bytes=32,
+            active_layer_index=3,
+            active_layer_name="F.Cu",
+            selection=(),
+            compatibility="probably_fine",
+        )
+
+
+def test_the_oracle_refuses_a_verdict_the_observation_boundary_could_not_produce() -> None:
+    """The oracle republishes the observation's verdict, so it revalidates rather than trusts."""
+
+    with pytest.raises(ValueError, match="compatibility is invalid"):
+        kicad_ipc_oracle.LiveIpcOracleResult(
+            status="skipped",
+            capability="kicad_plugin_environment_absent",
+            socket_configured=False,
+            token_configured=False,
+            compatibility="probably_fine",
+        )
