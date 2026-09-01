@@ -1,7 +1,7 @@
 # The live KiCad surface binds to a version window, and `compatible` now means less
 
 The live IPC surfaces stop delegating their compatibility decision to `kicad-python`'s
-`check_version()` boolean and apply a declared window instead (ADR-0128, D-236, R-186). If you
+`check_version()` boolean and apply a declared window instead (ADR-0128, D-237, R-187). If you
 deploy a live surface, three things change for you, and one of them is a claim getting *weaker*
 on purpose.
 

@@ -757,14 +757,54 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   before atomic publication. Unselected target paths are unavailable to the local solver outside
   their existing attachment endpoints. One shared exact topology-edge ledger, charged cancellable
   contact predicates, and preserved failed-projection work close the resource-accounting gaps.
-  Three-pad first/last-branch and 32-pad fixtures plus 27/27 killed mutants close the machine
+  Three-pad first/last-branch and 32-pad fixtures plus 35/35 killed mutants close the machine
   contract, while legacy two-pad identities remain pinned. This
   is synthetic capability evidence, not the held-out improvement #90 requires: B-140 ran with
-  repair disabled. The next agent-only slice is a predeclared B-141 successor that replays B-140's
+  repair disabled. The predeclared successor was B-141, which replays B-140's
   exact admitted population with repair enabled, preserves an uninstrumented control, and reports
   completion/quality and every refusal separately. #90 closes only if that differential is
   deterministic and positive without weakening the physical, identity or work gates; otherwise it
   re-parks on the measured result.
+  B-141 differential measured (2026-08-31; the predeclared artifact basename remains dated
+  2026-08-30). The exact B-140/B-088 population produced **20
+  offered/imported, 16 admitted, 4 envelope refusals and 70 submitted nets** in both arms. The
+  uninstrumented control (`repair_settings: null`) completed **0 boards / 0 nets**; treatment with
+  the default bounded repair profile completed **1 board / 2 nets**, publishing one repair and one
+  `completed_with_repair` result. The measured differential is **+1 board / +2 nets / +7,432
+  physical checks / +43,750,000 nm wire**; mean arm times were **40.574s** and **41.039s** across
+  two deterministic repetitions. Per-reason refusal/outcome reconciliation is independently
+  checked. The semantic guards require each arm's `outcome_breakdown["envelope_construction"]` to
+  equal the fixed population's `boards_unable_to_form_a_two_request_envelope` count (**4**); a
+  disabled control (`repair_settings: null`) forbids `completed_with_repair`, `repair_published`,
+  and every non-zero repair-work field; and all six status categories (`completed`, `no_path`,
+  `partial`, `invalid_request`, `cancelled`, `not_run`) reconcile to the outcome taxonomy.
+  The closed report and companion commitment are bound to source
+  `b7c71d4d643df155c7bdcee5bac25e7d943b7031`, runner
+  `sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`, configuration
+  `sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`, whole-metrics
+  digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
+  `sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3`, report raw
+  `sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c`, commitment run
+  `sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397`, commitment raw
+  `sha256:129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9`, and spec
+  `sha256:e1f4a225f963385cba00af45109d0d8ae0a22ef228787c2b7e87707cf8108c85`. Focused
+  evidence validation is **187/187 tests** and **78/78 evidence-contract mutants killed** with zero
+  survivors or control failures, distinct
+  from #238's **35/35 capability mutants**. A later checkout or merge-ref movement may load this
+  record without replacing its historically bound source commit. The source guard verifies the
+  actual Git runner blob SHA at the declared source commit and accepts later historical `HEAD`
+  movement without replacing that binding. The closed `total_ripups` bound is
+  `70 * (8 - 1) = 490`; 490 is accepted and 491 is mutation-killed. The closed aggregate wire bound is
+  `70 * 62,500,000,000 = 4,375,000,000,000 nm`; the exact bound is accepted and the `+1` boundary
+  is mutation-killed. The commitment pins exact control
+  and treatment arm totals plus the full differential, while its whole-metrics digest prevents a
+  self-consistent re-signing from changing any other metric. Caller-selected report/sidecar paths
+  are walked fd-relatively without following parent links; the final exact regular file is opened
+  nonblocking, so FIFO and other special files refuse before decode/JSON. This is a deterministic
+  completion differential, not held-out routing quality, KiCad DRC, electrical, SI/PI/EMC,
+  thermal, DFM, fabrication, apply, editor, hardware or generalisation evidence. #90 remains open
+  for human review/calibration and the next agent-only direction is #91's private surrogate ranking
+  with authoritative signoff.
 - [ ] **SI/PI/thermal/DFM surrogate hooks with authoritative signoff, parked behind #99**
   ([#91](https://github.com/seunghyukchoe/copper-mcp/issues/91)). The half of this that carries the
   safety property is the signoff, not the surrogate — any claim surfaced to a caller comes from an

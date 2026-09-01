@@ -27,15 +27,134 @@ All notable changes are documented here. The format follows
   `inspect_live_board` could observe, and removing it makes that bug class impossible. A
   capability probe was refused on measurement: KiCad's command protos carry no feature-discovery
   message, and `kipy` collapses the status codes that would substitute for one
-  (`ADR-0128`, `D-236`, `R-186`, `B-138`, issue #68).
+  (`ADR-0128`, `D-237`, `R-187`, `B-138`, issue #68).
 - `object_counts["nets"]` on the live observation is renamed **`net_declarations`**. It counts
   top-level `(net …)` declarations, which a KiCad 10 document does not carry — `B-138` measured
   it reporting `0` against an editor holding 15 nets. The count was always correct and its name
   was not. **No derived cardinality replaces it**: counting distinct net names off item
   references would be an unverified parity claim against `Board.get_nets()`. Board IR's own
-  `object_counts["nets"]` is a genuine net collection and is unchanged (`ADR-0128`, `D-236`).
+  `object_counts["nets"]` is a genuine net collection and is unchanged (`ADR-0128`, `D-237`).
 
+### Added
 
+- Live observations and the live editor context now publish
+  **`document_binding: in_memory_unsaved_state_unobservable`**, stating that `board_digest` binds
+  KiCad's in-memory document and never a file on disk. It is deliberately **not** a dirty flag —
+  `kipy` 0.7.1's `Board` exposes no modified state, so a save-state field would be fabricated —
+  and it makes `ADR-0074`'s existing refusal to bind a live read to the on-disk file legible to a
+  caller. `B-138` measured the gap it names: 165,571 live bytes against 166,070 on disk
+  (`ADR-0128`, `D-237`).
+- The live editor context now publishes `kicad_version`, `api_version` and `compatibility`,
+  which it previously computed and discarded. **Three** live schema versions move to `0.2.0`
+  under `ADR-0105`'s accepted-set rule: the live observation, the live editor context, and
+  the capability oracle. The oracle is included because it *republishes* the observation's
+  verdict — under `0.1.0` that field could only be `null` or `compatible`, since the oracle
+  passed no future-API override and a drifted editor was caught into a `refused` result, so
+  a consumer pinned to `0.1.0` would otherwise receive values that version never promised.
+  Neither contract has a published JSON schema, so the freeze is a recorded accepted set
+  (`LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0`) rather than frozen bytes, and no
+  `check_schema_sets` exemption is declared because that gate governs `schemas/**/*.json`
+  only (`ADR-0128`, `ADR-0105`, `D-237`).
+
+## [0.12.0] - 2026-09-01
+
+Upgrading from 0.11.0: see the
+[0.12.0 migration note](docs/migrations/copper-mcp-0.12.0.md). No schema version moves —
+`BOARD_IR_SCHEMA_VERSION` stays `0.4.0`, `schemas/` has no diff at all, and no persisted snapshot
+needs re-conversion. What moves is caller-visible in four places: Board IR accepts two more
+constructs, so boards that refused in 0.11.0 now convert — `Edge.Cuts` outline **arcs**, modelled
+as an inscribed polyline, and a footprint's stray **copper polygons**, modelled as a proven
+superset bounding box; `inspect_board_ir`'s `unmodelled_counts` map grows from nine entries to
+**eleven**, and one of the two new entries — `outline_inward_deviation_nm` — is a *distance* rather
+than a count, and the other discloses an **approximation** rather than an erasure; `preview_placement`
+and `preview_live_placement` now **refuse** a board whose outline is approximated, which is the one
+place in this release where a previously answered request becomes an error; and a family of
+refusal messages splits into per-primitive sentences, retiring two shared strings. Internal
+negotiated routing gains bounded multi-pin nets and one-branch local repair behind no new surface.
+
+### Changed
+
+- B-141 now records the first repair-enabled differential for the multi-pin branch-repair
+  capability on the exact B-140/B-088 population. The control keeps `repair_settings: null`; the
+  treatment uses the default bounded repair profile; both arms run twice and replay
+  deterministically. All **20** boards are imported/offered, **16** form a constructible envelope,
+  **4** refuse envelope construction, and the same **70** reference-routed nets are submitted to
+  both arms. The control completes **0 boards / 0 nets**; treatment completes **1 board / 2 nets**
+  with one published repair and one `completed_with_repair` outcome, a measured differential of
+  **+1 board / +2 nets / +7,432 physical checks / +43,750,000 nm wire**. Mean arm times are
+  descriptive (**40.574s** control, **41.039s** treatment), not a performance claim. Per-reason
+  refusal/outcome reconciliation is validated independently. The semantic guards require each
+  arm's `outcome_breakdown["envelope_construction"]` to equal the fixed population's
+  `boards_unable_to_form_a_two_request_envelope` count (**4**); a disabled control
+  (`repair_settings: null`) cannot contain `completed_with_repair`, `repair_published`, or any
+  non-zero repair-work field; and all six status categories (`completed`, `no_path`, `partial`,
+  `invalid_request`, `cancelled`, `not_run`) must reconcile to the outcome taxonomy. The report
+  remains portable when a merge ref moves `HEAD` because its historical source binding is retained
+  rather than replaced. The source guard verifies the actual Git runner blob SHA at the declared
+  source commit and still accepts later historical `HEAD` movement without replacing that binding.
+  The closed `total_ripups` bound is `70 * (8 - 1) = 490`; 490 is accepted and 491 is
+  mutation-killed. The closed aggregate wire bound is `70 * 62,500,000,000 = 4,375,000,000,000 nm`;
+  the exact bound is accepted and the `+1` boundary is mutation-killed. The closed evidence contract is covered by **187/187** focused tests and **78/78** killed
+  evidence-contract mutants with zero survivors or control failures; this is separate from the
+  **35/35** capability mutants for #238. The
+  self-digested report and companion commitment bind source
+  `b7c71d4d643df155c7bdcee5bac25e7d943b7031`, runner
+  `sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`, configuration
+  `sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`, whole-metrics
+  digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
+  `sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3`, report raw
+  `sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c`, commitment run
+  `sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397`, commitment raw
+  `sha256:129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9`, and mutation spec
+  `sha256:e1f4a225f963385cba00af45109d0d8ae0a22ef228787c2b7e87707cf8108c85`. The companion
+  commitment pins exact control and treatment arm totals plus the full differential, while the
+  whole-metrics digest prevents a self-consistent re-signing from changing any other metric. This is a
+  deterministic completion differential, not held-out routing quality, KiCad DRC, electrical,
+  SI/PI/EMC, thermal, DFM, fabrication, apply, editor or hardware evidence; #90 remains open for
+  human review/calibration, and the next agent-only direction is #91's private surrogate ranking
+  with authoritative signoff (`ADR-0127`, `D-236`, `R-186`, `SEC-173`, `B-141`).
+  Caller-selected report/sidecar reads walk every parent directory fd-relatively without following
+  links, open the final exact regular file nonblocking, and use a 64 KiB max+1 probe before
+  decode/JSON. FIFO and other special files refuse with fixed, non-echoing diagnostics, recursion
+  fails closed, and no path is exposed; this is not a quality, physics or generalisation claim.
+- B-141's self-digest validator now authenticates the decomposition, the denominators and the
+  provenance of what it publishes, not only the totals. Every published breakdown declares
+  which run-outcome codes each of its buckets stands for; the declaration is checked for
+  total, disjoint coverage and each bucket is reconciled against the codes it partitions, in
+  the report **and** in the companion, so an item moved between buckets with the totals
+  patched up is refused and a code that lands in no bucket at all fails the run instead of
+  being published as a quiet zero. The `total_overflow_units` ceiling is derived as
+  `70 * 250,000 = 17,500,000` from the submitted nets and the grid each may occupy, replacing
+  `admitted * iterations * submitted**2` = **627,200**, which multiplied two population-wide
+  aggregates by a per-board repeat count and was small enough to refuse a truthful
+  measurement from one dense board. `date_utc` is derived from the committer date of the
+  recorded revision and checked against Git on authoritative load, rather than pinned as a
+  literal. The commitment's arm key set is derived from the report's own arm schema, so
+  `total_physical_checks`, `total_wire_length_nm`, every breakdown and every repair-work
+  counter are pinned by name, and a claimed aggregate added later without a pin fails the
+  run. The republished evidence reproduced the retired artifact's whole-metrics digest
+  `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly: the
+  measurements were re-bound, not re-measured.
+- B-141's `validate_report` now returns the guarantee level it actually reached --
+  `shape_only`, `offline` or `repository_bound` -- instead of leaving a caller to read the
+  function name as the whole contract. Its docstring enumerates what is always checked, what
+  `require_semantics` adds, what only `verify_live_bindings` establishes, and what the
+  function never checks at any argument: the evidence date, the recorded source revision and
+  the companion's exact measurement pins are bound to the repository rather than to the
+  document. `_validate_authoritative_bindings` reports `repository_bound` or
+  `companion_bound` depending on whether the companion was consulted, and `load_artifact` --
+  the authoritative entry point -- checks that it reached `LOAD_ARTIFACT_GUARANTEE` rather
+  than asserting so in prose, so an edit that drops the companion binding fails the load.
+  Additive for callers: every existing call site invokes `validate_report` as a statement.
+- B-141's provenance check no longer reports an absent commit as a lying one. A repository
+  that does not contain the recorded revision -- reachable only from an unrelated branch, a
+  shallow checkout, a fresh clone, or a consumer holding another fork's artifact -- has
+  observed no disagreement, and is now told the commit could not be resolved rather than that
+  the evidence date is wrong. The same conflation was present in the runner binding and is
+  separated there too. An unresolvable commit refuses by default, and downgrades to the
+  `offline` guarantee only when a caller passes `allow_absent_source_commit`; `load_artifact`
+  cannot opt in, so the authoritative path stays fail-closed. Found by CI, which refused a
+  valid revision this way.
 - Internal negotiated routing now admits **2–32 selected-layer pads per net** and preserves each
   request's own lattice origin while retaining one common signal layer and grid step. Exact legacy
   two-pad identities remain pinned; malformed 1/33-pad requests refuse before router work; complete
@@ -149,27 +268,26 @@ All notable changes are documented here. The format follows
   No artifact or benchmark row is added, and this does not accept a zone field or change any
   production, schema, MCP, CLI, routing, DRC, apply, or board-write behavior (`D-232`, `R-183`,
   [issue #231](https://github.com/seunghyukchoe/copper-mcp/issues/231)).
-
-### Added
-
-- Live observations and the live editor context now publish
-  **`document_binding: in_memory_unsaved_state_unobservable`**, stating that `board_digest` binds
-  KiCad's in-memory document and never a file on disk. It is deliberately **not** a dirty flag —
-  `kipy` 0.7.1's `Board` exposes no modified state, so a save-state field would be fabricated —
-  and it makes `ADR-0074`'s existing refusal to bind a live read to the on-disk file legible to a
-  caller. `B-138` measured the gap it names: 165,571 live bytes against 166,070 on disk
-  (`ADR-0128`, `D-236`).
-- The live editor context now publishes `kicad_version`, `api_version` and `compatibility`,
-  which it previously computed and discarded. **Three** live schema versions move to `0.2.0`
-  under `ADR-0105`'s accepted-set rule: the live observation, the live editor context, and
-  the capability oracle. The oracle is included because it *republishes* the observation's
-  verdict — under `0.1.0` that field could only be `null` or `compatible`, since the oracle
-  passed no future-API override and a drifted editor was caught into a `refused` result, so
-  a consumer pinned to `0.1.0` would otherwise receive values that version never promised.
-  Neither contract has a published JSON schema, so the freeze is a recorded accepted set
-  (`LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0`) rather than frozen bytes, and no
-  `check_schema_sets` exemption is declared because that gate governs `schemas/**/*.json`
-  only (`ADR-0128`, `ADR-0105`, `D-236`).
+- A new read-only live-editor probe, `scripts/probe_live_text_shapes.py`, produced this project's
+  **first observation of a real running KiCad editor** through CopperMCP's own IPC transport, and
+  with it the ADR-0095 text-to-shape measurement. It is gated behind `COPPER_MCP_ALLOW_LIVE_IPC`
+  and **refuses loudly, publishing no artifact, without a live session** — so a machine that cannot
+  reproduce the measurement produces nothing rather than a misleading `skipped` record. Every run
+  binds one board digest **and** one session revision up front and re-verifies at two checkpoints,
+  validates `--board` (lexical *and* `realpath` containment, regular-file, non-empty, a 16 MiB cap
+  charged from `st_size`, git-tracked) before a single byte is read, and caps the census at 256
+  items and 180 s of wall clock shared across every IPC call; each of those refuses rather than
+  truncating. The measurement moved exactly one of ADR-0095's five exit conditions and only
+  partially — glyph extents become a *read* value over a live session — while **refuting** the lead
+  that motivated the probe: `GetTextAsShapes` renders `${…}` literally and carries no document
+  reference. `ADR-0095`'s copper-text refusal is **unchanged**, no shipped code path consumes
+  anything measured here, and no conversion, routing, DRC, apply or board-write behavior moves.
+  `R-182` records that this is the first evidence in this repository that **cannot be replayed**
+  from committed bytes, and `D-231` is where whether such evidence may ever bind an offline
+  conversion is decided — proposed, with the recommendation being that it may not (`B-138`,
+  `B-139`, `D-231`, `R-182`, `SEC-168`, satisfying roadmap M3 entry criterion E3,
+  [issue #68](https://github.com/seunghyukchoe/copper-mcp/issues/68),
+  [issue #193](https://github.com/seunghyukchoe/copper-mcp/issues/193)).
 
 ### Fixed
 
@@ -3985,7 +4103,8 @@ reproducible only by the version that recorded it.
   lifetimes, timeouts, strict contract parsing, and before/after DRC-context revision checks.
 - The development dependency floor excludes pytest versions affected by `PYSEC-2026-1845`.
 
-[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/seunghyukchoe/copper-mcp/compare/v0.8.0...v0.9.0

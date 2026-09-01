@@ -281,7 +281,7 @@ worse than none, because it will be ignored.
   defect — an editor a whole major *behind* the binding was being published as `compatible`, and
   is now refused. The oracle's plugin-environment skip is unchanged and is not a version result.
   **This is a code change, not a re-measurement: no live session has been run at HEAD**, so the
-  accept path against a real editor remains unverified and `R-186` holds it open. The unit tests
+  accept path against a real editor remains unverified and `R-187` holds it open. The unit tests
   exercise these surfaces through a fake official-client seam that reproduces `check_version()`'s
   measured asymmetry. See also `SEC-168` for
   what enabling the server exposes, and disable it when a live session is not needed.

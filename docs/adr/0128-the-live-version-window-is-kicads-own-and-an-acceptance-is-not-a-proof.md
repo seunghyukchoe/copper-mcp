@@ -4,7 +4,8 @@
 - Date: 2026-09-01
 - Owners: `@seunghyukchoe`
 - Related: [B-138](../ledgers/benchmark-ledger.md) (the measurement that forced this),
-  [D-236](../ledgers/decision-ledger.md), [R-186](../ledgers/risk-register.md),
+  [B-142](../ledgers/benchmark-ledger.md) (the measurement that verified it against a real
+  editor), [D-237](../ledgers/decision-ledger.md), [R-187](../ledgers/risk-register.md),
   [ADR-0074](0074-live-ipc-one-undo-commit-apply.md) (binds to the serialization, never the file),
   [ADR-0069](0069-operator-gated-live-ipc-observation.md) (the operator opt-in this sits behind),
   [ADR-0029](0029-read-only-kicad-ipc-observer.md) (the read-only observer),
@@ -213,6 +214,13 @@ file; this makes that refusal legible to a caller instead of leaving it in an AD
 
 - **The live surface can speak to a current KiCad.** B-138's 10.0.5 editor is observable on
   every read surface with no flag, carrying `future_api_unverified`.
+- **The accept path is measured, not argued.** [B-142](../ledgers/benchmark-ledger.md) put
+  this decision in front of the same real KiCad 10.0.5 that refused B-138: both
+  previously-refusing surfaces observe, the verdict is `future_api_unverified` across a
+  genuine `FutureVersionError`, `net_declarations` reads 0 against an editor holding 15
+  nets, and the binding-agreement guard does not misfire. **The `legacy_api_unverified`
+  direction and the major-boundary refusal remain fake-only** — they need KiCad builds
+  no host here has — which is what `R-187` holds open.
 - **A KiCad two majors behind is now refused rather than certified.** This is a behaviour change
   in the safe direction and the deployer-visible one; the migration note carries it.
 - **`compatible` means less than it did, and now means something true.** A caller who checked
@@ -236,7 +244,7 @@ file; this makes that refusal legible to a caller instead of leaving it in an AD
   reproducing the defect it exists to fix, one layer down. It is recorded rather than
   pre-emptively softened, because the alternative is dropping a check that is load-bearing
   today for a binding version that does not exist yet; the trigger to revisit is a `kipy`
-  upgrade, and `R-186` carries it.
+  upgrade, and `R-187` carries it.
 - **Live apply is stricter than before** in the drifted directions and unchanged otherwise. It
   remains withheld at its own boundary for the reasons ADR-0118 and ADR-0120 record; this
   decision does not open it.
