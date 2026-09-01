@@ -481,11 +481,18 @@ def test_every_committed_job_that_runs_the_suite_declares_a_budget() -> None:
 def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
     """The release boundary pins the newest successful CI pair and last release run.
 
-    Re-pinned at the v0.11.0 boundary. The CI sample is the two newest successful
-    post-merge `main` pushes -- the footprint-semantics tip and the killpg-EPERM
-    merge -- all three matrix legs from each because one job-level budget bounds
-    them. The release sample moves to v0.10.0, the latest completed tag-triggered
-    workflow, whose 2374s is now the longest duration recorded in the file.
+    Re-pinned at the v0.12.0 boundary. The CI sample is the two newest successful
+    post-merge `main` pushes -- the multi-pin branch-repair tip (#238) and the
+    multi-pin lattice merge (#237) -- all three matrix legs from each because one
+    job-level budget bounds them. The release sample moves to v0.11.0, the latest
+    completed tag-triggered workflow.
+
+    The longest duration in the file changed hands at this boundary: ci.yml:test
+    grew from 2332s to 3302s (+41.6%) while release.yml:verify shrank slightly to
+    2325s, so the matrix leg -- which runs the real-KiCad nodes the hosted release
+    gate skips -- is now the binding measurement. 3302s is 91.7% of the 3600s half
+    of the 120-minute ceiling; it still clears, and the calibration file's `why`
+    records that the next wave to grow this job must confront the ceiling.
 
     This assertion is why the calibration file cannot drift silently: re-recording
     it is a reviewed edit that must move these numbers too.
@@ -495,16 +502,16 @@ def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
     by_job = {(entry["workflow"], entry["job"]): entry for entry in document["jobs"]}
 
     verify = by_job[(".github/workflows/release.yml", "verify")]
-    assert [observation["seconds"] for observation in verify["observations"]] == [2374]
-    assert verify["observations"][0]["run_id"] == 33068157489
+    assert [observation["seconds"] for observation in verify["observations"]] == [2325]
+    assert verify["observations"][0]["run_id"] == 33162621059
 
     ci = by_job[(".github/workflows/ci.yml", "test")]
     assert len(ci["observations"]) == 6
     assert {observation["run_id"] for observation in ci["observations"]} == {
-        33118743926,
-        33133130626,
+        33256062797,
+        33271133579,
     }
-    assert max(observation["seconds"] for observation in ci["observations"]) == 2332
+    assert max(observation["seconds"] for observation in ci["observations"]) == 3302
 
     # Every committed observation is a completed successful run, which is the only
     # kind the checker will calibrate from.
