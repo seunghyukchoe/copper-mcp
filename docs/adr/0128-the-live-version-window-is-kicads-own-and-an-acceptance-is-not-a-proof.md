@@ -184,6 +184,18 @@ file; this makes that refusal legible to a caller instead of leaving it in an AD
   rule applied to a Pydantic contract rather than a published JSON schema.
 - **`object_counts` consumers keyed on `nets` break loudly** with a `KeyError` rather than
   silently reading a number that meant something else.
+- **The binding-agreement check pins `kicad-python` 0.7.1's comparison semantics, deliberately
+  and with a known expiry.** `check_version()` re-reads the editor's version over IPC, so
+  requiring it to agree with the pair this adapter read is a real cross-check: it catches an
+  editor whose reported identity moved between the two calls. Under 0.7.1 the two can only
+  disagree if a read was unstable. **If a future `kicad-python` relaxes its comparison** — for
+  instance by tolerating patch drift — then `check_version()` returning `True` on a pair this
+  adapter classifies as `future_api_unverified` stops being a contradiction and becomes a policy
+  difference, and this surface would refuse it as `inconsistent`. That would be this ADR
+  reproducing the defect it exists to fix, one layer down. It is recorded rather than
+  pre-emptively softened, because the alternative is dropping a check that is load-bearing
+  today for a binding version that does not exist yet; the trigger to revisit is a `kipy`
+  upgrade, and `R-186` carries it.
 - **Live apply is stricter than before** in the drifted directions and unchanged otherwise. It
   remains withheld at its own boundary for the reasons ADR-0118 and ADR-0120 record; this
   decision does not open it.
