@@ -33,7 +33,7 @@ snapshot**: a real modelled object, in an existing collection, in an existing fi
 existing type. The schema version does not move because the *shape* of the emitted document is
 unchanged — no new field, no new type, no new enum member — and a `Segment` with `net_id: None`
 was already representable and already emitted for net-tie copper under
-[ADR-0092](../adr/0092-net-tie-copper-is-modelled-without-a-net.md). What changed is which boards
+[ADR-0092](../adr/0092-net-tie-copper-as-netless-obstacle.md). What changed is which boards
 produce one, not what a produced document may contain. **A consumer validating against
 `0.4.0.schema.json` is unaffected. A consumer that assumed netless segments only ever came from
 net ties is not** — see §2.
@@ -261,7 +261,7 @@ whether they can be observed. They cannot, except as more requests succeeding.
   non-derived candidate field. Eligible two-pad targets retain precedence and their prior
   identities. Topology, accounting, budget, validator, cancellation and final-clearance refusals
   discard the reconstructed candidate and all repair evidence **atomically**
-  ([ADR-0127](../adr/0127-negotiated-repair-replaces-one-proven-responsible-branch.md), `D-235`,
+  ([ADR-0127](../adr/0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md), `D-235`,
   `R-185`, `SEC-171`, `SEC-172`).
 - The custom-router seam additionally **rejects and replay-compares `fill_binding`**, preventing
   unverified fill provenance from being attached to a re-hashed candidate.
