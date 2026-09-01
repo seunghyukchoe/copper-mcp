@@ -172,6 +172,17 @@
       "killing_tests": [
         "tests/test_live_version_binding.py::test_the_oracle_refuses_a_verdict_the_observation_boundary_could_not_produce"
       ]
+    },
+    {
+      "id": "LVB17-a-malformed-version-crashes-instead-of-refusing",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "    if len(parts) != 3 or not all(part.isdigit() and len(part) <= 3 for part in parts):\n        raise KicadIpcVersionError(f\"{subject} version is not a major.minor.patch triple\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_a_malformed_version_is_a_typed_refusal_not_a_crash",
+        "tests/test_live_version_binding.py::test_the_malformed_version_refusal_names_which_side_was_malformed"
+      ]
     }
   ]
 }

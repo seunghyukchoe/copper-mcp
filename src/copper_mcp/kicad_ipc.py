@@ -240,6 +240,23 @@ def _version_string(version: _VersionLike) -> str:
     return ".".join(str(value) for value in components)
 
 
+def _version_triple(subject: str, value: str) -> tuple[int, int, int]:
+    """Parse one ``major.minor.patch`` string into a comparable triple, or refuse by name.
+
+    On the live path this only ever sees output from :func:`_version_string`, which has already
+    validated three integers in range.  It is written to refuse anyway because
+    :func:`classify_api_compatibility` is callable on its own: a malformed argument must produce
+    a typed refusal naming its subject, not a bare ``ValueError`` from ``int()``.  ADR-0121 --
+    a refusal is an answer and a crash is not.
+    """
+
+    parts = value.split(".")
+    if len(parts) != 3 or not all(part.isdigit() and len(part) <= 3 for part in parts):
+        raise KicadIpcVersionError(f"{subject} version is not a major.minor.patch triple")
+    major, minor, patch = (int(part) for part in parts)
+    return major, minor, patch
+
+
 def classify_api_compatibility(kicad_version: str, api_version: str) -> str:
     """Classify one editor/binding version pair against ADR-0128's declared window.
 
@@ -261,8 +278,8 @@ def classify_api_compatibility(kicad_version: str, api_version: str) -> str:
     pairing it had never checked in the more dangerous direction.
     """
 
-    kicad = tuple(int(part) for part in kicad_version.split("."))
-    api = tuple(int(part) for part in api_version.split("."))
+    kicad = _version_triple("KiCad", kicad_version)
+    api = _version_triple("kicad-python API", api_version)
     if kicad[0] != api[0]:
         raise KicadIpcVersionError(
             f"KiCad {kicad_version} is outside the compatibility window of the installed "

@@ -455,3 +455,22 @@ def test_no_live_entry_point_accepts_a_compatibility_override() -> None:
         assert "allow_future_api" not in names, f"{function.__name__} can still widen the window"
         # Guard the guard: a renamed flag would slip past an exact-name check.
         assert not [n for n in names if "future" in n or "compat" in n or "version" in n.lower()]
+
+
+@pytest.mark.parametrize(
+    "malformed", ["", "10", "10.0", "10.0.1.2", "10.0.x", "abc", "-1.0.0", "10.0.1-rc1", "1000.0.0"]
+)
+def test_a_malformed_version_is_a_typed_refusal_not_a_crash(malformed: str) -> None:
+    """ADR-0121: the classifier is callable on its own, so bad input must refuse by name."""
+
+    with pytest.raises(KicadIpcVersionError, match=r"major\.minor\.patch triple"):
+        classify_api_compatibility(malformed, "10.0.1")
+    with pytest.raises(KicadIpcVersionError, match=r"major\.minor\.patch triple"):
+        classify_api_compatibility("10.0.1", malformed)
+
+
+def test_the_malformed_version_refusal_names_which_side_was_malformed() -> None:
+    with pytest.raises(KicadIpcVersionError, match=r"^KiCad version is not"):
+        classify_api_compatibility("nope", "10.0.1")
+    with pytest.raises(KicadIpcVersionError, match=r"^kicad-python API version is not"):
+        classify_api_compatibility("10.0.1", "nope")
