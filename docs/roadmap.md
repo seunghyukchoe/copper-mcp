@@ -18,7 +18,7 @@ request includes the issue that pull request closes, so its count is the expecte
 |---|---|---|---|
 | M1 — KiCad inspection completion | 10 | 1 | Open: [#188](https://github.com/seunghyukchoe/copper-mcp/issues/188), the measured third-party conversion wall. #116 and #172 are closed. |
 | M2 — Routing depth | 6 | 1 | The milestone itself is closed. [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) remains open and operator-blocked for a contained FreeRouting comparison provider; it is not agent-executable. |
-| M3 — Safe application completion | 2 | 2 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. Both remaining halves wait on a real-editor operator gate. |
+| M3 — Safe application completion | 2 | 2 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply — **designed; live probe predeclared; implementation gated on the probe** ([ADR-0130](adr/0130-a-live-apply-proves-a-matched-digest-not-exclusive-access.md)) — and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. Both remaining halves wait on a real-editor operator gate. |
 | M4 — Scene, policy, and evaluation | 4 | 0 | Complete as a tracked accounting fact. The `[~]` items below continue to state narrower capability boundaries rather than hidden open issues. |
 | M5 — Verification and physics | 6 | 2 | Open after this slice: [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90) and [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91) — #91 stays open with `dfm` sign-off now reachable under [ADR-0119](adr/0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md) and SI/PI/thermal still unbacked. [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167) closes on ADR-0116's measured 500,000-vertex source boundary; [#87](https://github.com/seunghyukchoe/copper-mcp/issues/87) and [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99) are closed. |
 | Audio Board Lab #001 — Physical validation | 0 | 1 | Open: [#8](https://github.com/seunghyukchoe/copper-mcp/issues/8). See [the Audio Board Lab gate](#audio-board-lab-001--physical-validation) — as written the issue would validate the board, and the thing that needs validating is the tool. |
@@ -471,18 +471,38 @@ observation strengthened rather than weakened it.
 | **E3 — complete** | One real-editor IPC observation, **or** a recorded park of #68 | **The observation exists.** The operator enabled the workstation IPC server and consented to one read-only run: B-138 records a live KiCad 10.0.5 session with the CopperTone board open, observed through CopperMCP's own transport. The result is deliberately unflattering and is the point — the **default MCP path refuses** (`KicadIpcVersionError`: connected KiCad 10.0.5 is newer than the binding's 10.0.1 API), the editor-context surface refuses with no override available, and the capability oracle skips for want of a KiCad-launched plugin environment. One session, one board, read-only. **This satisfies E3 as an observation and changes nothing about #68**, whose park recommendation stands. |
 | **E4 — complete** | Appliability re-measured on the frozen corpus | B-128 runs both production source-preservation gates at a clean commit over the frozen 18-save selection: 15 convert, route patching is structurally appliable on 5, and placement replay renders on 0. No apply or DRC runs. |
 
-The recommendation on #68, which the operator may take or decline, is still to **park** it — and
-B-138 makes that recommendation stronger rather than weaker, so the original wording is corrected
-rather than dropped. It used to rest on "a transport this project has never successfully spoken
-to". That is no longer true: the project has now spoken to a real editor. What the observation
-found is a better reason to park. The default MCP path **refuses a current KiCad outright**,
-because the pinned binding's API version trails the shipping editor and `check_version()` raises;
-an observation required a development flag that stamps its own result `future_api_unverified`. A
-mutation surface would be built on top of that. The protocol's original objection is also
-unchanged and was re-confirmed by measurement: it exposes no revision, no dirty flag and no
-conditional write, and the live board digest was measured to differ from the on-disk file digest
-(165,571 bytes over IPC against 166,070 committed) — the ADR-0074 gap, now observed rather than
-argued. #68 is parked and deliberately **not closed**, because the decision is the operator's.
+#68's state is now **designed; live probe predeclared; implementation gated on the probe** — no
+longer a bare park, and still not an implementation. The history is worth keeping because each
+step corrected the one before it. The park originally rested on "a transport this project has
+never successfully spoken to"; B-138 made that false and supplied a better reason, which was that
+three of four live surfaces refused a real editor on first contact. ADR-0129 (in flight on
+[#242](https://github.com/seunghyukchoe/copper-mcp/pull/242)) then removed that reason too, by
+binding every live surface to a declared version window and requiring the exact-match `compatible`
+verdict for apply specifically.
+
+What was left was structural, and it has now been **measured rather than argued**.
+[B-144](ledgers/benchmark-ledger.md) enumerates the whole protocol from source — 17 `.proto` files,
+253 messages, 891 fields — and finds no document revision, no dirty flag and no conditional write
+anywhere in it; the only field in the protocol containing the word "revision" is the title-block
+string a human types into the drawing sheet. It also finds that `BeginCommit` carries no document,
+that `EndCommitResponse` is empty, that no client-side rollback of a pushed commit exists among 58
+public `Board` methods, and that the binding reads no status from any of its four mutation calls.
+[ADR-0130](adr/0130-a-live-apply-proves-a-matched-digest-not-exclusive-access.md) is the safety
+model decided from exactly those facts, and it states what a write path can honestly promise — that
+the write landed on a board whose digest matched the caller's at the moment of comparison, and
+**not** that no one else wrote — together with the residual risk [R-189](ledgers/risk-register.md)
+that its four safety checks defend CopperMCP against its own mistakes and against nothing else,
+because the socket has no intra-uid authentication.
+
+Three exit conditions remain, all of them needing a live session and none of them agent-executable:
+**one apply produces exactly one undo entry**, **`drop_commit` reliably reverts a partially staged
+batch**, and **a post-push re-read verifies the write**. They are predeclared in ADR-0130 §7 so the
+lane that runs them cannot choose its questions after seeing the answers, and a probe that *fails*
+is also an exit — it would close #68 as not tractable on this protocol, which is a better outcome
+than an open issue. Merge of any mutation stays gated on adversarial review after that.
+
+#68 is deliberately **not closed** and the mutation is deliberately **not implemented**, because
+the probe is the operator's to authorize.
 
 - [x] Durable routing jobs and cancellation. The bounded internal ledger, single-worker lease
   recovery, redacted candidate manifests, file-backed layered request/result persistence,

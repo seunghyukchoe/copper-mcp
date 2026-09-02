@@ -98,6 +98,31 @@ All notable changes are documented here. The format follows
   record passes **190/190** focused tests and **78/78** evidence-contract mutants (`D-241`,
   `B-141`, `ADR-0127`).
 
+### Documentation
+
+- ADR-0130 records the safety model for a live one-undo-commit apply into a running KiCad
+  (issue #68), decided from a measured protocol surface rather than from argument. Its published
+  guarantee is deliberately narrow: **the write landed on a board whose serialization digest
+  equalled the caller's at the moment CopperMCP compared them** — not that no one else wrote. The
+  record fixes exactly one pushed commit per apply, states the failure atomicity it can and cannot
+  promise (a `drop_commit` is *issued* on every failure path, can itself fail, and leaves an orphan
+  this client cannot re-address), keeps the file surface's `applied` / `applied_but_unverified`
+  vocabulary unchanged, and adds a required `document_binding` disclosure so a live apply cannot be
+  read as a file write. **No code changes and no capability is added**; `apply_live_candidate` still
+  answers `capability_not_implemented`, and the mutation is gated on three predeclared live-probe
+  exit conditions and then on adversarial review.
+- B-144 enumerates the IPC apply primitive surface from source — `kicad-python` 0.7.1 and KiCad's
+  vendored `.proto` descriptors, **17 files / 253 messages / 891 fields** — with no socket opened
+  and no board read. A deliberately over-broad 16-substring sweep for a document revision, dirty
+  flag or conditional write returns **7** hits, none of them about document state; the only
+  `revision` in the protocol is the title-block string a human types. All **11** expected
+  primitives are present with file and line citations, all **12** hypothesised rollback and
+  point-in-time primitives are absent from `Board`'s 58 public methods, and none of the **4**
+  mutation methods reads a status field. The artifact binds **content digests only** and records no
+  commit identifier, with the reason stated in the artifact itself.
+- Issue #68 moves from "parked" to "designed; live probe predeclared; implementation gated on the
+  probe" in the roadmap. Records: B-144, D-243, R-189, SEC-175, ADR-0130.
+
 ## [0.12.0] - 2026-09-01
 
 Upgrading from 0.11.0: see the

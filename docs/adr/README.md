@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0130**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0131**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -21,6 +21,16 @@ a file that does not exist, and when the advertised next unused number above is 
 allocated plus one. Gaps are reported as information and never fail. Keeping the next number on one
 line is deliberate: two branches that both allocate it now conflict textually, so Git refuses the
 merge instead of accepting it.
+
+**0129 is a live claim, not a gap.** This record first took 0129 while 0128 was
+[#242](https://github.com/seunghyukchoe/copper-mcp/pull/242)'s claim; 0128 has since landed from
+[#254](https://github.com/seunghyukchoe/copper-mcp/pull/254) instead, #242 renumbered its own
+record to **0129**, and this record renumbered again to **0130** rather than racing it — rule 1 of
+the [ledger ID convention](../ledgers/README.md#allocating-ids) applied to ADR numbers, and the
+fifth consecutive round in which stepping over a live claim costs nothing when the claim lands. The
+advertised next unused number is **0131** for the same reason: if #242 lands first it will have
+written **0130** on that one line, and Git will refuse the merge textually instead of accepting
+two ADRs numbered 0130. If #242 is abandoned, 0129 becomes a permanent gap under rule 2.
 
 **Known gaps:** there is no ADR-0027, ADR-0082, ADR-0083, ADR-0085, or ADR-0086. Every
 one of them is **spent, not free**. Recycling a number would silently repoint every external citation of the
@@ -206,8 +216,9 @@ never silently widens it.
 | [0127](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md) | Multi-pin local repair replaces one proven responsible branch | Accepted |
 | [0128](0128-private-surrogate-ranking-is-bounded-and-never-signs-off.md) | A private surrogate ranking is bounded and never signs off | Accepted |
 | [0129](0129-the-live-version-window-is-kicads-own-and-an-acceptance-is-not-a-proof.md) | The live version window is KiCad's own, and an acceptance is never published as a proof | Accepted |
+| [0130](0130-a-live-apply-proves-a-matched-digest-not-exclusive-access.md) | A live apply proves a matched digest, not exclusive access | Proposed |
 
-One hundred and twenty-nine numbers allocated, one hundred and twenty-four records, no duplicates — and
+One hundred and thirty numbers allocated, one hundred and twenty-four records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -357,4 +368,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0125: Stray footprint copper is bounded by a box because no fill rule is written down](0125-stray-footprint-copper-is-bounded-because-no-fill-rule-is-written-down.md)
 - [ADR-0126: Negotiated routing admits bounded multi-pin nets on request-local lattices](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md)
 - [ADR-0127: Multi-pin local repair replaces one proven responsible branch](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md)
-- [ADR-0129: The live version window is KiCad's own, and an acceptance is never published as a proof](0129-the-live-version-window-is-kicads-own-and-an-acceptance-is-not-a-proof.md)
+- [ADR-0130: A live apply proves a matched digest, not exclusive access](0130-a-live-apply-proves-a-matched-digest-not-exclusive-access.md)
