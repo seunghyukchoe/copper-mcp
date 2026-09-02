@@ -65,6 +65,9 @@ EXPECTED_NOT_CLAIMED = [
     "apply, editor, hardware, or network behaviour",
     "any board, net, revision, candidate, path, geometry, or private corpus identity",
     "generalisation beyond the exact committed 20-board B-088 subset",
+    "that source_commit names a revision any repository still has, since this project's "
+    "linear-history merge policy discards every commit a pull request creates; the verified "
+    "provenance is the content digests in configuration, not that revision",
 ]
 
 
@@ -981,9 +984,9 @@ def _replace_path(document: dict[str, Any], path: tuple[str, ...], value: Any) -
     (
         (("schema",), "copper-mcp/benchmark/other/v1"),
         (("benchmark",), "B-140"),
-        # The shape layer no longer pins a date literal -- the value is bound to the recorded
-        # commit by `_validate_evidence_date_binding`, which
-        # `test_evidence_date_must_be_the_recorded_commits_utc_date` exercises.  What the shape
+        # The shape layer does not pin a date literal -- the value is derived from the commit the
+        # run read, which `test_published_evidence_date_is_derived_from_a_commit` exercises, and is
+        # related to the default branch only by the separate opt-in history check.  What the shape
         # layer still owes is that the field is a real calendar day.
         (("date_utc",), "2026-13-45"),
         (("date_utc",), "31-08-2026"),
@@ -1101,24 +1104,22 @@ def test_load_artifact_accepts_a_recorded_source_revision_after_head_moves(
     assert loaded["source_commit"] == recorded_source_commit
 
 
-def test_authoritative_load_rejects_a_self_resigned_source_without_its_pinned_runner_blob(
+def test_a_generic_self_digest_cannot_make_a_synthetic_configuration_authoritative(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Generic self-digests cannot make an arbitrary source revision authoritative."""
+    """Self-consistency is not provenance: the bound content must be this repository's content.
+
+    The synthetic report is well-formed and correctly re-signed, and every historical authority
+    and the corpus are stubbed out so nothing else can be the cause.  What is left is the verified
+    provenance set, and it refuses by name -- naming the first input whose recorded digest is not
+    the digest of the file that is here.
+    """
 
     tampered = _synthetic_public_report()
     tampered["source_commit"] = "f" * 40
     _retag_document(tampered)
-    commitment = _commitment()
-    commitment["source_commit"] = tampered["source_commit"]
-    _retag_commitment(commitment)
 
-    # Both documents remain independently well-formed and self-consistent.  The authoritative
-    # check must still reject: a revision nobody can resolve cannot make anything authoritative.
-    # The refusal names absence rather than alleging a runner mismatch nobody looked for -- this
-    # revision names no object, so no runner blob was ever compared against it.
     benchmark.validate_report(tampered)
-    benchmark.validate_commitment(commitment)
     monkeypatch.setattr(benchmark, "load_b140_artifact", lambda: {})
     monkeypatch.setattr(benchmark, "load_reference_artifact", lambda: {})
     monkeypatch.setattr(benchmark, "_reference_authority", lambda _document: {})
@@ -1132,7 +1133,7 @@ def test_authoritative_load_rejects_a_self_resigned_source_without_its_pinned_ru
         ),
     )
     with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._BOUND_INPUT_ERROR)
     ):
         benchmark._validate_authoritative_bindings(tampered)
 
@@ -2576,36 +2577,117 @@ def test_every_completion_ceiling_states_a_denominator_that_applies_to_it() -> N
 # --- Family C: provenance and commitment coverage ----------------------------------------------
 
 
-def test_evidence_date_must_be_the_recorded_commits_utc_date() -> None:
-    """A hand-written label can name a day the run did not happen on; a derived one cannot."""
+def test_published_evidence_date_is_derived_from_a_commit() -> None:
+    """A hand-written label can name a day the run did not happen on; a derived one cannot.
+
+    What is pinned is the *derivation*, not a later agreement with the default branch.  The date a
+    run can record is the date of the commit it read; the date the default branch will later carry
+    is the date of the squash, which does not exist yet when the artifact is signed.  Requiring
+    those to be equal is what broke; relating them is the separate opt-in check below.
+    """
 
     head = benchmark._git_state()[0]
-    document = {"source_commit": head, "date_utc": benchmark._commit_utc_date(head)}
-    benchmark._validate_evidence_date_binding(document)
+    derived = benchmark._commit_utc_date(head)
 
-    for wrong in ("2026-01-01", "1999-12-31"):
-        if wrong == document["date_utc"]:
-            continue
-        with pytest.raises(
-            benchmark.NegotiatedDifferentialError,
-            match=re.escape(benchmark._EVIDENCE_DATE_ERROR),
-        ):
-            benchmark._validate_evidence_date_binding({**document, "date_utc": wrong})
-
-    # A well-formed hex that names no commit cannot supply a date at all -- and is reported as
-    # absent, not as a disagreement, because no date was ever read to disagree with.
+    assert re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", derived)
+    # `build_report` derives from this same function, so publication cannot invent a day.  It also
+    # still requires the revision to resolve: publication happens inside the repository that owns
+    # the commit, and only validation may happen anywhere.
     with pytest.raises(
         benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
     ):
-        benchmark._validate_evidence_date_binding({**document, "source_commit": "0" * 40})
+        benchmark._commit_utc_date("0" * 40)
 
 
-def test_published_artifact_date_is_its_own_recorded_commits_utc_date() -> None:
-    """The published audit record's chronology is checked against Git, not asserted in prose."""
+def _first_parent_runner_binding() -> tuple[str, str, str]:
+    """A runner digest this checkout's own first-parent history certainly carries.
 
-    document = _artifact()
+    Deliberately not the working-tree file: on a pull-request CI checkout ``HEAD`` is a merge
+    commit, and reading the blob out of ``HEAD`` is the one value that is present on the
+    first-parent path in every environment this suite runs in -- a branch, a merge ref, or `main`.
+    """
 
-    assert document["date_utc"] == benchmark._commit_utc_date(document["source_commit"])
+    git = shutil.which("git")
+    assert git is not None
+    blob = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+        [git, "show", f"HEAD:{benchmark.SCRIPT_PATH}"],
+        cwd=benchmark.ROOT,
+        check=True,
+        capture_output=True,
+        timeout=15,
+    ).stdout
+    digest = "sha256:" + hashlib.sha256(blob).hexdigest()
+    introducing = benchmark._first_parent_commit_introducing_runner(digest)
+    assert introducing is not None
+    return digest, introducing, benchmark._commit_utc_date(introducing)
+
+
+def test_the_evidence_date_history_check_reports_all_three_states() -> None:
+    """`agrees`, `disagrees` and `undeterminable` are three answers, and none of them refuses.
+
+    `undeterminable` exists because "the blob has not reached the default branch yet" is not "the
+    date is wrong" -- the same conflation that turned `main` red when an orphaned revision was
+    reported as tampering.  `disagrees` does not refuse either: it is the ordinary outcome of
+    review taking more than a day, and the check exists to report that, not to police it.
+    """
+
+    digest, _introducing, published = _first_parent_runner_binding()
+    document = {"date_utc": published, "configuration": {"runner_sha256": digest}}
+
+    assert (
+        benchmark.verify_evidence_date_against_history(document) == benchmark.EVIDENCE_DATE_AGREES
+    )
+
+    year, month, day = published.split("-")
+    shifted = {**document, "date_utc": f"{int(year) + 1:04d}-{month}-{day}"}
+    assert (
+        benchmark.verify_evidence_date_against_history(shifted) == benchmark.EVIDENCE_DATE_DISAGREES
+    )
+
+    unmerged = {**document, "configuration": {"runner_sha256": "sha256:" + "0" * 64}}
+    assert (
+        benchmark.verify_evidence_date_against_history(unmerged)
+        == benchmark.EVIDENCE_DATE_UNDETERMINABLE
+    )
+    assert set(benchmark.EVIDENCE_DATE_OUTCOMES) == {
+        benchmark.EVIDENCE_DATE_AGREES,
+        benchmark.EVIDENCE_DATE_DISAGREES,
+        benchmark.EVIDENCE_DATE_UNDETERMINABLE,
+    }
+
+
+def test_the_evidence_date_history_check_is_undeterminable_without_git(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No Git is a checkout that cannot answer, not a checkout that has caught something."""
+
+    digest, _introducing, published = _first_parent_runner_binding()
+    monkeypatch.setattr(benchmark.shutil, "which", lambda _name: None)
+
+    assert (
+        benchmark.verify_evidence_date_against_history(
+            {"date_utc": published, "configuration": {"runner_sha256": digest}}
+        )
+        == benchmark.EVIDENCE_DATE_UNDETERMINABLE
+    )
+
+
+def test_the_evidence_date_history_check_is_never_reached_by_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """It is a later, opt-in check: no guarantee level may quietly depend on Git history.
+
+    If any validation path called it, `load_artifact` would refuse -- or silently vary -- in a
+    shallow clone, which is exactly the class this change removes.
+    """
+
+    def refuse(*_args: Any, **_kwargs: Any) -> str:
+        raise AssertionError("a validation path consulted the post-merge date check")
+
+    monkeypatch.setattr(benchmark, "verify_evidence_date_against_history", refuse)
+    monkeypatch.setattr(benchmark, "_first_parent_commit_introducing_runner", refuse)
+
+    assert benchmark.load_artifact(EXPECTED_ARTIFACT)["benchmark"] == "B-141"
 
 
 def test_commitment_pins_every_claimed_arm_aggregate() -> None:
@@ -2727,23 +2809,34 @@ def test_companion_published_repairs_must_match_its_own_repair_outcome(
         benchmark._validate_commitment_arm(lying, lying)
 
 
-def test_authoritative_load_rejects_a_self_resigned_evidence_date() -> None:
-    """The reviewer's tampering, executed: a re-signed artifact with a lying UTC date is refused."""
+def test_the_companion_is_what_refuses_a_self_resigned_evidence_date() -> None:
+    """The reviewer's tampering, executed -- and located precisely at the level that catches it.
+
+    A re-signed lying date is still refused, but by the companion rather than by Git, and this
+    pins where.  `repository_bound` accepts it, because every digest in the verified provenance set
+    still matches the files this repository holds and nothing about the date is a claim about those
+    files.  `companion_bound` refuses, because `artifact_run_id` is the digest of the whole body.
+    That division is the honest one: the companion can pin what the artifact says, and no clone can
+    confirm a revision this project's merge policy destroys.
+    """
 
     document = _artifact()
-    published = benchmark._commit_utc_date(document["source_commit"])
+    published = document["date_utc"]
     year, month, day = published.split("-")
     document["date_utc"] = f"{int(year) + 1:04d}-{month}-{day}"
     _retag_document(document)
     assert document["date_utc"] != published
 
-    # Self-consistent by its own digest, and still refused.
-    benchmark.validate_report(document)
+    # Self-consistent by its own digest, and content-bound to this repository's files.
+    assert benchmark.validate_report(document) == benchmark.GUARANTEE_OFFLINE
+    assert (
+        benchmark._validate_authoritative_bindings(document) == benchmark.GUARANTEE_REPOSITORY_BOUND
+    )
 
-    with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._EVIDENCE_DATE_ERROR)
-    ):
-        benchmark._validate_authoritative_bindings(document)
+    with pytest.raises(benchmark.NegotiatedDifferentialError, match="commitment binding"):
+        benchmark._validate_authoritative_bindings(
+            document, artifact_path=EXPECTED_ARTIFACT, require_commitment=True
+        )
 
 
 def test_declared_bucket_names_must_be_the_published_taxonomy(
@@ -2806,12 +2899,11 @@ def test_validate_report_returns_the_guarantee_level_it_reached() -> None:
     )
 
 
-def _repository_bound_tampers() -> dict[str, dict[str, Any]]:
-    """Three re-signed documents whose lie lives in the repository, not in the document."""
+def _companion_bound_tampers() -> dict[str, dict[str, Any]]:
+    """Three re-signed documents whose lie only the companion commitment can catch."""
 
     date_tamper = _artifact()
-    published = benchmark._commit_utc_date(date_tamper["source_commit"])
-    year, month, day = published.split("-")
+    year, month, day = date_tamper["date_utc"].split("-")
     date_tamper["date_utc"] = f"{int(year) + 1:04d}-{month}-{day}"
     _retag_document(date_tamper)
 
@@ -2832,20 +2924,31 @@ def _repository_bound_tampers() -> dict[str, dict[str, Any]]:
 
 
 @pytest.mark.parametrize("case", ("evidence_date", "source_commit", "headline_total"))
-def test_the_offline_guarantee_does_not_cover_repository_bound_provenance(case: str) -> None:
-    """The docstring's stated gap is real, and `load_artifact` is what closes it.
+def test_only_the_companion_refuses_a_re_signed_date_revision_or_headline_total(case: str) -> None:
+    """Each weaker guarantee's stated gap is real, and `load_artifact` is what closes it.
 
-    This pins the *content* of the weaker guarantee rather than its wording: at the offline level
-    each of these re-signed documents is accepted, and each is refused once the repository is
-    consulted.  If a future edit silently strengthened or weakened either side, this fails.
+    This pins the *content* of each level rather than its wording.  None of these three tampers
+    touches a file, so `repository_bound` -- which is now entirely about file content -- accepts all
+    three and says so.  All three are refused at `companion_bound`, which `load_artifact` always
+    reaches.  If a future edit silently strengthened or weakened any level, this fails.
+
+    The two provenance cases moved down one level when the revision binding was replaced, and that
+    is deliberate rather than incidental: the Git check they used to fail at could not survive a
+    squash merge, so it refused valid artifacts on `main` while still being bypassable by anyone
+    who could re-sign both files.  The companion catches the same re-signing durably.
     """
 
-    tampered = _repository_bound_tampers()[case]
+    tampered = _companion_bound_tampers()[case]
 
     # Accepted at the level `validate_report` actually reaches, and it says so.
     assert benchmark.validate_report(tampered) == benchmark.GUARANTEE_OFFLINE
 
-    # Refused once the repository is consulted, which is what `load_artifact` does.
+    # Still accepted with the repository consulted: every bound file is unchanged.
+    assert (
+        benchmark._validate_authoritative_bindings(tampered) == benchmark.GUARANTEE_REPOSITORY_BOUND
+    )
+
+    # Refused once the companion is consulted, which is what `load_artifact` does.
     with pytest.raises(benchmark.NegotiatedDifferentialError):
         benchmark._validate_authoritative_bindings(
             tampered, artifact_path=EXPECTED_ARTIFACT, require_commitment=True
@@ -2885,11 +2988,16 @@ def test_load_artifact_refuses_a_binding_that_did_not_reach_its_documented_guara
         benchmark.load_artifact()
 
 
-# --- An absent commit and a disagreeing commit are different facts --------------------------------
+# --- Content survives a squash merge; a recorded revision does not -------------------------------
 
 
 def test_recorded_commit_resolution_separates_absent_from_present() -> None:
-    """`None` means "not here", which is not a verdict about the artifact."""
+    """`None` means "not here", which is not a verdict about the artifact.
+
+    Still exercised, because *publication* derives the evidence date through this resolution and
+    happens inside the repository that owns the revision.  No validation path reaches it any more,
+    which is the whole point: publication may demand a revision, validation may not.
+    """
 
     head = benchmark._git_state()[0]
 
@@ -2900,97 +3008,135 @@ def test_recorded_commit_resolution_separates_absent_from_present() -> None:
         benchmark._resolve_recorded_commit("not-a-sha")
 
 
-def test_an_absent_commit_is_never_reported_as_a_date_disagreement() -> None:
-    """The CI defect: a real artifact in a clone without the object was blamed for tampering."""
+def test_a_squash_orphaned_source_commit_is_accepted_because_the_content_survives() -> None:
+    """The reason this change exists, mechanized as the inverse of the rule it replaces.
 
-    absent = {"date_utc": "2026-09-01", "source_commit": "0" * 40}
-
-    with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
-    ):
-        benchmark._validate_evidence_date_binding(absent)
-    # And specifically NOT the tampering refusal.
-    try:
-        benchmark._validate_evidence_date_binding(absent)
-    except benchmark.NegotiatedDifferentialError as error:
-        assert benchmark._EVIDENCE_DATE_ERROR not in str(error)
-
-
-def test_a_present_commit_with_a_wrong_date_keeps_the_tampering_refusal() -> None:
-    """The other branch is unchanged: a resolvable commit that disagrees is tampering."""
-
-    head = benchmark._git_state()[0]
-    published = benchmark._commit_utc_date(head)
-    year, month, day = published.split("-")
-    mismatched = {"date_utc": f"{int(year) + 1:04d}-{month}-{day}", "source_commit": head}
-
-    with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._EVIDENCE_DATE_ERROR)
-    ):
-        benchmark._validate_evidence_date_binding(mismatched)
-
-
-def test_an_absent_commit_is_never_reported_as_a_runner_binding_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The same conflation lived in the runner binding and is separated there too."""
-
-    document = _artifact()
-    document["source_commit"] = "0" * 40
-
-    with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
-    ):
-        benchmark._validate_source_commit_runner_binding(document)
-    assert (
-        benchmark._validate_source_commit_runner_binding(document, allow_absent_commit=True)
-        is False
-    )
-
-    # The other branch, without depending on any commit's reachability: point the binding at a
-    # different tracked file that HEAD certainly carries.  The revision resolves, the blob is
-    # fetched, and its digest is not the pinned runner's -- a real binding failure, named as one.
-    present = _artifact()
-    present["source_commit"] = benchmark._git_state()[0]
-    monkeypatch.setattr(benchmark, "SCRIPT_PATH", "scripts/mutation_harness.py")
-    with pytest.raises(benchmark.NegotiatedDifferentialError, match="source commit/runner"):
-        benchmark._validate_source_commit_runner_binding(present)
-
-
-def test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request() -> None:
-    """Direction of error: never certify what could not be checked, never allege what was not seen.
-
-    This is the shallow-checkout case -- a genuine artifact validated in a clone that lacks its
-    recorded commit.  The default refuses rather than silently accepting, because every call site
-    in this repository uses validation for its exception.  A caller that opts in is told what was
-    actually established: `offline`, which claims no repository binding.
+    This is the state a squash merge actually produces, reconstructed: the recorded revision is
+    unreachable while the exact bytes it bound are all still present.  `main` sets
+    `required_linear_history=true`, so this is not an accident that better hygiene avoids -- it is
+    the guaranteed outcome of every pull request this project merges.  The tree does not survive
+    either, because `main` advances between publication and merge.  The runner blob does.  Binding
+    content is therefore the only binding that can be true both before and after the merge, and
+    refusing here would refuse every artifact this project publishes, one merge after publishing
+    it -- which is exactly what happened in issue #250.
     """
 
     document = _artifact()
     document["source_commit"] = "0" * 40
     _retag_document(document)
 
-    with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
-    ):
-        benchmark.validate_report(document, verify_live_bindings=True)
+    assert benchmark._resolve_recorded_commit(document["source_commit"]) is None
+    # The bytes the orphaned revision bound are all still here, input by input.
+    for key, path in benchmark._bound_input_paths().items():
+        assert document["configuration"][key] == _file_digest(path)
 
+    assert benchmark.validate_report(document) == benchmark.GUARANTEE_OFFLINE
     assert (
-        benchmark.validate_report(
-            document, verify_live_bindings=True, allow_absent_source_commit=True
-        )
-        == benchmark.GUARANTEE_OFFLINE
+        benchmark.validate_report(document, verify_live_bindings=True)
+        == benchmark.GUARANTEE_REPOSITORY_BOUND
     )
 
 
-def test_load_artifact_never_downgrades_for_an_absent_commit(
+def test_load_artifact_is_unaffected_by_a_recorded_commit_no_clone_can_resolve(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The authoritative path stays fail-closed: it cannot opt in, and its level check backstops."""
+    """The defect that turned `main` red (#250), replayed against the committed artifact.
 
-    monkeypatch.setattr(benchmark, "_resolve_recorded_commit", lambda _commit: None)
+    Every clone is forced into the absent-commit case at once, and the authoritative entry point
+    keeps working -- because nothing it checks needs the revision.  A future edit that reintroduces
+    a resolution on this path fails here rather than on `main` after the next squash.
+    """
+
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("an authoritative load resolved the recorded revision")
+
+    monkeypatch.setattr(benchmark, "_resolve_recorded_commit", refuse)
+
+    assert benchmark.load_artifact(EXPECTED_ARTIFACT)["run_id"] == _artifact()["run_id"]
+
+
+def test_the_recorded_revision_is_a_note_and_the_report_says_so() -> None:
+    """The cost of the demotion, stated and pinned rather than left for a reader to discover.
+
+    A re-signed artifact can now name any revision it likes and still reach `repository_bound`.
+    That is a real loss, and it is accepted because the check it removes could not survive a squash
+    merge -- so it refused valid artifacts on `main` while remaining bypassable by anyone able to
+    re-sign both files anyway.  What is *not* lost is the verified set: the same re-signing cannot
+    change a single bound byte.  The published report carries the limitation in `not_claimed`, so a
+    consumer reading the JSON alone learns it without reading this suite.
+    """
+
+    document = _artifact()
+    document["source_commit"] = "f" * 40
+    _retag_document(document)
+
+    assert benchmark.validate_report(document, verify_live_bindings=True) == (
+        benchmark.GUARANTEE_REPOSITORY_BOUND
+    )
+    assert any("source_commit names a revision" in claim for claim in document["not_claimed"])
+
+    # And the verified set is untouched by the same re-signing: one changed digest is still refused.
+    document["configuration"]["runner_sha256"] = "sha256:" + "0" * 64
+    _retag_document(document)
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(f"{benchmark._BOUND_INPUT_ERROR}: runner_sha256"),
+    ):
+        benchmark.validate_report(document, verify_live_bindings=True)
+
+
+@pytest.mark.parametrize("field", sorted(benchmark._bound_input_paths()))
+def test_every_bound_input_is_refused_by_name_when_its_content_drifts(
+    monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    """A changed blob is refused, and the refusal says which input changed.
+
+    One opaque "binding could not be verified" is what the revision check produced, and it sent the
+    first reader of #250 hunting for tampering that had not happened.  Naming the input is the
+    difference between an actionable refusal and a mystery.
+    """
+
+    drifting = benchmark._bound_input_paths()[field].resolve()
+    original = benchmark._file_digest
+
+    def drifted(path: Path) -> str:
+        if Path(path).resolve() == drifting:
+            return "sha256:" + "0" * 64
+        return original(path)
+
+    monkeypatch.setattr(benchmark, "_file_digest", drifted)
 
     with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(f"{benchmark._BOUND_INPUT_ERROR}: {field}"),
     ):
-        benchmark.load_artifact()
+        benchmark._validate_bound_input_content(_artifact())
+
+
+def test_a_published_file_digest_outside_the_verified_set_fails_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A future bound input cannot be published unverified: the guard is derived, not listed."""
+
+    monkeypatch.setattr(
+        benchmark, "_CONFIGURATION_KEYS", benchmark._CONFIGURATION_KEYS | {"unverified_sha256"}
+    )
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._BOUND_INPUT_COVERAGE_ERROR),
+    ):
+        benchmark._assert_bound_inputs_cover_published_digests()
+
+
+def test_the_verified_set_is_the_only_source_of_published_file_digests() -> None:
+    """`_configuration` publishes exactly the verified set's digests, by construction."""
+
+    configuration = benchmark._configuration()
+    published = {
+        key for key in configuration if key.endswith("_sha256") and key != "configuration_sha256"
+    }
+
+    assert published == set(benchmark._bound_input_paths())
+    for key, path in benchmark._bound_input_paths().items():
+        assert configuration[key] == _file_digest(path)
