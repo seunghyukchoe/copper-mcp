@@ -236,15 +236,16 @@ class McpServerTests(unittest.TestCase):
 
     def test_live_observer_returns_typed_redacted_content(self) -> None:
         payload = {
-            "schema_version": "0.1.0",
+            "schema_version": "0.2.0",
             "source": "kicad-ipc-live",
             "kicad_version": "10.0.5",
             "api_version": "10.0.5",
             "compatibility": "compatible",
             "board_digest": "sha256:" + "a" * 64,
             "board_bytes": 128,
-            "object_counts": {"nets": 2, "pads": 4},
+            "object_counts": {"net_declarations": 2, "pads": 4},
             "socket_kind": "default-local-ipc",
+            "document_binding": "in_memory_unsaved_state_unobservable",
             "session_revision": "pbkdf2-hmac-sha256:" + "b" * 64,
             "read_only": True,
         }

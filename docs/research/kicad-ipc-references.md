@@ -14,8 +14,15 @@
    object exposes version checks, an open-board handle, `get_as_string`, and read APIs such as
    `get_nets`, `get_footprints`, `get_pads`, `get_tracks`, `get_vias`, and `get_zones`.
 4. Version compatibility is not cosmetic. The 0.7.1 wheel reports an API build based on KiCad
-   10.0.1, while this workstation has KiCad 10.0.5. The adapter therefore refuses future versions
-   by default and labels an explicit development override `future_api_unverified`.
+   10.0.1, while this workstation has KiCad 10.0.5. Under `ADR-0129` the adapter applies its own
+   declared major-version window rather than consuming `check_version()`'s boolean, which is
+   asymmetric: it raises only for a strictly newer editor and returns `True` for every older one.
+   A 10.0.5 editor is observed and labelled `future_api_unverified`; an older editor within the
+   same major is labelled `legacy_api_unverified`; only an exact `major.minor.patch` match is
+   labelled `compatible`; and a major boundary is refused, naming both versions. KiCad's guarantee
+   is a wire guarantee — new releases add messages and fields but do not change the meaning of
+   existing ones — which is what makes the newer direction safe to read and the major boundary the
+   right place to stop.
 5. IPC is synchronous and KiCad 9/10 has no schematic-editor IPC surface. Live board observation
    can close the editor-state loop for PCB work, but it cannot claim schematic parity, ERC,
    electrical validation, or a stable live scene until a separate binding is implemented.
