@@ -483,7 +483,7 @@ def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
 
     Re-pinned because `ci.yml:test` **changed shape**, not because the suite grew.
     Its `Unit tests` step now runs four xdist workers with `--dist loadfile`
-    (D-242, B-143), so the six serial legs pinned at the v0.12.0 boundary measured
+    (D-244, B-143), so the six serial legs pinned at the v0.12.0 boundary measured
     a job that no longer exists and were replaced rather than kept. The v0.12.0
     sample was two post-merge `main` pushes; this one is `workflow_dispatch` runs
     on the branch that makes the change, because the four-worker job does not

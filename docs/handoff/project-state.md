@@ -268,14 +268,22 @@ worse than none, because it will be ignored.
   `B-138` records a read-only observation of a running KiCad 10.0.5 (`kipy` 0.7.1) with the
   CopperTone board open, taken through CopperMCP's own transport after the operator enabled the
   workstation IPC server. It is one session, one board, one build, one host — not an apply and not
-  `#68`. The transport's behaviour against a real editor is now measured rather than assumed:
-  `inspect_live_board` **refuses by default** with `KicadIpcVersionError` because the connected
-  KiCad (10.0.5) is newer than the installed binding's API (10.0.1); `inspect_live_editor_context`
-  refuses identically and passes no `allow_future_api` override at all; and the
-  `probe_live_kicad_ipc` oracle returns `skipped`/`kicad_plugin_environment_absent` because it
-  requires the KiCad-launched plugin environment. An observation is obtainable only through the
-  documented non-MCP development flag, which stamps the result `future_api_unverified`. The unit
-  tests still exercise these surfaces through a fake official-client seam. See also `SEC-168` for
+  `#68`. The transport's behaviour against a real editor was
+  measured rather than assumed, and **`ADR-0129` has since changed three of the four results**.
+  As measured at B-138: `inspect_live_board` refused by default with `KicadIpcVersionError`
+  because the connected KiCad (10.0.5) is newer than the installed binding's API (10.0.1);
+  `inspect_live_editor_context` refused identically and passed no `allow_future_api` override at
+  all; and the `probe_live_kicad_ipc` oracle returned
+  `skipped`/`kicad_plugin_environment_absent` because it requires the KiCad-launched plugin
+  environment. **At HEAD the two version refusals are gone**: the binding now applies a declared
+  major-version window, so a 10.0.5 editor is observed on every read surface carrying
+  `future_api_unverified`, `allow_future_api` is retired, and the same audit found the reverse
+  defect — an editor a whole major *behind* the binding was being published as `compatible`, and
+  is now refused. The oracle's plugin-environment skip is unchanged and is not a version result.
+  **This is a code change, not a re-measurement: no live session has been run at HEAD**, so the
+  accept path against a real editor remains unverified and `R-188` holds it open. The unit tests
+  exercise these surfaces through a fake official-client seam that reproduces `check_version()`'s
+  measured asymmetry. See also `SEC-168` for
   what enabling the server exposes, and disable it when a live session is not needed.
 - **`R-033`**: the committed CopperTone board still carries mounting-hole keepout octagons
   inscribed at 2.85 mm, so edges sit 0.2169 mm inside the requirement. The generator is fixed;

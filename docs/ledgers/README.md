@@ -23,8 +23,8 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-242` | `D-243` |
-| [Risk register](risk-register.md) | `R-` | `R-187` | `R-188` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-244` | `D-245` |
+| [Risk register](risk-register.md) | `R-` | `R-188` | `R-189` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-174` | `SEC-175` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-143` | `B-144` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
@@ -40,6 +40,17 @@ its identifiers remain spent under rule 2.
 The same wave reserved `B-125`–`B-127` for sibling lanes and `B-128` for M3 E4. B-128 is now
 consumed here; the sibling reservations remain unavailable until their lanes land or explicitly
 release them.
+
+`B-142` was allocated while `B-141` was still held by open pull request
+[#239](https://github.com/seunghyukchoe/copper-mcp/pull/239), stepping over it under rule 1 rather
+than racing it. #239 has since landed, so `B-141` and `B-142` now sit adjacent with no gap. The
+same wave's `D-`/`R-` numbers collided twice. First, #239 and the live-version-binding lane both
+allocated `D-236`/`R-186` from the same stale registry, and the second to merge renumbered to
+`D-237`/`R-187` under rule 1. Then
+[#254](https://github.com/seunghyukchoe/copper-mcp/pull/254) landed that same `D-237`/`R-187` pair
+first, so this lane renumbered again — to `D-242`/`R-188`, the registry's next free numbers at
+main's tip, rather than reusing any number below `D-242` under rule 2 or adding a seventh and
+eighth double-named identifier to the list above.
 
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`
@@ -210,17 +221,21 @@ release them.
    precisely so that this case reads correctly afterwards.
 
    The CI suite-speed lane is the round where a stepped-over number was **withdrawn rather than
-   claimed**. It opened against a base whose highest decision row was `D-236` and took `D-238`,
-   stepping over two open branches. By the time it pushed, `main` had merged `D-237` and `D-241`,
-   and `D-238` was no longer available in the sense that matters: the decision ledger is strictly
-   increasing in document order, so a `D-238` row appended after `D-241` fails the checker, and
-   inserting it at its numeric position would have filled a gap to tidy the sequence -- which rule 2
-   forbids -- while leaving the `Highest allocated` line untouched and therefore producing **no
-   textual conflict at all** with the open branch also holding `D-240`. Losing that conflict is
-   losing the safety net, so the lane re-read the tip and took `D-242`. `B-143` needed no such move:
-   the benchmark ledger makes no ordering claim, `B-143` was still free, and it steps over `B-142`,
-   a live claim on [#242](https://github.com/seunghyukchoe/copper-mcp/pull/242). `D-238` and `D-239`
-   are live claims or spent numbers like any other, not an invitation to backfill.
+   claimed**, twice over. It opened against a base whose highest decision row was `D-236` and took
+   `D-238`, stepping over two open branches. By the time it pushed, `main` had merged `D-237` and
+   `D-241`, and the lane withdrew `D-238` rather than keep it: it had already published the number
+   to two sibling lanes, so re-reading the tip and taking a number above every live claim was the
+   move that kept the `Highest allocated` line conflicting textually with those siblings instead of
+   going quiet. It took `D-242` -- and
+   [#242](https://github.com/seunghyukchoe/copper-mcp/pull/242) then landed its own re-arbitrated
+   `D-242`/`R-188`/`B-142` first, so the lane re-read the tip a second time and took **`D-244`**,
+   above `D-243`, which [#251](https://github.com/seunghyukchoe/copper-mcp/pull/251) holds. `D-238`
+   is therefore a **withdrawn claim and permanently spent** under rule 2, and it is not an
+   invitation to backfill. `D-239` is a different case and is **not** spent: it is the
+   checker-population lane's own live claim, which that lane fills at its numeric position, which
+   is rule 1 working rather than a backfill. `B-143` needed no move in either round: the benchmark
+   ledger makes no ordering claim, `B-143` was free at both tips, and #242's `B-142` has since
+   landed, so `B-142` and `B-143` sit adjacent with no gap.
 3. **A correction gets a new ID.** Because rows are append-only, a superseding or clarifying entry
    is a new entry that names what it corrects — never an edit to the original. `B-075`
    ("held-out audio evidence-source provenance correction") is the model: it states what it
