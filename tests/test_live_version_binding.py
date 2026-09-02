@@ -1,10 +1,10 @@
-"""ADR-0128's live API version binding, exercised in both directions on every live surface.
+"""ADR-0129's live API version binding, exercised in both directions on every live surface.
 
 Every surface that opens an IPC session gets the same four cases: an exact version match must
 publish ``compatible``; a newer editor and an older editor must each be *observed* and carry a
 verdict naming the direction; and a pair spanning a major boundary must be refused with both
 versions in the message.  The older direction is the one this project shipped wrong -- until
-ADR-0128 a KiCad a whole major behind the binding was published as ``compatible`` -- so its
+ADR-0129 a KiCad a whole major behind the binding was published as ``compatible`` -- so its
 tests are written as regressions rather than as new coverage.
 """
 
@@ -436,7 +436,7 @@ def test_the_oracle_refuses_a_verdict_the_observation_boundary_could_not_produce
 
 
 def test_no_live_entry_point_accepts_a_compatibility_override() -> None:
-    """The structural half of ADR-0128: the window cannot be widened because no argument widens it.
+    """The structural half of ADR-0129: the window cannot be widened because no argument widens it.
 
     ``inspect_live_editor_context`` refused a real 10.0.5 editor that ``inspect_live_board`` could
     observe for one reason -- ``allow_future_api`` existed, and one of the two call sites forwarded
@@ -477,10 +477,10 @@ def test_the_malformed_version_refusal_names_which_side_was_malformed() -> None:
 
 
 # --------------------------------------------------------------------------------------------
-# The oracle's schema version, moved with its accepted set (ADR-0105 via ADR-0128).
+# The oracle's schema version, moved with its accepted set (ADR-0105 via ADR-0129).
 #
 # The oracle republishes the observation's verdict, so widening that vocabulary widened what a
-# *published* oracle document may say. Before ADR-0128 the oracle called `capture_live_board`
+# *published* oracle document may say. Before ADR-0129 the oracle called `capture_live_board`
 # with no future-API override, so a drifted editor raised and was caught into a `refused` result
 # -- a published document could carry only `None` or `compatible`. It can now carry two more.
 # --------------------------------------------------------------------------------------------

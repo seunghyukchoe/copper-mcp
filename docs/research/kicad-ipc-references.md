@@ -14,7 +14,7 @@
    object exposes version checks, an open-board handle, `get_as_string`, and read APIs such as
    `get_nets`, `get_footprints`, `get_pads`, `get_tracks`, `get_vias`, and `get_zones`.
 4. Version compatibility is not cosmetic. The 0.7.1 wheel reports an API build based on KiCad
-   10.0.1, while this workstation has KiCad 10.0.5. Under `ADR-0128` the adapter applies its own
+   10.0.1, while this workstation has KiCad 10.0.5. Under `ADR-0129` the adapter applies its own
    declared major-version window rather than consuming `check_version()`'s boolean, which is
    asymmetric: it raises only for a strictly newer editor and returns `True` for every older one.
    A 10.0.5 editor is observed and labelled `future_api_unverified`; an older editor within the

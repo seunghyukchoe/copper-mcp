@@ -274,9 +274,9 @@ def _factory(
 def test_live_preview_runs_across_the_whole_declared_window(
     tmp_path: Path, kicad: tuple[int, int, int], api: tuple[int, int, int]
 ) -> None:
-    """ADR-0128: a read surface accepts every pair inside the window, drifted or not.
+    """ADR-0129: a read surface accepts every pair inside the window, drifted or not.
 
-    Before ADR-0128 the first of these pairs -- the one B-138 measured against a real editor --
+    Before ADR-0129 the first of these pairs -- the one B-138 measured against a real editor --
     reached a `KicadIpcVersionError` here, so the preview could not run against the KiCad the
     operator actually had installed.
     """

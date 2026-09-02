@@ -245,7 +245,7 @@ def test_live_apply_refuses_every_acceptance_the_read_paths_allow(
     api: tuple[int, int, int],
     verdict: str,
 ) -> None:
-    """ADR-0128 tiers the window: a read may publish an unverified verdict, a mutation may not.
+    """ADR-0129 tiers the window: a read may publish an unverified verdict, a mutation may not.
 
     Both pairs here are *observable* on every read surface. Apply refuses them anyway, because
     a caller cannot act on a disclosure attached to a board that has already changed.

@@ -311,7 +311,7 @@ class KicadIpcTests(unittest.TestCase):
                 inspect_live_board(_settings(), client_factory=lambda **_: _KiCad())
 
     def test_a_future_editor_is_observed_with_a_typed_disclosure_and_no_flag(self) -> None:
-        """ADR-0128: the case B-138 hit. No escape hatch is needed and none exists."""
+        """ADR-0129: the case B-138 hit. No escape hatch is needed and none exists."""
 
         def factory(**_: object) -> _KiCad:
             return _KiCad(kicad=(10, 0, 5), api=(10, 0, 1), future=True)

@@ -279,7 +279,7 @@ def _copper_mcp_surfaces(settings: Settings, budget: Budget) -> dict[str, Any]:
             "message": str(error),
         }
 
-    # 2. The same surface again.  Before ADR-0128 this second probe used the non-MCP
+    # 2. The same surface again.  Before ADR-0129 this second probe used the non-MCP
     #    `allow_future_api` escape hatch and was the ONLY surface that observed anything.
     #    The flag is retired: the declared window now governs both probes, so 1 and 2 differ
     #    only in that this one is charged against the budget after the first has run.

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Measure ADR-0128's live version binding against one real KiCad editor, read-only.
+"""Measure ADR-0129's live version binding against one real KiCad editor, read-only.
 
 [B-138](../docs/ledgers/benchmark-ledger.md) measured this project's live surfaces refusing a real
 KiCad 10.0.5 editor: `inspect_live_board` on its default path and `inspect_live_editor_context`
 both raised `KicadIpcVersionError`, and only a non-MCP development flag could observe anything.
-ADR-0128 replaced that with a declared major-version window. **This instrument asks whether the
+ADR-0129 replaced that with a declared major-version window. **This instrument asks whether the
 replacement actually works against the same editor, which no offline test can answer.**
 
 It records exactly four things:
@@ -19,7 +19,7 @@ It records exactly four things:
    rename's whole premise, checked against `Board.get_nets()` -- the oracle the old name implied
    and never consulted.
 4. **The binding-agreement check does not misfire.** `check_version()` re-reads the version over
-   IPC, so on a real editor it is a genuine second reading; ADR-0128 refuses when it disagrees
+   IPC, so on a real editor it is a genuine second reading; ADR-0129 refuses when it disagrees
    with the pair this adapter read, and that must not fire on a healthy session.
 
 **Read-only discipline, inherited rather than reimplemented.** The revision binding, wall-clock
@@ -137,7 +137,7 @@ def _raw_binding_facts(client: Any, budget: Budget) -> dict[str, Any]:
         "api_version": api,
         "check_version_raised": raised,
         "check_version_returned": returned if raised is None else None,
-        # The premise ADR-0128 rests on, restated as an observation rather than a citation.
+        # The premise ADR-0129 rests on, restated as an observation rather than a citation.
         "editor_is_newer_than_binding": tuple(int(p) for p in kicad_version.split("."))
         > tuple(int(p) for p in api.split(".")),
     }

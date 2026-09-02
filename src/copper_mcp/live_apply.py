@@ -590,7 +590,7 @@ def apply_live_candidate(
         )
 
     board_revision = captured.observation.board_digest
-    # ADR-0128 tiers the window by what a surface can do, not by what it reads. A *read* across
+    # ADR-0129 tiers the window by what a surface can do, not by what it reads. A *read* across
     # an unverified binding is safe to publish because it carries the verdict that says so, and
     # its worst case is an incomplete answer. A mutation has no such disclosure to hide behind:
     # the board changes either way, and "the write was issued against an API this build never

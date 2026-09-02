@@ -391,7 +391,7 @@ class LiveBoardObservationToolResponse(_ClosedContract):
     kicad_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
     api_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
     #: Exactly one of these means the binding proved compatibility. ``compatible`` requires an
-    #: exact version match; the other two are acceptances under ADR-0128's declared window and
+    #: exact version match; the other two are acceptances under ADR-0129's declared window and
     #: name the direction of the drift. A caller that collapses them has discarded the only
     #: signal distinguishing a verified read from an unverified one.
     compatibility: Literal["compatible", "future_api_unverified", "legacy_api_unverified"]

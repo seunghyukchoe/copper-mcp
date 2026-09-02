@@ -31,8 +31,8 @@ from copper_mcp.kicad_ipc import (
 )
 from copper_mcp.parse_budgets import parse_limits_for
 
-#: Moved ``0.1.0`` -> ``0.2.0`` by ADR-0128, under ADR-0105's rule that a schema version moves
-#: with its **accepted set**.  This document's ``compatibility`` field widened: before ADR-0128 the
+#: Moved ``0.1.0`` -> ``0.2.0`` by ADR-0129, under ADR-0105's rule that a schema version moves
+#: with its **accepted set**.  This document's ``compatibility`` field widened: before ADR-0129 the
 #: oracle called ``capture_live_board`` without any future-API override, so a drifted editor raised
 #: ``KicadIpcVersionError`` and was caught into a ``refused`` result -- meaning a *published*
 #: oracle document could only ever carry the two values frozen below.  It can now carry two more.
@@ -96,7 +96,7 @@ class LiveIpcOracleResult:
         # condition, so a document declaring a superseded schema version was refused with
         # "must remain read-only" -- a true refusal giving a false reason, which is the defect
         # ADR-0123 names and D-197 corrected on the codec's own version path. The pin became
-        # load-bearing when ADR-0128 moved this version, so it now says what it checked.
+        # load-bearing when ADR-0129 moved this version, so it now says what it checked.
         if self.schema_version != LIVE_IPC_ORACLE_SCHEMA_VERSION:
             raise ValueError("live IPC oracle schema version is not the version this build emits")
         # The oracle republishes the observation's verdict, so it must be one the observation

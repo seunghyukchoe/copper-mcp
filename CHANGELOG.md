@@ -27,15 +27,26 @@ All notable changes are documented here. The format follows
   `inspect_live_board` could observe, and removing it makes that bug class impossible. A
   capability probe was refused on measurement: KiCad's command protos carry no feature-discovery
   message, and `kipy` collapses the status codes that would substitute for one
-  (`ADR-0128`, `D-237`, `R-187`, `B-138`, issue #68).
+  (`ADR-0129`, `D-242`, `R-188`, `B-138`, issue #68).
 - `object_counts["nets"]` on the live observation is renamed **`net_declarations`**. It counts
   top-level `(net …)` declarations, which a KiCad 10 document does not carry — `B-138` measured
   it reporting `0` against an editor holding 15 nets. The count was always correct and its name
   was not. **No derived cardinality replaces it**: counting distinct net names off item
   references would be an unverified parity claim against `Board.get_nets()`. Board IR's own
-  `object_counts["nets"]` is a genuine net collection and is unchanged (`ADR-0128`, `D-237`).
+  `object_counts["nets"]` is a genuine net collection and is unchanged (`ADR-0129`, `D-242`).
 
 ### Added
+
+- Added the private, direct-import-only surrogate-ranking slice for issue #91. It accepts only
+  immutable, revision-bound route candidates, applies fixed integer scoring under 32-candidate and
+  16,384-vertex ceilings, and returns redacted deterministic advisory rankings. Candidates must
+  share the full comparison context and are refused as `incomparable_candidates` otherwise; the
+  accepted output includes a separate `comparison_digest` because legacy candidate IDs omit some
+  settings. The final focused suite is 62 passed and the official mutation result is 23/23 killed.
+  It has no MCP, CLI,
+  apply, persistence, backend, or sign-off surface; DFM authority remains the coordinator-owned
+  repeated KiCad DRC path, while SI, PI, and thermal remain unregistered. See ADR-0128, D-237,
+  R-187, and SEC-174. Issue #91 remains open.
 
 - Live observations and the live editor context now publish
   **`document_binding: in_memory_unsaved_state_unobservable`**, stating that `board_digest` binds
@@ -43,7 +54,7 @@ All notable changes are documented here. The format follows
   `kipy` 0.7.1's `Board` exposes no modified state, so a save-state field would be fabricated —
   and it makes `ADR-0074`'s existing refusal to bind a live read to the on-disk file legible to a
   caller. `B-138` measured the gap it names: 165,571 live bytes against 166,070 on disk
-  (`ADR-0128`, `D-237`).
+  (`ADR-0129`, `D-242`).
 - The live editor context now publishes `kicad_version`, `api_version` and `compatibility`,
   which it previously computed and discarded. **Three** live schema versions move to `0.2.0`
   under `ADR-0105`'s accepted-set rule: the live observation, the live editor context, and
@@ -54,7 +65,38 @@ All notable changes are documented here. The format follows
   Neither contract has a published JSON schema, so the freeze is a recorded accepted set
   (`LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0`) rather than frozen bytes, and no
   `check_schema_sets` exemption is declared because that gate governs `schemas/**/*.json`
-  only (`ADR-0128`, `ADR-0105`, `D-237`).
+  only (`ADR-0129`, `ADR-0105`, `D-242`).
+
+### Fixed
+
+- B-141's committed artifact is rebound to the squash-merge commit
+  `86634180e5a3f0956cf2ede4168710f1fce8fbcb` that the default branch carries, replacing the
+  branch commit `b7c71d4d643df155c7bdcee5bac25e7d943b7031` that squash-merging discarded. In
+  any fresh clone of main the artifact refused to load, naming its recorded source commit as
+  absent -- the correct verdict about an incorrect recorded value, and the v0.5.0 orphaned-SHA
+  class recurring. Binding the tree instead was considered and refuted by measurement: the
+  branch and squash trees differ because main advanced between publication and merge, so a
+  squash preserves file content but not the tree. Accepting content-only provenance as
+  `repository_bound` was rejected as certifying a claim no clone can check; `load_artifact`
+  stays fail-closed. A clean replay reproduced the pinned whole-metrics digest
+  `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly, while
+  freshly observing descriptive mean timings of **39.224s** control and **40.042s** treatment;
+  the semantic result is unchanged, but this is a new measurement record rather than a
+  byte-only re-signing. The runner file is byte-identical to the one the squash commit carries.
+  Hosted CI injects the exact pull-request base into a new ancestry test, so a pull request that
+  binds a feature-branch-only commit is refused before squash-merging without requiring every
+  local checkout to have a remote named `origin` or to trust a possibly stale local branch.
+  Unconfigured source snapshots skip this repository-only assertion. `main`
+  sets `required_linear_history=true`, so no merge strategy this repository allows preserves
+  a branch commit's SHA -- an artifact cannot bind its own revision and survive its own
+  merge, and this fix binds a commit already on the default branch rather than any of its
+  own. The structural successor, binding the runner blob that every strategy preserves, is a
+  separate change: implementing it edits the runner and moves `runner_sha256`, which is what
+  would stop the squash commit from carrying the bound bytes. The exact prior report and
+  commitment bytes remain under `benchmarks/results/routing/archive/`; they validate their own
+  digests offline but are deliberately not accepted as the current canonical pair. The corrected
+  record passes **190/190** focused tests and **78/78** evidence-contract mutants (`D-241`,
+  `B-141`, `ADR-0127`).
 
 ## [0.12.0] - 2026-09-01
 

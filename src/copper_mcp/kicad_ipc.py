@@ -57,7 +57,7 @@ API_COMPATIBILITY_FUTURE = "future_api_unverified"
 #: README pins features to patch-level minimums (``9.0.4``, ``9.0.5``, ``10.0.1``) which proves
 #: the client surface outruns older editors.  It is accepted rather than refused because the
 #: failure mode is a *loud* call-time ``ApiError``, not a silent misparse -- but it is emphatically
-#: not ``compatible``, and until ADR-0128 this case was published as exactly that.
+#: not ``compatible``, and until ADR-0129 this case was published as exactly that.
 API_COMPATIBILITY_LEGACY = "legacy_api_unverified"
 #: Every verdict a live observation may publish.  Membership here is *not* permission to treat
 #: two members alike -- see ``VERIFIED_API_COMPATIBILITY``.
@@ -258,7 +258,7 @@ def _version_triple(subject: str, value: str) -> tuple[int, int, int]:
 
 
 def classify_api_compatibility(kicad_version: str, api_version: str) -> str:
-    """Classify one editor/binding version pair against ADR-0128's declared window.
+    """Classify one editor/binding version pair against ADR-0129's declared window.
 
     Returns a member of :data:`ACCEPTED_API_COMPATIBILITY`, or raises
     :class:`KicadIpcVersionError` naming both versions when the pair is outside the window.
@@ -718,7 +718,7 @@ class LiveEditorContextSnapshot:
     active_layer_index: int
     active_layer_name: str
     selection: tuple[LiveEditorSelection, ...]
-    #: The same verdict ``inspect_live_board`` publishes.  Before ADR-0128 this surface computed
+    #: The same verdict ``inspect_live_board`` publishes.  Before ADR-0129 this surface computed
     #: a version decision and then discarded it, so a caller could not tell a verified editor
     #: from an accepted-unverified one on this path at all -- there was nothing to tell it with.
     kicad_version: str = ""
@@ -912,7 +912,7 @@ def capture_live_board(
     """Capture one bounded live board for an internal semantic conversion.
 
     The optional ``client_factory`` is a test seam; production calls lazily load
-    ``kicad-python``.  There is no compatibility override argument: ADR-0128 makes the
+    ``kicad-python``.  There is no compatibility override argument: ADR-0129 makes the
     declared window the whole policy, so a caller cannot widen it and -- more to the point --
     cannot *forget* to widen it.  The escape hatch this replaces was the direct cause of
     ``inspect_live_editor_context`` refusing a real editor that ``inspect_live_board`` could
