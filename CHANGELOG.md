@@ -19,6 +19,54 @@ All notable changes are documented here. The format follows
   repeated KiCad DRC path, while SI, PI, and thermal remain unregistered. See ADR-0128, D-237,
   R-187, and SEC-174. Issue #91 remains open.
 
+### Changed
+
+- B-141's verified provenance is now **content, not revision**, superseding the binding #252
+  installed without editing its record. #252 rebound the artifact to squash commit
+  `86634180e5a3f0956cf2ede4168710f1fce8fbcb` as a one-time unblock, correctly, under a contract
+  that required a recorded revision to resolve; this change removes that requirement, so the field
+  #252 repaired is no longer load-bearing. The recurrence is measured rather than predicted: a
+  `--depth=1` clone of `main`, running `main`'s own code against `main`'s own artifact, resolves
+  the recorded revision to `None` and refuses -- so the rebinding holds only while a consumer's
+  clone is deep enough, and clone depth, fetch policy and fork boundaries are properties of the
+  consumer's checkout rather than of the evidence. `_bound_input_paths()` is now the verified
+  provenance set and the only producer of published file digests: the configuration derives all
+  six by digesting exactly those paths, a derived guard closes the reverse direction against the
+  closed configuration key set, and a drifting input is refused **by name** instead of as one
+  opaque binding failure. `source_commit` becomes informational at every guarantee level, is never
+  resolved by any validation path, and its demotion is published as a seventh `not_claimed` entry
+  so a consumer reading the JSON alone learns it; it is still derived at publication, because the
+  evidence date is read from it and publication happens inside the repository that owns the
+  revision. `date_utc` is likewise informational, pinned against re-signing by the companion's
+  `artifact_run_id`, with the new opt-in `verify_evidence_date_against_history` reporting
+  `agrees` / `disagrees` / `undeterminable` and returning rather than raising on all three --
+  `disagrees` is the ordinary outcome of review taking more than a day, and `undeterminable` is
+  *not yet answerable* rather than *wrong*, which is the conflation that turned `main` red in
+  #250. The guarantee vocabulary is unchanged and `load_artifact` still reaches `companion_bound`.
+  The accepted cost is stated rather than buried: a re-signed `date_utc` or `source_commit` used
+  to be refused at `repository_bound` by Git and is now refused at `companion_bound` by
+  `artifact_run_id`, so nothing moves at the authoritative entry point while a caller stopping at
+  `repository_bound` accepts a document naming any revision. The republication reproduced the
+  pinned whole-metrics digest
+  `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly -- a
+  re-binding, not a re-measurement -- while freshly observing descriptive mean timings of
+  **47.348s** control and **51.310s** treatment. `test_published_artifact_records_a_default_branch_ancestor`,
+  the `COPPER_MCP_DEFAULT_BRANCH_REF` CI injection and its workflow regression are removed
+  together: they mechanize the rule this change retires and would refuse this change itself. The
+  archived `b7c71d4d` bytes are untouched; because the claim list gained an entry and claim lists
+  are validated exactly, that archived document no longer validates against the current contract,
+  which is the correct reading of an append-only archive. The simulated squash -- a `--depth=50`
+  clone of `main` carrying this branch's file content but none of its commits -- resolves the
+  recorded revision to `None`, re-digests all six bound inputs as matching, and now **accepts at
+  `companion_bound`**. Focused evidence validation is **200/200 focused tests** and mutation evidence is
+  **79/79 evidence-contract mutants killed**, with zero survivors, zero stale anchors, zero
+  control failures, zero invalid runs and zero `not_run`. Five mutants whose code this change
+  deletes were retired rather than silently dropped, two were re-anchored onto the successor code,
+  and six new mutants pin the new guards. One mutant survived the first run and was a real coverage
+  gap rather than a mapping typo: nothing exercised the whole-configuration comparison, so `seed`,
+  the router version and every declared ceiling were unpinned against a re-signed document; a new
+  test closes it (`D-242`, `R-188`, `SEC-175`, `B-141`, `ADR-0127`).
+
 ### Fixed
 
 - B-141's committed artifact is rebound to the squash-merge commit
