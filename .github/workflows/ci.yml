@@ -24,6 +24,10 @@ jobs:
     # not move this number without re-recording that file. This job had no budget at all until
     # now, which is not the same as having a generous one: an unbounded job cannot be cancelled by
     # a ceiling, but it also cannot tell anyone the suite has grown.
+    # The unit-test step now runs four xdist workers rather than one, so the durations recorded in
+    # that file after this change measure a parallel suite and are not comparable with the serial
+    # ones above it; the budget itself is deliberately unchanged, because a ceiling that follows
+    # the gate down stops being able to report the next growth.
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -62,8 +66,24 @@ jobs:
         run: python -m ruff check .
       - name: Type check
         run: python -m mypy src
+      # `-n 4` is the runner, not a guess: a standard GitHub-hosted `ubuntu-latest` runner has four
+      # vCPUs. Nothing in an archived run log said so -- the log records the image and the agent but
+      # never the core count -- so the step below records it, and a runner-spec change becomes a
+      # visible line rather than a silent mismatch with this number.
+      #
+      # `--dist loadfile` and not `loadscope`/`load`: the expensive fixtures here are module-scoped
+      # and each takes hundreds of seconds, so distributing anything finer than a file would run
+      # them once per worker and make the suite slower. Measured serially with `--durations=0`,
+      # 98.8% of a 2,179 s local run is attributable to tests and the longest single *file* is
+      # `tests/test_benchmark_negotiated_multipin_branch_repair.py` at 610.2 s. That file is the
+      # ceiling: no worker count divides it, so the best achievable speed-up at any `-n` is 3.53x
+      # and `-n 8` buys nothing over `-n 4`. Raising the ceiling means making that file's
+      # `fresh_report` fixture cheaper, which is a separate change to the benchmark, not to this
+      # workflow.
+      - name: Record runner CPU count
+        run: nproc
       - name: Unit tests
-        run: python -m pytest
+        run: python -m pytest -n 4 --dist loadfile
       - name: Validate metadata and ledgers
         run: python scripts/check_version.py && python scripts/check_ledgers.py
       - name: Validate ADR number allocation
