@@ -55,6 +55,17 @@ The same wave reserved `B-125`–`B-127` for sibling lanes and `B-128` for M3 E4
 consumed here; the sibling reservations remain unavailable until their lanes land or explicitly
 release them.
 
+`B-142` was allocated while `B-141` was still held by open pull request
+[#239](https://github.com/seunghyukchoe/copper-mcp/pull/239), stepping over it under rule 1 rather
+than racing it. #239 has since landed, so `B-141` and `B-142` now sit adjacent with no gap. The
+same wave's `D-`/`R-` numbers collided twice. First, #239 and the live-version-binding lane both
+allocated `D-236`/`R-186` from the same stale registry, and the second to merge renumbered to
+`D-237`/`R-187` under rule 1. Then
+[#254](https://github.com/seunghyukchoe/copper-mcp/pull/254) landed that same `D-237`/`R-187` pair
+first, so this lane renumbered again — to `D-242`/`R-188`, the registry's next free numbers at
+main's tip, rather than reusing any number below `D-242` under rule 2 or adding a seventh and
+eighth double-named identifier to the list above.
+
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`
    early will collide — and that is not hypothetical. Six numbers each name two unrelated entries

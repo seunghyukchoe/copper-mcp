@@ -1,0 +1,230 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "LVB01-major-boundary-is-not-refused",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "    if kicad[0] != api[0]:\n",
+      "replacement": "    if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_a_major_boundary_is_refused_and_the_refusal_names_both_versions",
+        "tests/test_live_version_binding.py::test_inspect_live_board_refuses_across_a_major_boundary"
+      ]
+    },
+    {
+      "id": "LVB02-drift-is-published-as-verified",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "    if kicad == api:\n        return API_COMPATIBILITY_VERIFIED\n",
+      "replacement": "    if kicad[:2] == api[:2]:\n        return API_COMPATIBILITY_VERIFIED\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_window_classifies_every_same_major_pair",
+        "tests/test_live_version_binding.py::test_only_an_exact_match_is_verified"
+      ]
+    },
+    {
+      "id": "LVB03-older-editor-is-called-future",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "    if kicad > api:\n        return API_COMPATIBILITY_FUTURE\n    return API_COMPATIBILITY_LEGACY\n",
+      "replacement": "    return API_COMPATIBILITY_FUTURE\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_window_classifies_every_same_major_pair",
+        "tests/test_live_version_binding.py::test_inspect_live_board_no_longer_calls_an_older_editor_compatible"
+      ]
+    },
+    {
+      "id": "LVB04-legacy-direction-is-silently-verified-again",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "    if kicad > api:\n        return API_COMPATIBILITY_FUTURE\n    return API_COMPATIBILITY_LEGACY\n",
+      "replacement": "    if kicad > api:\n        return API_COMPATIBILITY_FUTURE\n    return API_COMPATIBILITY_VERIFIED\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_inspect_live_board_no_longer_calls_an_older_editor_compatible",
+        "tests/test_live_version_binding.py::test_only_an_exact_match_is_verified"
+      ]
+    },
+    {
+      "id": "LVB05-a-future-error-on-a-non-future-pair-is-tolerated",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "        if verdict != API_COMPATIBILITY_FUTURE:\n",
+      "replacement": "        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_a_future_error_from_a_non_future_version_pair_is_refused"
+      ]
+    },
+    {
+      "id": "LVB06-a-passing-check-on-a-future-pair-is-tolerated",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "        if verdict == API_COMPATIBILITY_FUTURE:\n",
+      "replacement": "        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_a_passing_check_on_a_future_version_pair_is_refused"
+      ]
+    },
+    {
+      "id": "LVB07-apply-accepts-any-verdict-the-reads-accept",
+      "file": "src/copper_mcp/live_apply.py",
+      "anchor": "    if captured.observation.compatibility not in VERIFIED_API_COMPATIBILITY:\n",
+      "replacement": "    if captured.observation.compatibility not in ACCEPTED_API_COMPATIBILITY:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_apply.py::test_live_apply_refuses_every_acceptance_the_read_paths_allow"
+      ]
+    },
+    {
+      "id": "LVB08-the-verified-set-is-widened-without-an-edit-being-visible",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "VERIFIED_API_COMPATIBILITY = frozenset({API_COMPATIBILITY_VERIFIED})\n",
+      "replacement": "VERIFIED_API_COMPATIBILITY = frozenset(\n    {API_COMPATIBILITY_VERIFIED, API_COMPATIBILITY_FUTURE}\n)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_only_an_exact_match_is_verified",
+        "tests/test_live_apply.py::test_live_apply_refuses_every_acceptance_the_read_paths_allow"
+      ]
+    },
+    {
+      "id": "LVB09-the-editor-context-drops-the-verdict-it-computed",
+      "file": "src/copper_mcp/live_editor_context.py",
+      "anchor": "        compatibility=snapshot.compatibility,\n",
+      "replacement": "        compatibility=\"compatible\",\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_mcp_editor_context_surface_reaches_a_real_editor_and_discloses_the_verdict"
+      ]
+    },
+    {
+      "id": "LVB10-the-refusal-stops-naming-the-versions",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "            f\"KiCad {kicad_version} is outside the compatibility window of the installed \"\n            f\"kicad-python API {api_version}: major versions differ, so KiCad's field-meaning \"\n            f\"and deprecation guarantees do not span this pair\"\n",
+      "replacement": "            \"KiCad IPC version validation failed\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_a_major_boundary_is_refused_and_the_refusal_names_both_versions",
+        "tests/test_live_version_binding.py::test_inspect_live_board_refuses_across_a_major_boundary"
+      ]
+    },
+    {
+      "id": "LVB11-the-net-count-keeps-a-name-that-misdescribes-it",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "            name = \"net_declarations\"\n",
+      "replacement": "            name = \"nets\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_net_count_is_named_for_what_it_counts_and_the_old_name_is_gone",
+        "tests/test_kicad_ipc.py::KicadIpcTests::test_object_counts_follow_serialized_revision_not_mutable_getters"
+      ]
+    },
+    {
+      "id": "LVB12-the-document-binding-disclosure-is-dropped",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "            \"document_binding\": self.document_binding,\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_both_live_surfaces_state_that_the_digest_binds_the_in_memory_document"
+      ]
+    },
+    {
+      "id": "LVB13-an-unaccepted-verdict-reaches-a-caller",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "        if self.compatibility not in ACCEPTED_API_COMPATIBILITY:\n            raise KicadIpcError(\"live observation compatibility is invalid\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_an_observation_refuses_a_verdict_outside_the_accepted_set",
+        "tests/test_live_version_binding.py::test_every_accepted_verdict_actually_constructs"
+      ]
+    },
+    {
+      "id": "LVB14-the-observation-accepts-any-document-binding",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "        if self.document_binding != DOCUMENT_BINDING_IN_MEMORY:\n            raise KicadIpcError(\"live observation document binding is invalid\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_an_observation_refuses_a_document_binding_it_did_not_declare"
+      ]
+    },
+    {
+      "id": "LVB15-the-editor-snapshot-accepts-an-unaccepted-verdict",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "        if self.compatibility not in ACCEPTED_API_COMPATIBILITY:\n            raise KicadIpcPayloadError(\"live editor compatibility is invalid\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_editor_snapshot_refuses_a_verdict_outside_the_accepted_set"
+      ]
+    },
+    {
+      "id": "LVB16-the-oracle-republishes-a-verdict-it-never-checked",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "        if self.compatibility is not None and self.compatibility not in ACCEPTED_API_COMPATIBILITY:\n            raise ValueError(\"live IPC oracle compatibility is invalid\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_oracle_refuses_a_verdict_the_observation_boundary_could_not_produce"
+      ]
+    },
+    {
+      "id": "LVB17-a-malformed-version-crashes-instead-of-refusing",
+      "file": "src/copper_mcp/kicad_ipc.py",
+      "anchor": "    if len(parts) != 3 or not all(part.isdigit() and len(part) <= 3 for part in parts):\n        raise KicadIpcVersionError(f\"{subject} version is not a major.minor.patch triple\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_a_malformed_version_is_a_typed_refusal_not_a_crash",
+        "tests/test_live_version_binding.py::test_the_malformed_version_refusal_names_which_side_was_malformed"
+      ]
+    },
+    {
+      "id": "LVB18-the-oracle-schema-version-does-not-move-with-its-set",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "LIVE_IPC_ORACLE_SCHEMA_VERSION = \"0.2.0\"\n",
+      "replacement": "LIVE_IPC_ORACLE_SCHEMA_VERSION = \"0.1.0\"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_oracle_schema_version_moved_with_its_accepted_set",
+        "tests/test_live_version_binding.py::test_the_new_verdicts_are_exactly_the_ones_0_1_0_never_promised"
+      ]
+    },
+    {
+      "id": "LVB19-a-superseded-version-document-is-accepted",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "        if self.schema_version != LIVE_IPC_ORACLE_SCHEMA_VERSION:\n            raise ValueError(\"live IPC oracle schema version is not the version this build emits\")\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_a_document_declaring_the_superseded_version_is_refused"
+      ]
+    },
+    {
+      "id": "LVB20-the-version-refusal-goes-back-to-the-false-read-only-reason",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "        if not self.read_only:\n            raise ValueError(\"live IPC oracle must remain read-only\")\n",
+      "replacement": "        if not self.read_only or self.schema_version != LIVE_IPC_ORACLE_SCHEMA_VERSION:\n            raise ValueError(\"live IPC oracle must remain read-only\")\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_version_refusal_no_longer_gives_the_read_only_reason"
+      ]
+    },
+    {
+      "id": "LVB21-the-0-1-0-freeze-is-widened-to-hide-the-move",
+      "file": "src/copper_mcp/kicad_ipc_oracle.py",
+      "anchor": "LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0 = frozenset({None, \"compatible\"})\n",
+      "replacement": "LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0 = frozenset(\n    {None, \"compatible\", \"future_api_unverified\", \"legacy_api_unverified\"}\n)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_live_version_binding.py::test_the_frozen_0_1_0_set_is_a_strict_subset_of_what_this_build_emits",
+        "tests/test_live_version_binding.py::test_the_new_verdicts_are_exactly_the_ones_0_1_0_never_promised"
+      ]
+    }
+  ]
+}

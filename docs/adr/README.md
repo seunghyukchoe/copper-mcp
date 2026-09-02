@@ -215,6 +215,7 @@ never silently widens it.
 | [0126](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md) | Negotiated routing admits bounded multi-pin nets on request-local lattices | Accepted (multi-pin repair deferral satisfied by 0127) |
 | [0127](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md) | Multi-pin local repair replaces one proven responsible branch | Accepted |
 | [0128](0128-private-surrogate-ranking-is-bounded-and-never-signs-off.md) | A private surrogate ranking is bounded and never signs off | Accepted |
+| [0129](0129-the-live-version-window-is-kicads-own-and-an-acceptance-is-not-a-proof.md) | The live version window is KiCad's own, and an acceptance is never published as a proof | Accepted |
 | [0130](0130-a-live-apply-proves-a-matched-digest-not-exclusive-access.md) | A live apply proves a matched digest, not exclusive access | Proposed |
 
 One hundred and thirty numbers allocated, one hundred and twenty-four records, no duplicates — and
