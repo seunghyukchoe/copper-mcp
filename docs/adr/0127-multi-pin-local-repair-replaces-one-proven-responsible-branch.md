@@ -179,22 +179,22 @@ guard verifies the actual Git runner blob SHA at the declared source commit and 
 historical `HEAD` movement without replacing that binding. The closed `total_ripups` bound is
 `70 * (8 - 1) = 490`; 490 is accepted and 491 is mutation-killed. The closed aggregate wire bound is
 `70 * 62,500,000,000 = 4,375,000,000,000 nm`; the exact bound is accepted and the `+1` boundary
-is mutation-killed. Focused validation passes **189/189** tests and the B-141 contract mutation
+is mutation-killed. Focused validation passes **187/187** tests and the B-141 contract mutation
 harness kills **78/78** mutants with
 zero survivors or control failures; the **35/35** capability mutant result above belongs to #238 and
 is not counted again here. The measured population is **20 offered/imported, 16 admitted,
 4 envelope-refused and 70 submitted**. Control is **0 boards / 0 nets**, while treatment is
 **1 board / 2 nets** with one published repair and one `completed_with_repair`; the differential is
 **+1 / +2 / +7,432 physical checks / +43,750,000 nm wire**. The exact evidence pins are: source
-`86634180e5a3f0956cf2ede4168710f1fce8fbcb`; runner
+`b7c71d4d643df155c7bdcee5bac25e7d943b7031`; runner
 `sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`; configuration
 `sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`; whole-metrics digest
 `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`; report raw
-`sha256:32ec7b3f489d006940f0ab6b05987b943bf8263f7ded07ef27085b57d7368e7f` with run
-`sha256:237d4ddfd4ce403aa3bb2ea19e4229aa0833f667501127fd5acd223e62173021`; commitment raw
-`sha256:c190e5d8ca5066fa3ff09695841dde266907ebfb32252fa91c84dceccd93df12` with run
-`sha256:6ce94a530ef55ecb1690a0a19eb5b148607e7c30bd80bc0ded87a038b1c74efd`; and mutation spec
-`sha256:d7098924ad05c9a9ad6b15f508b330ba25dcd87a8829461ac51310dc282a9c14`. Mean arm timings
+`sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c` with run
+`sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3`; commitment raw
+`sha256:129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9` with run
+`sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397`; and mutation spec
+`sha256:e1f4a225f963385cba00af45109d0d8ae0a22ef228787c2b7e87707cf8108c85`. Mean arm timings
 of 40.574s and 41.039s are descriptive only. The commitment pins exact control and treatment
 arm totals plus the full differential, while the whole-metrics digest prevents a self-consistent
 re-signing from changing any other metric. This remains contract and completion evidence,
@@ -234,10 +234,26 @@ request publishes from a branch commit, and squash-merging discards it: #239's a
 `b7c71d4d643df155c7bdcee5bac25e7d943b7031`, the squash landed as
 `86634180e5a3f0956cf2ede4168710f1fce8fbcb`, and every fresh clone of the default branch then
 refused the artifact because the recorded revision named nothing. The refusal was correct. The
-recorded value was not.
+recorded value was truthful on the pull-request branch but was not durable or verifiable after the
+squash.
 
 The artifact is rebound to the squash commit, which the default branch carries and every clone
-fetches. Two alternatives were weighed and rejected on evidence rather than taste:
+fetches. A clean replay on that source reproduced the semantic metrics digest exactly while
+freshly observing descriptive mean timings of **39.224s** control and **40.042s** treatment. The
+semantic result is unchanged; the published artifact is nevertheless a new measurement record,
+not a byte-only re-signing. Two alternatives were weighed and rejected on evidence rather than
+taste:
+
+The displaced bytes remain directly auditable as
+[`2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.json`](../../benchmarks/results/routing/archive/2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.json)
+and its
+[`archived commitment`](../../benchmarks/results/routing/archive/2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.commitment.json).
+Their raw SHA-256 values remain `ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c`
+and `129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9`.
+They retain their original internal canonical path for byte identity and therefore validate only
+as historical offline material, never as the current authoritative pair. The corrected canonical
+record passes **190/190** focused tests and the unchanged 78-mutant set with zero survivors or
+control failures.
 
 - **Bind the tree instead of the commit.** Refuted by measurement: the branch tree
   (`792bd419e043955f0f44978158008aef34495645`) and the squash tree
@@ -280,7 +296,8 @@ edits the runner, which moves `runner_sha256`, which is precisely what would sto
 `86634180e5a3f0956cf2ede4168710f1fce8fbcb` from carrying the bound bytes. One pull request cannot
 both bind that commit and change the runner.
 
-Until then the residue is a process obligation — the correct revision is only knowable after the
-merge — and it is mechanized rather than documented as a habit:
-`test_published_artifact_records_a_commit_this_repository_can_resolve` fails on the default branch
-the moment a future squash orphans a recorded revision, and names the repair in its message.
+Until then the residue is a process constraint mechanized rather than documented as a habit:
+`test_published_artifact_records_a_default_branch_ancestor` checks the recorded revision against
+the fetched `origin/main` ancestry and refuses a pull request before merge when it binds only a
+feature-branch commit. A future runner change must therefore land before a later evidence-only
+publication can bind its default-branch commit.

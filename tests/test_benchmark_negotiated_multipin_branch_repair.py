@@ -33,6 +33,14 @@ EXPECTED_ARTIFACT = (
     benchmark.ROOT
     / "benchmarks/results/routing/2026-08-30-negotiated-multipin-branch-repair-v1.json"
 )
+ARCHIVED_ARTIFACT = (
+    benchmark.ROOT / "benchmarks/results/routing/archive/"
+    "2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.json"
+)
+ARCHIVED_COMMITMENT = (
+    benchmark.ROOT / "benchmarks/results/routing/archive/"
+    "2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.commitment.json"
+)
 EXPECTED_POPULATION = {
     "boards_offered": 20,
     "boards_imported": 20,
@@ -2999,15 +3007,13 @@ def test_load_artifact_never_downgrades_for_an_absent_commit(
 # --- The squash-merge orphan class -----------------------------------------------------------
 
 
-def test_published_artifact_records_a_commit_this_repository_can_resolve() -> None:
+def test_published_artifact_records_a_default_branch_ancestor() -> None:
     """The durable rule, mechanized: a recorded revision that no clone carries is not provenance.
 
-    A pull request publishes its artifact from a branch commit.  Squash-merging discards that
-    commit, so on the default branch the recorded revision names nothing and `load_artifact`
-    refuses -- correctly, but only after the merge, where it reads as a mysterious break.  This
-    fails in the same place with an actionable message instead, and it is why the committed
-    artifact binds the squash commit on the default branch rather than the branch commit that
-    produced it.
+    A pull request may publish its artifact from a feature-branch commit that squash-merging will
+    discard.  The synthetic merge ``HEAD`` still contains that commit, so it cannot prove durable
+    provenance.  This guard checks the fetched default branch instead and refuses before merge
+    unless the recorded revision is already carried there.
     """
 
     document = _artifact()
@@ -3018,6 +3024,88 @@ def test_published_artifact_records_a_commit_this_repository_can_resolve() -> No
         "squash-merged, republish the artifact bound to the squash commit on the default branch; "
         "see the B-141 amendment in docs/ledgers/benchmark-ledger.md."
     )
+    git = shutil.which("git")
+    assert git is not None
+    default_branch = "refs/remotes/origin/main"
+    default_branch_probe = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+        [git, "rev-parse", "--verify", f"{default_branch}^{{commit}}"],
+        cwd=benchmark.ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert default_branch_probe.returncode == 0, (
+        "the fetched default-branch ref is unavailable. Fetch origin/main before validating "
+        "B-141 provenance."
+    )
+    ancestry = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+        [git, "merge-base", "--is-ancestor", recorded, default_branch],
+        cwd=benchmark.ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert ancestry.returncode == 0, (
+        "the recorded B-141 source commit exists only outside the fetched default-branch "
+        "ancestry. "
+        "Republish the artifact against a commit carried by the default branch; see the B-141 "
+        "amendment in docs/ledgers/benchmark-ledger.md."
+    )
+
+
+def test_orphaned_publication_is_archived_without_becoming_canonical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Preserve the retired bytes for audit without weakening the authoritative loader."""
+
+    report_bytes = ARCHIVED_ARTIFACT.read_bytes()
+    commitment_bytes = ARCHIVED_COMMITMENT.read_bytes()
+    assert hashlib.sha256(report_bytes).hexdigest() == (
+        "ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c"
+    )
+    assert hashlib.sha256(commitment_bytes).hexdigest() == (
+        "129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9"
+    )
+
+    report = json.loads(report_bytes)
+    commitment = json.loads(commitment_bytes)
+    assert benchmark.validate_report(report) == benchmark.GUARANTEE_OFFLINE
+    benchmark.validate_commitment(commitment)
+    assert report["source_commit"] == "b7c71d4d643df155c7bdcee5bac25e7d943b7031"
+    assert report["run_id"] == (
+        "sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3"
+    )
+    assert report["timing"]["mean_wall_seconds"] == {
+        "control": 40.574,
+        "treatment": 41.039,
+    }
+    assert commitment["artifact_sha256"] == "sha256:" + hashlib.sha256(report_bytes).hexdigest()
+    assert commitment["artifact_run_id"] == report["run_id"]
+    assert commitment["run_id"] == (
+        "sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397"
+    )
+    assert not _nested_keys(report).intersection(benchmark.FORBIDDEN_PUBLIC_KEYS)
+
+    current = _artifact()
+    assert current["source_commit"] == "86634180e5a3f0956cf2ede4168710f1fce8fbcb"
+    assert current["run_id"] != report["run_id"]
+    monkeypatch.setattr(
+        benchmark,
+        "_validate_source_commit_runner_binding",
+        lambda _document, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        benchmark,
+        "_validate_evidence_date_binding",
+        lambda _document, **_kwargs: True,
+    )
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape("the B-141 commitment artifact path is malformed"),
+    ):
+        benchmark.load_artifact(ARCHIVED_ARTIFACT)
 
 
 def test_a_squash_orphaned_source_commit_stays_fail_closed_even_though_the_runner_survives() -> (

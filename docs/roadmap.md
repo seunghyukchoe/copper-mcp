@@ -765,13 +765,13 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   completion/quality and every refusal separately. #90 closes only if that differential is
   deterministic and positive without weakening the physical, identity or work gates; otherwise it
   re-parks on the measured result.
-  B-141 differential measured (2026-08-31; the predeclared artifact basename remains dated
+  B-141 differential measured (2026-09-01; the predeclared artifact basename remains dated
   2026-08-30). The exact B-140/B-088 population produced **20
   offered/imported, 16 admitted, 4 envelope refusals and 70 submitted nets** in both arms. The
   uninstrumented control (`repair_settings: null`) completed **0 boards / 0 nets**; treatment with
   the default bounded repair profile completed **1 board / 2 nets**, publishing one repair and one
   `completed_with_repair` result. The measured differential is **+1 board / +2 nets / +7,432
-  physical checks / +43,750,000 nm wire**; mean arm times were **40.574s** and **41.039s** across
+  physical checks / +43,750,000 nm wire**; mean arm times were **39.224s** and **40.042s** across
   two deterministic repetitions. Per-reason refusal/outcome reconciliation is independently
   checked. The semantic guards require each arm's `outcome_breakdown["envelope_construction"]` to
   equal the fixed population's `boards_unable_to_form_a_two_request_envelope` count (**4**); a
@@ -788,7 +788,7 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   `sha256:6ce94a530ef55ecb1690a0a19eb5b148607e7c30bd80bc0ded87a038b1c74efd`, commitment raw
   `sha256:c190e5d8ca5066fa3ff09695841dde266907ebfb32252fa91c84dceccd93df12`, and spec
   `sha256:d7098924ad05c9a9ad6b15f508b330ba25dcd87a8829461ac51310dc282a9c14`. Focused
-  evidence validation is **189/189 tests** and **78/78 evidence-contract mutants killed** with zero
+  evidence validation is **190/190 tests** and **78/78 evidence-contract mutants killed** with zero
   survivors or control failures, distinct
   from #238's **35/35 capability mutants**. A later checkout or merge-ref movement may load this
   record without replacing its historically bound source commit. The source guard verifies the
