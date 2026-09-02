@@ -1055,7 +1055,12 @@ def test_load_artifact_rejects_current_authority_digest_drift(
     path_attribute: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A self-consistent report is still stale when any bound authority bytes drift."""
+    """A self-consistent report is still stale when any bound authority bytes drift.
+
+    The refusal now names the input.  It used to be one opaque binding failure covering six very
+    different files, and that is what sent the first reader of #250 looking for tampering that had
+    not happened.
+    """
 
     original_digest = benchmark._file_digest
     expected_path = Path(getattr(benchmark, path_attribute)).resolve()
@@ -1069,7 +1074,8 @@ def test_load_artifact_rejects_current_authority_digest_drift(
     monkeypatch.setattr(benchmark, "_file_digest", drifted_digest)
 
     with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=r"(?:digest|authority|binding)"
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(f"{benchmark._BOUND_INPUT_ERROR}: {binding}"),
     ):
         benchmark.load_artifact(EXPECTED_ARTIFACT)
 
@@ -1090,7 +1096,8 @@ def test_load_artifact_rejects_a_current_runner_digest_drift(
     monkeypatch.setattr(benchmark, "_file_digest", drifted_runner)
 
     with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=r"(?:digest|authority|binding)"
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(f"{benchmark._BOUND_INPUT_ERROR}: runner_sha256"),
     ):
         benchmark.load_artifact(EXPECTED_ARTIFACT)
 
@@ -1112,22 +1119,63 @@ def test_load_artifact_accepts_a_recorded_source_revision_after_head_moves(
     assert loaded["source_commit"] == recorded_source_commit
 
 
+def test_a_configuration_fact_outside_the_verified_set_still_binds_to_this_repository() -> None:
+    """The verified set covers files; the whole-configuration comparison covers everything else.
+
+    `seed`, the router version, the envelope budgets and every declared ceiling are configuration
+    facts no file digest can witness.  They are bound by comparing the published configuration with
+    the one this repository would produce now, which is a separate check from the per-input content
+    refusal.  Nothing exercised it directly: the runner-drift test used to reach it, but the content
+    check now refuses first and by name, so `B141-BIND01` survived until this test existed.  The
+    mutant found the gap; this closes it.
+    """
+
+    document = _artifact()
+    document["configuration"]["seed"] = benchmark._configuration()["seed"] + 1
+    document["configuration"]["configuration_sha256"] = _canonical_digest(
+        {
+            key: value
+            for key, value in document["configuration"].items()
+            if key != "configuration_sha256"
+        }
+    )
+    _retag_document(document)
+
+    # Invisible to the content check: every bound file digest is still this repository's.
+    benchmark._validate_bound_input_content(document)
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape("the B-141 source/configuration binding drifted"),
+    ):
+        benchmark._validate_authoritative_bindings(document)
+
+
 def test_a_generic_self_digest_cannot_make_a_synthetic_configuration_authoritative(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Self-consistency is not provenance: the bound content must be this repository's content.
 
-    The synthetic report is well-formed and correctly re-signed, and every historical authority
-    and the corpus are stubbed out so nothing else can be the cause.  What is left is the verified
-    provenance set, and it refuses by name -- naming the first input whose recorded digest is not
-    the digest of the file that is here.
+    The document is re-signed at *both* levels -- the nested configuration digest and the outer
+    `run_id` -- so nothing about its internal arithmetic is wrong, and every historical authority
+    and the corpus are stubbed out so none of them can be the cause.  What is left is the verified
+    provenance set, and it refuses by name, naming the one input whose recorded digest is not the
+    digest of the file that is here rather than reporting one opaque binding failure.
     """
 
     tampered = _synthetic_public_report()
     tampered["source_commit"] = "f" * 40
+    tampered["configuration"]["reference_adapter_sha256"] = "sha256:" + "0" * 64
+    tampered["configuration"]["configuration_sha256"] = _canonical_digest(
+        {
+            key: value
+            for key, value in tampered["configuration"].items()
+            if key != "configuration_sha256"
+        }
+    )
     _retag_document(tampered)
 
-    benchmark.validate_report(tampered)
+    assert benchmark.validate_report(tampered) == benchmark.GUARANTEE_OFFLINE
     monkeypatch.setattr(benchmark, "load_b140_artifact", lambda: {})
     monkeypatch.setattr(benchmark, "load_reference_artifact", lambda: {})
     monkeypatch.setattr(benchmark, "_reference_authority", lambda _document: {})
@@ -1141,7 +1189,8 @@ def test_a_generic_self_digest_cannot_make_a_synthetic_configuration_authoritati
         ),
     )
     with pytest.raises(
-        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._BOUND_INPUT_ERROR)
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(f"{benchmark._BOUND_INPUT_ERROR}: reference_adapter_sha256"),
     ):
         benchmark._validate_authoritative_bindings(tampered)
 
@@ -2698,6 +2747,40 @@ def test_the_evidence_date_history_check_is_never_reached_by_validation(
     assert benchmark.load_artifact(EXPECTED_ARTIFACT)["benchmark"] == "B-141"
 
 
+def test_the_introducing_commit_is_the_oldest_first_parent_commit_carrying_the_blob(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same bytes can land on the default branch more than once; the *first* one is the date.
+
+    A revert and a revert of the revert put an identical runner blob on `main` twice, and so does
+    any change that is later backed out and restored.  Reading the newest match would date the
+    evidence by the reinstatement rather than by the publication, turning an `agrees` into a
+    `disagrees` -- a reported discrepancy that the history does not contain, which is the same
+    class of false claim as reporting an absent commit as tampering.
+
+    Driven through a synthetic first-parent listing rather than this repository's real history,
+    because a real double-introduction cannot be created inside a test and a single-match history
+    cannot tell the two orderings apart at all.
+    """
+
+    newest, middle, oldest = "a" * 40, "b" * 40, "c" * 40
+    payload = b"the bound runner bytes"
+    digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+
+    def fake_run(argv: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        if argv[1] == "log":
+            return subprocess.CompletedProcess(argv, 0, stdout=f"{newest}\n{middle}\n{oldest}\n")
+        assert argv[1] == "show"
+        commit = argv[2].split(":", 1)[0]
+        return subprocess.CompletedProcess(
+            argv, 0, stdout=payload if commit in {newest, oldest} else b"other runner bytes"
+        )
+
+    monkeypatch.setattr(benchmark.subprocess, "run", fake_run)
+
+    assert benchmark._first_parent_commit_introducing_runner(digest) == oldest
+
+
 def test_commitment_pins_every_claimed_arm_aggregate() -> None:
     """If an aggregate is claimed, it is signed -- enumerated from the report's own arm schema."""
 
@@ -3083,8 +3166,17 @@ def test_the_recorded_revision_is_a_note_and_the_report_says_so() -> None:
     )
     assert any("source_commit names a revision" in claim for claim in document["not_claimed"])
 
-    # And the verified set is untouched by the same re-signing: one changed digest is still refused.
+    # And the verified set is untouched by the same re-signing: one changed digest is still
+    # refused.  The nested configuration digest is recomputed too, so the refusal cannot come from
+    # arithmetic the tamperer forgot -- only from the bytes this repository holds.
     document["configuration"]["runner_sha256"] = "sha256:" + "0" * 64
+    document["configuration"]["configuration_sha256"] = _canonical_digest(
+        {
+            key: value
+            for key, value in document["configuration"].items()
+            if key != "configuration_sha256"
+        }
+    )
     _retag_document(document)
     with pytest.raises(
         benchmark.NegotiatedDifferentialError,
@@ -3135,6 +3227,46 @@ def test_a_published_file_digest_outside_the_verified_set_fails_the_run(
         match=re.escape(benchmark._BOUND_INPUT_COVERAGE_ERROR),
     ):
         benchmark._assert_bound_inputs_cover_published_digests()
+
+
+def test_the_verified_set_covers_every_published_file_digest_key() -> None:
+    """The other direction, which derivation cannot see: a set that *shrank*.
+
+    `test_the_verified_set_is_the_only_source_of_published_file_digests` reads both sides out of
+    the same mapping, so dropping an entry moves both together and it stays green.  The closed
+    configuration key set is the independent witness: it still names the field, and a field named
+    in the published shape but absent from the verified set is a digest nothing re-computes.
+    """
+
+    published = {
+        key
+        for key in benchmark._CONFIGURATION_KEYS
+        if key.endswith("_sha256") and key != "configuration_sha256"
+    }
+
+    assert published == set(benchmark._bound_input_paths())
+    benchmark._assert_bound_inputs_cover_published_digests()
+
+
+def test_the_coverage_guard_is_reached_by_the_content_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A guard that exists but is never called is prose.
+
+    Calling `_assert_bound_inputs_cover_published_digests` directly proves it *can* refuse; this
+    proves the content check reaches it.  Those are different claims, and only the second is the
+    one a consumer of `load_artifact` depends on.
+    """
+
+    monkeypatch.setattr(
+        benchmark, "_CONFIGURATION_KEYS", benchmark._CONFIGURATION_KEYS | {"unverified_sha256"}
+    )
+
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape(benchmark._BOUND_INPUT_COVERAGE_ERROR),
+    ):
+        benchmark._validate_bound_input_content(_artifact())
 
 
 def test_the_verified_set_is_the_only_source_of_published_file_digests() -> None:

@@ -78,8 +78,8 @@
     {
       "id": "B141-DIGEST02-runner-bytes-must-bind-configuration",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "        \"runner_sha256\": _file_digest(ROOT / SCRIPT_PATH),",
-      "replacement": "        \"runner_sha256\": \"sha256:\" + \"0\" * 64,",
+      "anchor": "        \"runner_sha256\": ROOT / SCRIPT_PATH,\n",
+      "replacement": "        \"runner_sha256\": B140_RUNNER_PATH,\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_current_configuration_digest_binds_the_current_runner_bytes"
@@ -92,7 +92,7 @@
       "replacement": "    if False:\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_load_artifact_rejects_a_current_runner_digest_drift"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_a_configuration_fact_outside_the_verified_set_still_binds_to_this_repository"
       ]
     },
     {
@@ -247,17 +247,6 @@
       ]
     },
     {
-      "id": "B141-SHAPE04-report-date-must-match-measurement-date",
-      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "    if recorded != _commit_utc_date(source_commit):\n        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)\n",
-      "replacement": "    if False:\n        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)\n",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_evidence_date_must_be_the_recorded_commits_utc_date",
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_load_rejects_a_self_resigned_evidence_date"
-      ]
-    },
-    {
       "id": "B141-PUBLISH01-tracked-allowlisted-paths-must-be-refused",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
       "anchor": "    if not isinstance(dirty_paths, bool) and any(\n        _git_path_is_tracked(path) for path in dirty_paths if path in allowed_dirty\n    ):\n        raise NegotiatedDifferentialError(\"artifact publication requires an unchanged source tree\")\n",
@@ -305,16 +294,6 @@
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_exact_pins_reject_self_resigned_differential_with_patched_metrics_digest"
-      ]
-    },
-    {
-      "id": "B141-SOURCE02-source-revision-must-supply-the-pinned-runner-blob",
-      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "    if \"sha256:\" + hashlib.sha256(runner_bytes).hexdigest() != configuration[\"runner_sha256\"]:\n        raise NegotiatedDifferentialError(\n            \"the B-141 source commit/runner binding could not be verified\"\n        )\n",
-      "replacement": "    if False:\n        raise NegotiatedDifferentialError(\n            \"the B-141 source commit/runner binding could not be verified\"\n        )\n",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_runner_binding_failure"
       ]
     },
     {
@@ -678,16 +657,6 @@
       ]
     },
     {
-      "id": "B141-DATE02-evidence-date-binding-must-run-on-authoritative-load",
-      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "    date_bound = _validate_evidence_date_binding(\n        document, allow_absent_commit=allow_absent_source_commit\n    )\n",
-      "replacement": "    date_bound = True\n",
-      "expectation": "killed",
-      "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_authoritative_load_rejects_a_self_resigned_evidence_date"
-      ]
-    },
-    {
       "id": "B141-DATE03-published-date-must-be-derived-not-written",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
       "anchor": "        \"date_utc\": captured_date_utc,\n",
@@ -736,7 +705,7 @@
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_validate_report_returns_the_guarantee_level_it_reached",
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_the_offline_guarantee_does_not_cover_repository_bound_provenance"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_only_the_companion_refuses_a_re_signed_date_revision_or_headline_total[evidence_date]"
       ]
     },
     {
@@ -763,13 +732,12 @@
     {
       "id": "B141-ABSENT01-absent-commit-must-not-be-reported-as-a-date-disagreement",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "    if _resolve_recorded_commit(source_commit) is None:\n        if allow_absent_commit:\n            return False\n        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)\n",
-      "replacement": "    if _resolve_recorded_commit(source_commit) is None:\n        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)\n",
+      "anchor": "    if introducing is None:\n        return EVIDENCE_DATE_UNDETERMINABLE\n",
+      "replacement": "    if introducing is None:\n        return EVIDENCE_DATE_DISAGREES\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_date_disagreement",
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request",
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_a_squash_orphaned_source_commit_stays_fail_closed_even_though_the_runner_survives"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_the_evidence_date_history_check_reports_all_three_states",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_the_evidence_date_history_check_is_undeterminable_without_git"
       ]
     },
     {
@@ -783,24 +751,66 @@
       ]
     },
     {
-      "id": "B141-ABSENT03-absent-commit-must-not-be-reported-as-a-runner-binding-failure",
+      "id": "B141-BLOB01-every-bound-input-must-supply-its-pinned-content",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "        if allow_absent_commit:\n            return False\n        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)\n    try:\n",
-      "replacement": "        raise NegotiatedDifferentialError(\n            \"the B-141 source commit/runner binding could not be verified\"\n        )\n    try:\n",
+      "anchor": "        if _file_digest(path) != recorded:\n            raise NegotiatedDifferentialError(f\"{_BOUND_INPUT_ERROR}: {key}\")\n",
+      "replacement": "        if False:\n            raise NegotiatedDifferentialError(f\"{_BOUND_INPUT_ERROR}: {key}\")\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_runner_binding_failure"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_every_bound_input_is_refused_by_name_when_its_content_drifts[runner_sha256]",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_every_bound_input_is_refused_by_name_when_its_content_drifts[b140_artifact_sha256]"
       ]
     },
     {
-      "id": "B141-ABSENT04-unconsulted-provenance-must-not-certify-repository-binding",
+      "id": "B141-BLOB02-the-coverage-guard-must-run-on-the-content-check",
       "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
-      "anchor": "    if not provenance_consulted:\n        # Everything checkable without the recorded commit has been checked, and none of it\n        # establishes provenance.  `offline` is the strongest honest answer.\n        return GUARANTEE_OFFLINE\n",
-      "replacement": "    if False:\n        return GUARANTEE_OFFLINE\n",
+      "anchor": "    _assert_bound_inputs_cover_published_digests()\n    configuration = document.get(\"configuration\")\n",
+      "replacement": "    configuration = document.get(\"configuration\")\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request",
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_a_squash_orphaned_source_commit_stays_fail_closed_even_though_the_runner_survives"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_the_coverage_guard_is_reached_by_the_content_check"
+      ]
+    },
+    {
+      "id": "B141-BLOB03-the-verified-set-must-not-silently-shrink",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        \"b140_runner_sha256\": B140_RUNNER_PATH,\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_the_verified_set_covers_every_published_file_digest_key"
+      ]
+    },
+    {
+      "id": "B141-DATE04-the-introducing-commit-must-be-the-oldest-match",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    for commit in reversed(touched):\n",
+      "replacement": "    for commit in touched:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_the_introducing_commit_is_the_oldest_first_parent_commit_carrying_the_blob"
+      ]
+    },
+    {
+      "id": "B141-DATE05-the-companion-must-pin-the-whole-document-body",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "        or commitment[\"artifact_run_id\"] != document.get(\"run_id\")\n",
+      "replacement": "        or False\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_the_companion_is_what_refuses_a_self_resigned_evidence_date",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_only_the_companion_refuses_a_re_signed_date_revision_or_headline_total[evidence_date]"
+      ]
+    },
+    {
+      "id": "B141-SOURCE03-an-unresolvable-recorded-revision-must-not-refuse",
+      "file": "scripts/benchmark_negotiated_multipin_branch_repair.py",
+      "anchor": "    _validate_bound_input_content(document)\n    configuration = document.get(\"configuration\")\n    if not isinstance(configuration, dict) or configuration != _configuration():\n",
+      "replacement": "    _validate_bound_input_content(document)\n    if _resolve_recorded_commit(str(document.get(\"source_commit\"))) is None:\n        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)\n    configuration = document.get(\"configuration\")\n    if not isinstance(configuration, dict) or configuration != _configuration():\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_a_squash_orphaned_source_commit_is_accepted_because_the_content_survives",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_load_artifact_is_unaffected_by_a_recorded_commit_no_clone_can_resolve"
       ]
     }
   ]
