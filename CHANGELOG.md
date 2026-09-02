@@ -66,7 +66,7 @@ All notable changes are documented here. The format follows
   `check_schema_sets`, `check_drc_comparability`, `check_ci_budgets` and the mutation-anchor sweep
   all walk the filesystem already, `check_secrets` already includes untracked files, and
   `check_audio_benchmarks`, `check_circuit_intents` and `check_version` are manifest- or
-  artifact-driven rather than population walks. (D-239, R-188, issue #244)
+  artifact-driven rather than population walks. (D-239, R-190, issue #244)
 
 ## [0.12.0] - 2026-09-01
 

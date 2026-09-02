@@ -24,7 +24,7 @@ contain, so it cannot go stale unnoticed.
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
 | [Decision ledger](decision-ledger.md) | `D-` | `D-241` | `D-242` |
-| [Risk register](risk-register.md) | `R-` | `R-188` | `R-189` |
+| [Risk register](risk-register.md) | `R-` | `R-190` | `R-191` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-174` | `SEC-175` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-141` | `B-142` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
@@ -41,14 +41,18 @@ The same wave reserved `B-125`–`B-127` for sibling lanes and `B-128` for M3 E4
 consumed here; the sibling reservations remain unavailable until their lanes land or explicitly
 release them.
 
-The 2026-09-02 checker-population lane (#244) takes `D-239`/`R-188` under rule 1, re-derived
-against `main`'s **rows** at `f8b4daa` rather than against the registry line. `main` carries
-`D-237` and `D-241` — allocated by #254 and #252 — with `D-238`–`D-240` unallocated, and `R-187`
-as its highest risk row. `D-239` sits in that verified gap and `R-188` is the next free risk
-number; no open branch claims either. The live claims around them are left untouched:
-`D-238`/`B-143` by the CI suite-speed lane, which both #251 and #242 record as holding them, and
-`D-240`/`R-189` by #251. If a sibling lane is abandoned its numbers remain spent under rule 2, so
-the checker's gap notes for `D-238` and `D-240` are expected until those branches land.
+The 2026-09-02 checker-population lane (#244) takes `D-239`/`R-190` under rule 1, re-derived
+against `main`'s **rows** at `f8b4daa` rather than against the registry line and re-checked
+against every open branch immediately before merging. `main` carries `D-237` and `D-241` — #254
+took `D-237`/`R-187`/`SEC-174` and #252 took `D-241` — leaving `D-238`–`D-240` unallocated and
+`R-187` as the highest risk row. `D-239` sits in that verified gap and nothing else claims it.
+`R-188` was this lane's original claim and **had to move**: #254 landing displaced #242's entire
+set, #242's re-arbitration took `D-242`/`R-188`, and #251 took `D-243`/`R-189`. Rather than race
+#242 for a number two branches would otherwise both carry, this record steps up to `R-190`, above
+every live claim — the same half of rule 1 that allocated `D-181`/`R-138`. `D-238` stays reserved
+for the CI suite-speed lane, which both #242 and #251 record as holding `D-238`/`B-143`. The
+checker's gap notes for `D-238`, `D-240`, `R-188` and `R-189` are therefore expected until those
+branches land.
 
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`
