@@ -226,3 +226,80 @@ floors.
   same-net branch twice, remain globally connected and still close a copper loop.
 - **Publish before the final whole-set pass.** Rejected because local and Board IR validity do not
   prove pairwise clearance against the rest of the negotiated allocation.
+
+## Amendment, 2026-09-02 — an artifact's recorded revision must be one the default branch carries
+
+B-141's evidence binds `source_commit` and verifies the runner blob at that revision. A pull
+request publishes from a branch commit, and squash-merging discards it: #239's artifact recorded
+`b7c71d4d643df155c7bdcee5bac25e7d943b7031`, the squash landed as
+`86634180e5a3f0956cf2ede4168710f1fce8fbcb`, and every fresh clone of the default branch then
+refused the artifact because the recorded revision named nothing. The refusal was correct. The
+recorded value was truthful on the pull-request branch but was not durable or verifiable after the
+squash.
+
+The artifact is rebound to the squash commit, which the default branch carries and every clone
+fetches. A clean replay on that source reproduced the semantic metrics digest exactly while
+freshly observing descriptive mean timings of **39.224s** control and **40.042s** treatment. The
+semantic result is unchanged; the published artifact is nevertheless a new measurement record,
+not a byte-only re-signing. Two alternatives were weighed and rejected on evidence rather than
+taste:
+
+The displaced bytes remain directly auditable as
+[`2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.json`](../../benchmarks/results/routing/archive/2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.json)
+and its
+[`archived commitment`](../../benchmarks/results/routing/archive/2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.commitment.json).
+Their raw SHA-256 values remain `ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c`
+and `129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9`.
+They retain their original internal canonical path for byte identity and therefore validate only
+as historical offline material, never as the current authoritative pair. The corrected canonical
+record passes **190/190** focused tests and the unchanged 78-mutant set with zero survivors or
+control failures.
+
+- **Bind the tree instead of the commit.** Refuted by measurement: the branch tree
+  (`792bd419e043955f0f44978158008aef34495645`) and the squash tree
+  (`b2e1edac893a8cdbda5e6a944f52871bfd34a00e`) differ, because the default branch advanced between
+  publication and merge. A squash preserves file *content*, not the tree. The blob binding that
+  does survive is `runner_sha256`, and it was already bound.
+- **Accept content-only provenance as `repository_bound`.** Rejected because the artifact claims it
+  was produced at a *named revision*. When no clone can check that claim, certifying it green is
+  precisely the failure this contract exists to refuse. `offline` remains the honest answer, and
+  `load_artifact` stays fail-closed.
+
+**Under linear history a commit SHA is not a durable identifier for anything a pull request
+produces.** `main` sets `required_linear_history=true`: branch protection refuses merge commits, and
+both remaining strategies rewrite history — squash collapses the branch to one new commit, rebase
+replays every commit under new SHAs. No strategy available to this repository preserves a branch
+commit's SHA. An artifact published on a branch therefore cannot bind its own revision and survive
+its own merge. The only commit that can be bound durably is one that is *already* on the default
+branch when the artifact is written, which is why this rebinding names the squash commit of the pull
+request that introduced the artifact rather than any commit of the branch performing the repair.
+
+That makes the present fix a valid unblock but not a general answer: it must be repeated on every
+future runner change. The structural answer is to bind provenance to what survives every strategy —
+**the runner blob**, whose hash is already bound as `runner_sha256`, verifiable with no history at
+all — and to stop requiring a resolvable commit for the strongest guarantee. Two facts constrain that
+design and are recorded here so the follow-up does not rediscover them:
+
+- **The tree does not survive, only the blob does.** Measured on this very merge: branch tree
+  `792bd419e043955f0f44978158008aef34495645`, squash tree
+  `b2e1edac893a8cdbda5e6a944f52871bfd34a00e`. They differ because the default branch advanced
+  between publication and merge, so a squash rewrites the root tree even when it preserves every
+  byte of the file in question. Binding the tree would fail exactly as binding the commit did.
+- **A commit-derived date cannot be fixed at publication time.** Deriving the evidence date from
+  `git log --first-parent main` for the first commit carrying the runner blob is durable *after* the
+  merge, but at publication the blob is not yet on the default branch, so the value would change at
+  merge and break the artifact's self-digest. The follow-up must either drop the date from the
+  verified set — recording it as informational under `offline` — or accept a post-merge derivation.
+
+The follow-up is a separate change because it is mutually exclusive with this one: implementing it
+edits the runner, which moves `runner_sha256`, which is precisely what would stop
+`86634180e5a3f0956cf2ede4168710f1fce8fbcb` from carrying the bound bytes. One pull request cannot
+both bind that commit and change the runner.
+
+Until then the residue is a process constraint mechanized rather than documented as a habit:
+`test_published_artifact_records_a_default_branch_ancestor` checks the recorded revision against
+the exact pull-request base injected by hosted CI and refuses before merge when it binds only a
+feature-branch commit. Outside that explicitly configured environment the repository-only
+assertion skips rather than trusting a possibly stale local `main` or inheriting an `origin` naming
+requirement. A future runner change must therefore land before a later evidence-only publication
+can bind its default-branch commit.
