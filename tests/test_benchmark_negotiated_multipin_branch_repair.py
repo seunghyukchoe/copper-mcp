@@ -3012,21 +3012,19 @@ def test_published_artifact_records_a_default_branch_ancestor() -> None:
 
     A pull request may publish its artifact from a feature-branch commit that squash-merging will
     discard.  The synthetic merge ``HEAD`` still contains that commit, so it cannot prove durable
-    provenance.  This guard checks the fetched default branch instead and refuses before merge
-    unless the recorded revision is already carried there.
+    provenance.  Hosted CI therefore injects the exact pull-request base; ordinary repository
+    checkouts fall back to local ``main`` without requiring a particular remote name.
     """
 
     document = _artifact()
     recorded = document["source_commit"]
-
-    assert benchmark._resolve_recorded_commit(recorded) == recorded, (
-        "the recorded B-141 source commit is not in this repository. If this branch was "
-        "squash-merged, republish the artifact bound to the squash commit on the default branch; "
-        "see the B-141 amendment in docs/ledgers/benchmark-ledger.md."
-    )
+    configured_ref = os.environ.get("COPPER_MCP_DEFAULT_BRANCH_REF")
+    default_branch = configured_ref or "main"
     git = shutil.which("git")
-    assert git is not None
-    default_branch = "refs/remotes/origin/main"
+    if git is None:
+        if configured_ref is not None:
+            pytest.fail("git is required to check the configured default-branch ancestry")
+        pytest.skip("Git metadata is unavailable; default-branch provenance is repository-only")
     default_branch_probe = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
         [git, "rev-parse", "--verify", f"{default_branch}^{{commit}}"],
         cwd=benchmark.ROOT,
@@ -3035,10 +3033,10 @@ def test_published_artifact_records_a_default_branch_ancestor() -> None:
         text=True,
         timeout=5,
     )
-    assert default_branch_probe.returncode == 0, (
-        "the fetched default-branch ref is unavailable. Fetch origin/main before validating "
-        "B-141 provenance."
-    )
+    if default_branch_probe.returncode != 0:
+        if configured_ref is not None:
+            pytest.fail("the configured default-branch ref is unavailable")
+        pytest.skip("local main is unavailable; configure COPPER_MCP_DEFAULT_BRANCH_REF to check")
     ancestry = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
         [git, "merge-base", "--is-ancestor", recorded, default_branch],
         cwd=benchmark.ROOT,
@@ -3048,7 +3046,7 @@ def test_published_artifact_records_a_default_branch_ancestor() -> None:
         timeout=5,
     )
     assert ancestry.returncode == 0, (
-        "the recorded B-141 source commit exists only outside the fetched default-branch "
+        "the recorded B-141 source commit exists only outside the configured default-branch "
         "ancestry. "
         "Republish the artifact against a commit carried by the default branch; see the B-141 "
         "amendment in docs/ledgers/benchmark-ledger.md."

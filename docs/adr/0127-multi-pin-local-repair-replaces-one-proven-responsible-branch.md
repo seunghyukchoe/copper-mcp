@@ -298,6 +298,8 @@ both bind that commit and change the runner.
 
 Until then the residue is a process constraint mechanized rather than documented as a habit:
 `test_published_artifact_records_a_default_branch_ancestor` checks the recorded revision against
-the fetched `origin/main` ancestry and refuses a pull request before merge when it binds only a
-feature-branch commit. A future runner change must therefore land before a later evidence-only
-publication can bind its default-branch commit.
+the exact pull-request base injected by hosted CI and refuses before merge when it binds only a
+feature-branch commit. Ordinary repository checkouts fall back to local `main`, while source
+snapshots without that Git metadata skip this repository-only assertion rather than inheriting an
+`origin` naming requirement. A future runner change must therefore land before a later
+evidence-only publication can bind its default-branch commit.
