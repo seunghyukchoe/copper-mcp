@@ -6,6 +6,19 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Added the private, direct-import-only surrogate-ranking slice for issue #91. It accepts only
+  immutable, revision-bound route candidates, applies fixed integer scoring under 32-candidate and
+  16,384-vertex ceilings, and returns redacted deterministic advisory rankings. Candidates must
+  share the full comparison context and are refused as `incomparable_candidates` otherwise; the
+  accepted output includes a separate `comparison_digest` because legacy candidate IDs omit some
+  settings. The final focused suite is 62 passed and the official mutation result is 23/23 killed.
+  It has no MCP, CLI,
+  apply, persistence, backend, or sign-off surface; DFM authority remains the coordinator-owned
+  repeated KiCad DRC path, while SI, PI, and thermal remain unregistered. See ADR-0128, D-237,
+  R-187, and SEC-174. Issue #91 remains open.
+
 ### Fixed
 
 - B-141's committed artifact is rebound to the squash-merge commit
