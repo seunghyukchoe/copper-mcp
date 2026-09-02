@@ -3012,21 +3012,21 @@ def test_published_artifact_records_a_default_branch_ancestor() -> None:
 
     A pull request may publish its artifact from a feature-branch commit that squash-merging will
     discard.  The synthetic merge ``HEAD`` still contains that commit, so it cannot prove durable
-    provenance.  Hosted CI therefore injects the exact pull-request base; ordinary repository
-    checkouts fall back to local ``main`` without requiring a particular remote name.
+    provenance.  Hosted CI therefore injects the exact pull-request base.  Outside that configured
+    environment this repository-only assertion skips instead of guessing a stale local branch or
+    requiring a particular remote name.
     """
 
     document = _artifact()
     recorded = document["source_commit"]
     configured_ref = os.environ.get("COPPER_MCP_DEFAULT_BRANCH_REF")
-    default_branch = configured_ref or "main"
+    if configured_ref is None:
+        pytest.skip("configure COPPER_MCP_DEFAULT_BRANCH_REF to check default-branch ancestry")
     git = shutil.which("git")
     if git is None:
-        if configured_ref is not None:
-            pytest.fail("git is required to check the configured default-branch ancestry")
-        pytest.skip("Git metadata is unavailable; default-branch provenance is repository-only")
+        pytest.fail("git is required to check the configured default-branch ancestry")
     default_branch_probe = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
-        [git, "rev-parse", "--verify", f"{default_branch}^{{commit}}"],
+        [git, "rev-parse", "--verify", f"{configured_ref}^{{commit}}"],
         cwd=benchmark.ROOT,
         check=False,
         capture_output=True,
@@ -3034,11 +3034,9 @@ def test_published_artifact_records_a_default_branch_ancestor() -> None:
         timeout=5,
     )
     if default_branch_probe.returncode != 0:
-        if configured_ref is not None:
-            pytest.fail("the configured default-branch ref is unavailable")
-        pytest.skip("local main is unavailable; configure COPPER_MCP_DEFAULT_BRANCH_REF to check")
+        pytest.fail("the configured default-branch ref is unavailable")
     ancestry = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
-        [git, "merge-base", "--is-ancestor", recorded, default_branch],
+        [git, "merge-base", "--is-ancestor", recorded, configured_ref],
         cwd=benchmark.ROOT,
         check=False,
         capture_output=True,

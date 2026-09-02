@@ -24,7 +24,8 @@ All notable changes are documented here. The format follows
   byte-only re-signing. The runner file is byte-identical to the one the squash commit carries.
   Hosted CI injects the exact pull-request base into a new ancestry test, so a pull request that
   binds a feature-branch-only commit is refused before squash-merging without requiring every
-  local checkout to have a remote named `origin`. `main`
+  local checkout to have a remote named `origin` or to trust a possibly stale local branch.
+  Unconfigured source snapshots skip this repository-only assertion. `main`
   sets `required_linear_history=true`, so no merge strategy this repository allows preserves
   a branch commit's SHA -- an artifact cannot bind its own revision and survive its own
   merge, and this fix binds a commit already on the default branch rather than any of its
