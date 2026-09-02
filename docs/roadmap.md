@@ -18,7 +18,7 @@ request includes the issue that pull request closes, so its count is the expecte
 |---|---|---|---|
 | M1 — KiCad inspection completion | 10 | 1 | Open: [#188](https://github.com/seunghyukchoe/copper-mcp/issues/188), the measured third-party conversion wall. #116 and #172 are closed. |
 | M2 — Routing depth | 6 | 1 | The milestone itself is closed. [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) remains open and operator-blocked for a contained FreeRouting comparison provider; it is not agent-executable. |
-| M3 — Safe application completion | 2 | 2 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply — **designed; live probe predeclared; implementation gated on the probe** ([ADR-0129](adr/0129-a-live-apply-proves-a-matched-digest-not-exclusive-access.md)) — and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. Both remaining halves wait on a real-editor operator gate. |
+| M3 — Safe application completion | 2 | 2 | Open: [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68) IPC one-undo-commit apply — **designed; live probe predeclared; implementation gated on the probe** ([ADR-0130](adr/0130-a-live-apply-proves-a-matched-digest-not-exclusive-access.md)) — and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52) placement apply, whose file-backed half has shipped. Both remaining halves wait on a real-editor operator gate. |
 | M4 — Scene, policy, and evaluation | 4 | 0 | Complete as a tracked accounting fact. The `[~]` items below continue to state narrower capability boundaries rather than hidden open issues. |
 | M5 — Verification and physics | 6 | 2 | Open after this slice: [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90) and [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91) — #91 stays open with `dfm` sign-off now reachable under [ADR-0119](adr/0119-a-signoff-claim-rests-on-repeated-agreement-from-a-registered-backend.md) and SI/PI/thermal still unbacked. [#167](https://github.com/seunghyukchoe/copper-mcp/issues/167) closes on ADR-0116's measured 500,000-vertex source boundary; [#87](https://github.com/seunghyukchoe/copper-mcp/issues/87) and [#99](https://github.com/seunghyukchoe/copper-mcp/issues/99) are closed. |
 | Audio Board Lab #001 — Physical validation | 0 | 1 | Open: [#8](https://github.com/seunghyukchoe/copper-mcp/issues/8). See [the Audio Board Lab gate](#audio-board-lab-001--physical-validation) — as written the issue would validate the board, and the thing that needs validating is the tool. |
@@ -475,7 +475,7 @@ observation strengthened rather than weakened it.
 longer a bare park, and still not an implementation. The history is worth keeping because each
 step corrected the one before it. The park originally rested on "a transport this project has
 never successfully spoken to"; B-138 made that false and supplied a better reason, which was that
-three of four live surfaces refused a real editor on first contact. ADR-0128 (in flight on
+three of four live surfaces refused a real editor on first contact. ADR-0129 (in flight on
 [#242](https://github.com/seunghyukchoe/copper-mcp/pull/242)) then removed that reason too, by
 binding every live surface to a declared version window and requiring the exact-match `compatible`
 verdict for apply specifically.
@@ -487,7 +487,7 @@ anywhere in it; the only field in the protocol containing the word "revision" is
 string a human types into the drawing sheet. It also finds that `BeginCommit` carries no document,
 that `EndCommitResponse` is empty, that no client-side rollback of a pushed commit exists among 58
 public `Board` methods, and that the binding reads no status from any of its four mutation calls.
-[ADR-0129](adr/0129-a-live-apply-proves-a-matched-digest-not-exclusive-access.md) is the safety
+[ADR-0130](adr/0130-a-live-apply-proves-a-matched-digest-not-exclusive-access.md) is the safety
 model decided from exactly those facts, and it states what a write path can honestly promise — that
 the write landed on a board whose digest matched the caller's at the moment of comparison, and
 **not** that no one else wrote — together with the residual risk [R-189](ledgers/risk-register.md)
@@ -496,7 +496,7 @@ because the socket has no intra-uid authentication.
 
 Three exit conditions remain, all of them needing a live session and none of them agent-executable:
 **one apply produces exactly one undo entry**, **`drop_commit` reliably reverts a partially staged
-batch**, and **a post-push re-read verifies the write**. They are predeclared in ADR-0129 §7 so the
+batch**, and **a post-push re-read verifies the write**. They are predeclared in ADR-0130 §7 so the
 lane that runs them cannot choose its questions after seeing the answers, and a probe that *fails*
 is also an exit — it would close #68 as not tractable on this protocol, which is a better outcome
 than an open issue. Merge of any mutation stays gated on adversarial review after that.
@@ -785,13 +785,13 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   completion/quality and every refusal separately. #90 closes only if that differential is
   deterministic and positive without weakening the physical, identity or work gates; otherwise it
   re-parks on the measured result.
-  B-141 differential measured (2026-08-31; the predeclared artifact basename remains dated
+  B-141 differential measured (2026-09-01; the predeclared artifact basename remains dated
   2026-08-30). The exact B-140/B-088 population produced **20
   offered/imported, 16 admitted, 4 envelope refusals and 70 submitted nets** in both arms. The
   uninstrumented control (`repair_settings: null`) completed **0 boards / 0 nets**; treatment with
   the default bounded repair profile completed **1 board / 2 nets**, publishing one repair and one
   `completed_with_repair` result. The measured differential is **+1 board / +2 nets / +7,432
-  physical checks / +43,750,000 nm wire**; mean arm times were **40.574s** and **41.039s** across
+  physical checks / +43,750,000 nm wire**; mean arm times were **39.224s** and **40.042s** across
   two deterministic repetitions. Per-reason refusal/outcome reconciliation is independently
   checked. The semantic guards require each arm's `outcome_breakdown["envelope_construction"]` to
   equal the fixed population's `boards_unable_to_form_a_two_request_envelope` count (**4**); a
@@ -799,16 +799,16 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   and every non-zero repair-work field; and all six status categories (`completed`, `no_path`,
   `partial`, `invalid_request`, `cancelled`, `not_run`) reconcile to the outcome taxonomy.
   The closed report and companion commitment are bound to source
-  `b7c71d4d643df155c7bdcee5bac25e7d943b7031`, runner
+  `86634180e5a3f0956cf2ede4168710f1fce8fbcb`, runner
   `sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`, configuration
   `sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3`, report raw
-  `sha256:ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c`, commitment run
-  `sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397`, commitment raw
-  `sha256:129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9`, and spec
-  `sha256:e1f4a225f963385cba00af45109d0d8ae0a22ef228787c2b7e87707cf8108c85`. Focused
-  evidence validation is **187/187 tests** and **78/78 evidence-contract mutants killed** with zero
+  `sha256:237d4ddfd4ce403aa3bb2ea19e4229aa0833f667501127fd5acd223e62173021`, report raw
+  `sha256:32ec7b3f489d006940f0ab6b05987b943bf8263f7ded07ef27085b57d7368e7f`, commitment run
+  `sha256:6ce94a530ef55ecb1690a0a19eb5b148607e7c30bd80bc0ded87a038b1c74efd`, commitment raw
+  `sha256:c190e5d8ca5066fa3ff09695841dde266907ebfb32252fa91c84dceccd93df12`, and spec
+  `sha256:d7098924ad05c9a9ad6b15f508b330ba25dcd87a8829461ac51310dc282a9c14`. Focused
+  evidence validation is **190/190 tests** and **78/78 evidence-contract mutants killed** with zero
   survivors or control failures, distinct
   from #238's **35/35 capability mutants**. A later checkout or merge-ref movement may load this
   record without replacing its historically bound source commit. The source guard verifies the
@@ -823,15 +823,26 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   nonblocking, so FIFO and other special files refuse before decode/JSON. This is a deterministic
   completion differential, not held-out routing quality, KiCad DRC, electrical, SI/PI/EMC,
   thermal, DFM, fabrication, apply, editor, hardware or generalisation evidence. #90 remains open
-  for human review/calibration and the next agent-only direction is #91's private surrogate ranking
-  with authoritative signoff.
-- [ ] **SI/PI/thermal/DFM surrogate hooks with authoritative signoff, parked behind #99**
+  for human review/calibration. #91's completed private ranking slice and its remaining
+  authoritative-adapter and reviewed-exposure gates are recorded below.
+- [x] **Private bounded surrogate ranking slice; authoritative signoff remains domain-gated**
   ([#91](https://github.com/seunghyukchoe/copper-mcp/issues/91)). The half of this that carries the
   safety property is the signoff, not the surrogate — any claim surfaced to a caller comes from an
   authoritative tool run or is declared a non-claim — and that is the same evidence-binding contract
   #99 has to define first. Design the hook contract against #99's vocabulary rather than inventing a
   second one.
-  Current slice disposition (2026-08-23): the coordinator-owned bounded executor ADR-0118 named
+  Current slice disposition (2026-09-02): ADR-0128 adds a direct-import-only deterministic
+  candidate-ranking seam. It accepts immutable candidates only when base revision, net, ordered
+  endpoints, layer/width/pad count, ordering policy, fill binding, router version, policy and all
+  nine A* settings match; seed, geometry, cost and metrics may differ for ranking. A separate
+  `comparison_digest` is emitted because legacy candidate IDs omit some settings, and mismatches
+  refuse as `incomparable_candidates`. It uses fixed integer scoring and bounded redacted advisory
+  output. It is not exposed through MCP, CLI, apply, persistence, or
+  a backend and cannot produce `SIGNED_OFF`; DFM remains the repeated KiCad DRC authority, while
+  SI, PI and thermal remain unregistered. The slice proves neither routing quality nor physics,
+  fabrication, or hardware validity. Issue #91 remains open for authoritative adapters, reviewed
+  exposure, and human or external validation.
+  Prior disposition (2026-08-23): the coordinator-owned bounded executor ADR-0118 named
   now exists, and `SIGNED_OFF` is reachable — **for `dfm` only**. The reason it is only `dfm` is
   the reason the deferral could be lifted at all: this repository has exactly one authority that
   answers a physics-or-fabrication question about a candidate, and ADR-0004 made it KiCad's DRC.

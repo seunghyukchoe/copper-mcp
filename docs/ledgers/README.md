@@ -23,23 +23,27 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-240` | `D-241` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-243` | `D-244` |
 | [Risk register](risk-register.md) | `R-` | `R-189` | `R-190` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-174` | `SEC-175` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-175` | `SEC-176` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-144` | `B-145` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
 
-The 2026-09-02 apply-v0.2 design lane took `D-240`/`R-189`/`SEC-174`/`B-144`/`ADR-0129`, every one
-of them **above** the next free number on `main`, because three branches were open on this same
-base and each holds a claim: [#242](https://github.com/seunghyukchoe/copper-mcp/pull/242) holds
-`D-237`/`R-187`/`B-142`/`ADR-0128`, the CI suite-speed lane holds `D-238`/`B-143`, and the
-vacuous-pass checker lane holds `D-239`/`R-188`. Stepping over all three is rule 1's other half
-rather than an exception to it, and `SEC-174` is *not* a step-over — no open branch claims it, so
-it is simply the next free number. Every stepped-over identifier is a **live claim, not a gap**;
-if any of those branches is abandoned its numbers become permanent gaps under rule 2, and this
-paragraph becomes the correction to make.
+The 2026-09-02 apply-v0.2 design lane first took `D-240`/`R-189`/`SEC-174`/`B-144`/`ADR-0129`
+against a registry that has since moved, and this paragraph is the correction that allocation
+predicted. [#254](https://github.com/seunghyukchoe/copper-mcp/pull/254) landed
+`D-237`/`R-187`/`SEC-174`/`ADR-0128` and [#252](https://github.com/seunghyukchoe/copper-mcp/pull/252)
+landed `D-241`, so `D-240` fell *below* the highest allocated number and `SEC-174` was taken
+outright; [#242](https://github.com/seunghyukchoe/copper-mcp/pull/242), still open on this same
+base, renumbered its own claim to `D-242`/`R-188`/`B-142`/`ADR-0129`. This lane therefore holds
+`D-243`/`R-189`/`SEC-175`/`B-144`/`ADR-0130`: `SEC-175` is simply the next free number, and
+`D-243` and `ADR-0130` step over #242's live claim rather than racing it, which is rule 1's other
+half rather than an exception to it. `D-238`, `D-239` and `D-240` are **spent, not free** — rule 2
+forbids recycling them even though no record carries them. Every stepped-over identifier is a
+**live claim, not a gap**; if #242 is abandoned its numbers become permanent gaps under rule 2, and
+this paragraph becomes the correction to make.
 
 The 2026-08-24 parallel closure wave pre-assigned `D-219`/`R-170`/`SEC-158`/`ADR-0119`
 to the authoritative-signoff lane and `D-220`/`R-171` to its sibling lane. This record therefore

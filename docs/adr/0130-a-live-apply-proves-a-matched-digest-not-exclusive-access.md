@@ -1,10 +1,10 @@
-# ADR-0129: A live apply proves a matched digest, not exclusive access
+# ADR-0130: A live apply proves a matched digest, not exclusive access
 
 - Status: Proposed
 - Date: 2026-09-02
 - Owners: `@seunghyukchoe`
-- Related: ADR-0025, ADR-0069, ADR-0074, ADR-0103, ADR-0120, ADR-0128, B-138, B-144, D-240,
-  R-189, SEC-168, SEC-174, issue #68
+- Related: ADR-0025, ADR-0069, ADR-0074, ADR-0103, ADR-0120, ADR-0129, B-138, B-144, D-243,
+  R-189, SEC-168, SEC-175, issue #68
 
 ## Context
 
@@ -16,15 +16,15 @@ rather than wait for them to go away.
 
 **What #242 resolved.** The park's reasons 1 and 2 were that CopperMCP's default MCP path refused a
 current KiCad outright, and that the editor-context surface had no override at all.
-ADR-0128 replaced the binding's asymmetric `check_version()` boolean with a declared version
+ADR-0129 replaced the binding's asymmetric `check_version()` boolean with a declared version
 window, retired `allow_future_api`, and made **live apply the one surface that requires
 `compatible`** — the exact-match verdict, the only one carrying a proof. Those two reasons are
 gone, and the strictness live apply inherits is the correct half of the window.
 
-ADR-0128 is cited by number and not linked throughout this record. It is in flight on
+ADR-0129 is cited by number and not linked throughout this record. It is in flight on
 [#242](https://github.com/seunghyukchoe/copper-mcp/pull/242) and is not on `main` at the base of
 this branch, so a link would resolve to nothing until that pull request lands. The citation is
-deliberate rather than an omission: this record's §4.1 *depends* on ADR-0128's decision, and saying
+deliberate rather than an omission: this record's §4.1 *depends* on ADR-0129's decision, and saying
 so by number is honest about the dependency being unmerged.
 
 **What did not change.** Reason 4 is the protocol, and [B-144](../ledgers/benchmark-ledger.md) has
@@ -189,7 +189,7 @@ had.
 CopperMCP cannot add authentication to KiCad's socket. It is not its socket. Four things it **can**
 do, each with its error direction, and then the plain statement of what they are worth:
 
-1. **Require `compatible`.** Already decided in ADR-0128 (unmerged; see the note in Context) and
+1. **Require `compatible`.** Already decided in ADR-0129 (unmerged; see the note in Context) and
    unchanged here: live apply refuses both `future_api_unverified` and `legacy_api_unverified`.
    *Error direction: refuses editors it could probably have driven. Correct — a read's worst case
    is an incomplete answer carrying the verdict that says so, and an apply has no such disclosure
@@ -219,7 +219,7 @@ right, that is not safety.
 **This is defence against CopperMCP's own mistakes — wrong board, stale digest, unauthorized
 candidate, incompatible editor — and not against a hostile local process.** Recorded as
 [R-189](../ledgers/risk-register.md), with the apply surface's threat model as
-[SEC-174](../ledgers/security-ledger.md), extending SEC-168 from a read surface to a write one.
+[SEC-175](../ledgers/security-ledger.md), extending SEC-168 from a read surface to a write one.
 
 ### 5. What apply v0.2 does not do
 
@@ -230,7 +230,7 @@ Each exclusion is a decision, so each says why.
   half-apply with no client-side rollback (§2) to undo the first.
 - **No live placement apply.** The live surface mints no placement capability at all today —
   `unsupported_surface` is a real member of ADR-0120's withheld-reason set for exactly this — and
-  ADR-0128's `compatible` requirement is scoped to `live_apply.py`, so it constrains the route
+  ADR-0129's `compatible` requirement is scoped to `live_apply.py`, so it constrains the route
   surface and does not silently authorize a placement one. Placement's parity surface is bracketed
   by verdicts (ADR-0110) rather than closed, and adding a live write to a surface whose parity is
   bracketed would compound two unfinished things.
@@ -252,9 +252,9 @@ by this record or is a specific thing someone must do.
 
 | | Exit condition | State |
 |---|---|---|
-| **X1** | The version gate no longer refuses a current editor, and no surface can widen the window. | **Closed by ADR-0128.** |
+| **X1** | The version gate no longer refuses a current editor, and no surface can widen the window. | **Closed by ADR-0129.** |
 | **X2** | The primitive census is measured rather than recalled, including the negatives. | **Closed by B-144.** 17 files, 253 messages, 891 fields, 7 sweep hits, 0 of them document state. |
-| **X3** | The safety model is written down with its guarantee and its residual risk stated in the ADR's own words. | **Closed by this record**, R-189 and SEC-174. |
+| **X3** | The safety model is written down with its guarantee and its residual risk stated in the ADR's own words. | **Closed by this record**, R-189 and SEC-175. |
 | **X4** | **One apply produces exactly one undo entry**, demonstrated against a real editor. | **Open — needs a live session.** Predeclared in §7. |
 | **X5** | **`drop_commit` reliably reverts a partially staged batch**, demonstrated against a real editor, including the disconnect case. | **Open — needs a live session.** Predeclared in §7. |
 | **X6** | **A post-push re-read verifies the write**, demonstrated end to end. | **Open — needs a live session.** Predeclared in §7. |
@@ -358,10 +358,10 @@ during the week this record was written.
 ## References
 
 - [ADR-0074: Gate live editor mutation on its own consent](0074-live-ipc-one-undo-commit-apply.md)
-- ADR-0128 — the live IPC version window (in flight on #242, not yet on `main`; cited by number)
+- ADR-0129 — the live IPC version window (in flight on #242, not yet on `main`; cited by number)
 - [ADR-0120: withheld apply authority has a closed reason]
   (0120-withheld-apply-authority-has-a-closed-reason.md)
 - [ADR-0025: Apply a route candidate by splicing bytes](0025-file-level-candidate-apply.md)
 - [Live IPC apply research](../research/ipc-apply-v1.md)
-- [B-144, B-138](../ledgers/benchmark-ledger.md) · [D-240](../ledgers/decision-ledger.md) ·
-  [R-189](../ledgers/risk-register.md) · [SEC-174, SEC-168](../ledgers/security-ledger.md)
+- [B-144, B-138](../ledgers/benchmark-ledger.md) · [D-243](../ledgers/decision-ledger.md) ·
+  [R-189](../ledgers/risk-register.md) · [SEC-175, SEC-168](../ledgers/security-ledger.md)

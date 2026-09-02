@@ -1,0 +1,240 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "PSR01-batch-bound-accepts-33",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    if type(candidates) is not tuple or not 1 <= len(candidates) <= _MAX_CANDIDATES:\n",
+      "replacement": "    if type(candidates) is not tuple or not 1 <= len(candidates) <= _MAX_CANDIDATES + 1:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_exact_batch_bound_accepts_32_and_refuses_33_without_partial_entries"
+      ]
+    },
+    {
+      "id": "PSR02-path-tuple-bound-is-removed",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "            if path_count > _MAX_TOTAL_VERTICES // 2:\n                return _MAX_TOTAL_VERTICES + 1\n",
+      "replacement": "            if False:\n                return _MAX_TOTAL_VERTICES + 1\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_vertex_element_tuple_overflow_is_rejected_before_element_inspection"
+      ]
+    },
+    {
+      "id": "PSR03-aggregate-vertex-bound-becomes-exclusive",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    if vertex_count > _MAX_TOTAL_VERTICES:\n        return _refused(SurrogateRankingCode.VERTEX_BUDGET_EXCEEDED)\n",
+      "replacement": "    if vertex_count >= _MAX_TOTAL_VERTICES:\n        return _refused(SurrogateRankingCode.VERTEX_BUDGET_EXCEEDED)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_aggregate_vertex_bound_is_exact_and_overflow_is_rejected_before_id_verification"
+      ]
+    },
+    {
+      "id": "PSR04-patch-subclass-is-admitted-before-path-access",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "            if type(patch) is not RoutePatch:\n",
+      "replacement": "            if not isinstance(patch, RoutePatch):\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_route_patch_subclass_is_rejected_without_touching_its_paths_accessor"
+      ]
+    },
+    {
+      "id": "PSR05-nested-contract-reconstruction-is-skipped",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "        return RouteCandidate(\n            candidate_id=candidate.candidate_id,\n            base_revision=candidate.base_revision,\n            start_pad_id=candidate.start_pad_id,\n            end_pad_id=candidate.end_pad_id,\n            patch=fresh_patch,\n            cost=fresh_cost,\n            metrics=fresh_metrics,\n            settings=fresh_settings,\n            router_version=candidate.router_version,\n            policy=candidate.policy,\n            seed=candidate.seed,\n            pad_count=candidate.pad_count,\n            ordering_policy=candidate.ordering_policy,\n            fill_binding=candidate.fill_binding,\n        )\n",
+      "replacement": "        return candidate\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_forged_cost_geometry_metrics_and_settings_drift_are_rejected"
+      ]
+    },
+    {
+      "id": "PSR06-candidate-id-verification-is-bypassed",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "            verified_ok = verify_candidate_id(candidate)\n",
+      "replacement": "            verified_ok = True\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_tampered_id_duplicate_and_mixed_revision_inputs_are_refused"
+      ]
+    },
+    {
+      "id": "PSR07-duplicate-candidate-gate-is-removed",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "        if candidate_id in scored_by_id:\n",
+      "replacement": "        if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_every_refusal_family_has_an_exact_typed_code"
+      ]
+    },
+    {
+      "id": "PSR08-mixed-revision-gate-is-removed",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "        elif revision != base_revision:\n",
+      "replacement": "        elif False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_every_refusal_family_has_an_exact_typed_code"
+      ]
+    },
+    {
+      "id": "PSR09-score-rounding-falls-back-to-floor",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    cost_units = (total_cost_nm + (_COST_SCALE_NM - 1)) // _COST_SCALE_NM\n",
+      "replacement": "    cost_units = total_cost_nm // _COST_SCALE_NM\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_score_formula_pins_rounding_and_cap_boundaries"
+      ]
+    },
+    {
+      "id": "PSR10-score-sign-is-positive",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    return -min(_SCORE_CAP, cost_units)\n",
+      "replacement": "    return min(_SCORE_CAP, cost_units)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_score_formula_pins_rounding_and_cap_boundaries"
+      ]
+    },
+    {
+      "id": "PSR11-score-cap-is-removed",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    return -min(_SCORE_CAP, cost_units)\n",
+      "replacement": "    return -cost_units\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_score_formula_pins_rounding_and_cap_boundaries"
+      ]
+    },
+    {
+      "id": "PSR12-score-ties-use-input-order",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    scored.sort(key=lambda item: (-item[0], item[1]))\n",
+      "replacement": "    scored.sort(key=lambda item: -item[0])\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_rank_is_deterministic_across_reordered_input_and_digest_fields_are_stable"
+      ]
+    },
+    {
+      "id": "PSR13-feature-digest-drops-score-binding",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "            \"features\": {\"score_milli\": score_milli},\n",
+      "replacement": "            \"features\": {},\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_fixed_candidate_and_domain_pin_source_owned_digest_literals"
+      ]
+    },
+    {
+      "id": "PSR14-input-digest-drops-candidate-bindings",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "            bindings=tuple(entry.binding for entry in entries),\n",
+      "replacement": "            bindings=(),\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_fixed_candidate_and_domain_pin_source_owned_digest_literals"
+      ]
+    },
+    {
+      "id": "PSR15-ranking-digest-drops-ranked-entries",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "            input_digest=input_digest,\n            entries=entries,\n        )\n    )\n",
+      "replacement": "            input_digest=input_digest,\n            entries=(),\n        )\n    )\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_fixed_candidate_and_domain_pin_source_owned_digest_literals"
+      ]
+    },
+    {
+      "id": "PSR16-initial-cancellation-check-is-removed",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    # The first cooperative check precedes all candidate work, including the len-only preflight.\n    stop = _stop_code(cancelled, deadline)\n",
+      "replacement": "    # The first cooperative check precedes all candidate work, including the len-only preflight.\n    stop = None\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_cancellation_before_work_refuses_atomically"
+      ]
+    },
+    {
+      "id": "PSR17-deadline-is-checked-before-cancellation",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    if cancelled is not None:\n        try:\n            value = cancelled()\n",
+      "replacement": "    if deadline is not None:\n        try:\n            value = deadline()\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_cancellation_precedes_deadline_for_every_cancelled_outcome"
+      ]
+    },
+    {
+      "id": "PSR18-final-publication-stop-check-is-removed",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    # Publication is the final stop boundary.  Constructing the accepted envelope below is\n    # deterministic and contains only already-redacted values.\n    stop = _stop_code(cancelled, deadline)\n",
+      "replacement": "    # Publication is the final stop boundary.  Constructing the accepted envelope below is\n    # deterministic and contains only already-redacted values.\n    stop = None\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_cancellation_at_final_publication_discards_the_complete_ranking"
+      ]
+    },
+    {
+      "id": "PSR19-vertex-overflow-maps-to-invalid-candidate",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    if vertex_count > _MAX_TOTAL_VERTICES:\n        return _refused(SurrogateRankingCode.VERTEX_BUDGET_EXCEEDED)\n",
+      "replacement": "    if vertex_count > _MAX_TOTAL_VERTICES:\n        return _refused(SurrogateRankingCode.INVALID_CANDIDATE)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_every_refusal_family_has_an_exact_typed_code"
+      ]
+    },
+    {
+      "id": "PSR20-accepted-result-loses-advisory-only-flag",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "        return SurrogateRankingAccepted(\n            status=\"accepted\",\n            advisory_only=True,\n            domain=domain,\n",
+      "replacement": "        return SurrogateRankingAccepted(\n            status=\"accepted\",\n            advisory_only=False,\n            domain=domain,\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_every_domain_is_advisory_and_signoff_without_evidence_is_non_claim"
+      ]
+    },
+    {
+      "id": "PSR21-comparison-gate-is-removed",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "        elif candidate_comparison_digest != comparison_digest:\n            return _refused(SurrogateRankingCode.INCOMPARABLE_CANDIDATES)\n",
+      "replacement": "        elif False:\n            return _refused(SurrogateRankingCode.INCOMPARABLE_CANDIDATES)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_candidates_with_one_route_problem_context_drift_are_incomparable",
+        "tests/test_routing_surrogate_ranking.py::test_candidates_with_different_settings_context_are_incomparable"
+      ]
+    },
+    {
+      "id": "PSR22-comparison-settings-context-is-incomplete",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "    \"max_net_objects\",\n",
+      "replacement": "",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_candidates_with_different_settings_context_are_incomparable"
+      ]
+    },
+    {
+      "id": "PSR23-input-identity-drops-comparison-digest",
+      "file": "src/copper_mcp/routing/surrogate_ranking.py",
+      "anchor": "        \"comparison_digest\": comparison_digest,\n        \"candidate_bindings\": [\n",
+      "replacement": "        \"candidate_bindings\": [\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_routing_surrogate_ranking.py::test_fixed_candidate_and_domain_pin_source_owned_digest_literals"
+      ]
+    }
+  ]
+}
