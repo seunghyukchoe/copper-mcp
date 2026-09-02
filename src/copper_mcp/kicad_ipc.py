@@ -33,14 +33,60 @@ from copper_mcp.adapters.sexpr import SExpr, SExprError, parse_sexpr
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 
-IPC_SCHEMA_VERSION = "0.1.0"
+IPC_SCHEMA_VERSION = "0.2.0"
 _DEFAULT_TIMEOUT_MS = 2_000
 _MAX_TIMEOUT_MS = 10_000
 _MAX_SOCKET_CHARS = 4_096
 _MAX_TOKEN_CHARS = 4_096
 _MAX_IPC_ITEMS = 1_000_000
+
+#: The only verdict that means the binding *proved* anything: the editor and the installed
+#: ``kicad-python`` report the same ``major.minor.patch``, and the binding's own check agreed.
+#: It is exact-match and not "same minor" because KiCad documents no patch-level API freeze --
+#: its own developer rules tell contributors to annotate added fields ``// Since: 9.0.1``, and
+#: KiCad 10.0.1's release notes add IPC commands.  A patch series is not a stable surface.
+API_COMPATIBILITY_VERIFIED = "compatible"
+#: Editor newer than the binding, same major.  Accepted because KiCad's IPC guarantee is a
+#: *wire* guarantee -- new versions "may introduce new messages and fields, but will not modify
+#: the meaning of existing messages and fields" -- so the binding still reads what it knows and
+#: the residual risk is missing *new* data, never misreading old data.  Unverified because
+#: nothing tells the binding what it is missing.  This is the verdict B-138 observed.
+API_COMPATIBILITY_FUTURE = "future_api_unverified"
+#: Editor *older* than the binding, same major.  No KiCad guarantee covers this direction: the
+#: binding may issue a command or read a field that did not exist yet, and ``kicad-python``'s own
+#: README pins features to patch-level minimums (``9.0.4``, ``9.0.5``, ``10.0.1``) which proves
+#: the client surface outruns older editors.  It is accepted rather than refused because the
+#: failure mode is a *loud* call-time ``ApiError``, not a silent misparse -- but it is emphatically
+#: not ``compatible``, and until ADR-0129 this case was published as exactly that.
+API_COMPATIBILITY_LEGACY = "legacy_api_unverified"
+#: Every verdict a live observation may publish.  Membership here is *not* permission to treat
+#: two members alike -- see ``VERIFIED_API_COMPATIBILITY``.
+ACCEPTED_API_COMPATIBILITY = frozenset(
+    {
+        API_COMPATIBILITY_VERIFIED,
+        API_COMPATIBILITY_FUTURE,
+        API_COMPATIBILITY_LEGACY,
+    }
+)
+#: The subset carrying a proof rather than a policy.  Mutating surfaces gate on this set, and it
+#: is deliberately a *set* rather than an equality test so that widening it is a visible edit.
+VERIFIED_API_COMPATIBILITY = frozenset({API_COMPATIBILITY_VERIFIED})
+
+#: What ``board_digest`` is a digest *of*.  KiCad's IPC API exposes no dirty flag and no on-disk
+#: path for the open document -- ``kipy`` 0.7.1's ``Board`` offers ``save``, ``save_as`` and
+#: ``get_project`` and nothing that reports modified state -- so this surface states what it
+#: bound and must never state whether the editor has unsaved changes.  ADR-0074 already refused
+#: to bind a live read to the on-disk file; B-138 measured the gap (165,571 live bytes against
+#: 166,070 on disk) and this field is what stops a reader inferring the file from the digest.
+DOCUMENT_BINDING_IN_MEMORY = "in_memory_unsaved_state_unobservable"
+
 _COUNT_NAMES = (
-    "nets",
+    # Renamed from ``nets`` at IPC schema 0.2.0.  It counts top-level ``(net ...)`` declarations,
+    # which a KiCad 10 document does not carry at all -- B-138 measured this key reporting 0
+    # against an editor holding 15 nets.  The count is correct and its old name was not, so the
+    # name now states the quantity.  No net *cardinality* is published in its place: deriving one
+    # from item references would be an unverified parity claim against ``Board.get_nets()``.
+    "net_declarations",
     "footprints",
     "pads",
     "tracks",
@@ -192,6 +238,89 @@ def _version_string(version: _VersionLike) -> str:
             raise KicadIpcVersionError("KiCad returned an invalid version")
         components.append(value)
     return ".".join(str(value) for value in components)
+
+
+def _version_triple(subject: str, value: str) -> tuple[int, int, int]:
+    """Parse one ``major.minor.patch`` string into a comparable triple, or refuse by name.
+
+    On the live path this only ever sees output from :func:`_version_string`, which has already
+    validated three integers in range.  It is written to refuse anyway because
+    :func:`classify_api_compatibility` is callable on its own: a malformed argument must produce
+    a typed refusal naming its subject, not a bare ``ValueError`` from ``int()``.  ADR-0121 --
+    a refusal is an answer and a crash is not.
+    """
+
+    parts = value.split(".")
+    if len(parts) != 3 or not all(part.isdigit() and len(part) <= 3 for part in parts):
+        raise KicadIpcVersionError(f"{subject} version is not a major.minor.patch triple")
+    major, minor, patch = (int(part) for part in parts)
+    return major, minor, patch
+
+
+def classify_api_compatibility(kicad_version: str, api_version: str) -> str:
+    """Classify one editor/binding version pair against ADR-0129's declared window.
+
+    Returns a member of :data:`ACCEPTED_API_COMPATIBILITY`, or raises
+    :class:`KicadIpcVersionError` naming both versions when the pair is outside the window.
+
+    The window is the major version, and that boundary is KiCad's own rather than this
+    project's invention.  Within a major, KiCad's IPC contract promises that new releases
+    "will not modify the meaning of existing messages and fields", and that a deprecated
+    field survives "at least one major version" after the deprecation is announced.  A major
+    boundary is therefore the exact point at which both promises lapse and a field the binding
+    still reads may be gone or repurposed -- which is the one situation that could turn a live
+    read into a *wrong* answer instead of a failed one.
+
+    This deliberately does not delegate to ``kicad-python``'s ``check_version()``.  That call
+    answers a different question -- it raises only when ``kicad > api`` on the ``(major, minor,
+    patch)`` tuple and returns ``True`` for *every* older editor, including one a whole major
+    behind.  Consuming its boolean is how this project came to publish ``compatible`` for a
+    pairing it had never checked in the more dangerous direction.
+    """
+
+    kicad = _version_triple("KiCad", kicad_version)
+    api = _version_triple("kicad-python API", api_version)
+    if kicad[0] != api[0]:
+        raise KicadIpcVersionError(
+            f"KiCad {kicad_version} is outside the compatibility window of the installed "
+            f"kicad-python API {api_version}: major versions differ, so KiCad's field-meaning "
+            f"and deprecation guarantees do not span this pair"
+        )
+    if kicad == api:
+        return API_COMPATIBILITY_VERIFIED
+    if kicad > api:
+        return API_COMPATIBILITY_FUTURE
+    return API_COMPATIBILITY_LEGACY
+
+
+def _resolve_api_compatibility(client: _KiCadLike, kicad_version: str, api_version: str) -> str:
+    """Apply the declared window, then require the binding's own check to agree with it.
+
+    ``check_version()`` is still called, for two reasons: a failure that is *not* a future
+    version is a binding fault this surface must not read through, and a ``FutureVersionError``
+    where the version pair says the editor is not newer is an inconsistency between what the
+    editor reported and what the binding concluded.  Publishing an observation across that
+    disagreement would mean trusting two sources that contradict each other.
+    """
+
+    verdict = classify_api_compatibility(kicad_version, api_version)
+    try:
+        version_ok = client.check_version()
+    except Exception as error:
+        if error.__class__.__name__ != "FutureVersionError":
+            raise KicadIpcVersionError("KiCad IPC version validation failed") from error
+        if verdict != API_COMPATIBILITY_FUTURE:
+            raise KicadIpcVersionError(
+                "KiCad IPC version validation is inconsistent with the reported versions"
+            ) from error
+    else:
+        if version_ok is not True:
+            raise KicadIpcVersionError("KiCad IPC version validation was inconclusive")
+        if verdict == API_COMPATIBILITY_FUTURE:
+            raise KicadIpcVersionError(
+                "KiCad IPC version validation is inconsistent with the reported versions"
+            )
+    return verdict
 
 
 def _socket_path() -> tuple[str | None, str]:
@@ -444,7 +573,7 @@ def _count_serialized_items(
         head = expression.head
         name: str | None = None
         if head == "net" and is_top_level_child:
-            name = "nets"
+            name = "net_declarations"
         elif head == "footprint":
             name = "footprints"
         elif head == "pad":
@@ -484,6 +613,9 @@ class LiveBoardObservation:
     board_bytes: int
     object_counts: Mapping[str, int]
     socket_kind: str
+    #: What ``board_digest`` binds.  Always the in-memory document; see
+    #: :data:`DOCUMENT_BINDING_IN_MEMORY` for why no save-state claim accompanies it.
+    document_binding: str = DOCUMENT_BINDING_IN_MEMORY
     # ``None`` is a truthful capability result for an observation made without a plugin token.
     # It is deliberately still serialized so a client can distinguish that state from a field
     # omitted by an older or lossy transport, and will then fail closed for a live proposal.
@@ -497,8 +629,10 @@ class LiveBoardObservation:
             raise KicadIpcError("unsupported live observation schema")
         if self.source != "kicad-ipc-live" or not self.read_only:
             raise KicadIpcError("live observations are read-only")
-        if self.compatibility not in {"compatible", "future_api_unverified"}:
+        if self.compatibility not in ACCEPTED_API_COMPATIBILITY:
             raise KicadIpcError("live observation compatibility is invalid")
+        if self.document_binding != DOCUMENT_BINDING_IN_MEMORY:
+            raise KicadIpcError("live observation document binding is invalid")
         if not self.board_digest.startswith("sha256:") or len(self.board_digest) != 71:
             raise KicadIpcError("live board digest is invalid")
         if self.session_revision is not None and not _is_session_revision(self.session_revision):
@@ -530,6 +664,7 @@ class LiveBoardObservation:
             "board_bytes": self.board_bytes,
             "object_counts": dict(self.object_counts),
             "socket_kind": self.socket_kind,
+            "document_binding": self.document_binding,
             "session_revision": self.session_revision,
             "read_only": self.read_only,
         }
@@ -583,8 +718,19 @@ class LiveEditorContextSnapshot:
     active_layer_index: int
     active_layer_name: str
     selection: tuple[LiveEditorSelection, ...]
+    #: The same verdict ``inspect_live_board`` publishes.  Before ADR-0129 this surface computed
+    #: a version decision and then discarded it, so a caller could not tell a verified editor
+    #: from an accepted-unverified one on this path at all -- there was nothing to tell it with.
+    kicad_version: str = ""
+    api_version: str = ""
+    compatibility: str = API_COMPATIBILITY_VERIFIED
+    document_binding: str = DOCUMENT_BINDING_IN_MEMORY
 
     def __post_init__(self) -> None:
+        if self.compatibility not in ACCEPTED_API_COMPATIBILITY:
+            raise KicadIpcPayloadError("live editor compatibility is invalid")
+        if self.document_binding != DOCUMENT_BINDING_IN_MEMORY:
+            raise KicadIpcPayloadError("live editor document binding is invalid")
         if not self.board_digest.startswith("sha256:") or len(self.board_digest) != 71:
             raise KicadIpcPayloadError("live editor board digest is invalid")
         if not 1 <= self.board_bytes <= 64 * 1024 * 1024:
@@ -644,7 +790,6 @@ def capture_live_editor_context(
     settings: Settings | None = None,
     *,
     client_factory: Callable[..., _KiCadLike] | None = None,
-    allow_future_api: bool = False,
     timeout_ms: int = _DEFAULT_TIMEOUT_MS,
     max_selection: int = _MAX_EDITOR_SELECTION,
 ) -> LiveEditorContextSnapshot:
@@ -684,7 +829,6 @@ def capture_live_editor_context(
         return _capture_live_editor_context_from_client(
             client,
             active_settings,
-            allow_future_api=allow_future_api,
             max_selection=max_selection,
         )
     finally:
@@ -695,26 +839,14 @@ def _capture_live_editor_context_from_client(
     client: _KiCadLike,
     settings: Settings,
     *,
-    allow_future_api: bool,
     max_selection: int,
 ) -> LiveEditorContextSnapshot:
     """Read and validate one editor context while the caller owns client closure."""
 
     try:
-        _version_string(client.get_version())
-        _version_string(client.get_api_version())
-        try:
-            version_ok = client.check_version()
-        except Exception as error:
-            if error.__class__.__name__ != "FutureVersionError":
-                raise KicadIpcVersionError("KiCad IPC version validation failed") from error
-            if not allow_future_api:
-                raise KicadIpcVersionError(
-                    "connected KiCad is newer than the installed kicad-python API"
-                ) from error
-        else:
-            if version_ok is not True:
-                raise KicadIpcVersionError("KiCad IPC version validation was inconclusive")
+        kicad_version = _version_string(client.get_version())
+        api_version = _version_string(client.get_api_version())
+        compatibility = _resolve_api_compatibility(client, kicad_version, api_version)
         board = cast(_EditorContextBoardLike, client.get_board())
         source = board.get_as_string()
         if not isinstance(source, str):
@@ -764,6 +896,9 @@ def _capture_live_editor_context_from_client(
         active_layer_index=active_index,
         active_layer_name=active_name,
         selection=selection,
+        kicad_version=kicad_version,
+        api_version=api_version,
+        compatibility=compatibility,
     )
 
 
@@ -771,16 +906,17 @@ def capture_live_board(
     settings: Settings | None = None,
     *,
     client_factory: Callable[..., _KiCadLike] | None = None,
-    allow_future_api: bool = False,
     timeout_ms: int = _DEFAULT_TIMEOUT_MS,
     deadline: float | None = None,
 ) -> LiveBoardSnapshot:
     """Capture one bounded live board for an internal semantic conversion.
 
     The optional ``client_factory`` is a test seam; production calls lazily load
-    ``kicad-python``.  ``allow_future_api`` is intentionally not an MCP argument:
-    operators may use it in a controlled development probe, but the public tool
-    refuses a newer KiCad than the binding by default.
+    ``kicad-python``.  There is no compatibility override argument: ADR-0129 makes the
+    declared window the whole policy, so a caller cannot widen it and -- more to the point --
+    cannot *forget* to widen it.  The escape hatch this replaces was the direct cause of
+    ``inspect_live_editor_context`` refusing a real editor that ``inspect_live_board`` could
+    observe, because only one of the two remembered to pass the flag.
     """
 
     active_settings = settings or Settings.from_env()
@@ -818,7 +954,6 @@ def capture_live_board(
             client,
             active_settings,
             socket_kind=socket_kind,
-            allow_future_api=allow_future_api,
             deadline=deadline,
         )
     finally:
@@ -830,7 +965,6 @@ def _capture_live_board_from_client(
     settings: Settings,
     *,
     socket_kind: str,
-    allow_future_api: bool,
     deadline: float | None,
 ) -> LiveBoardSnapshot:
     """Read one board while the public capture function owns client closure."""
@@ -848,20 +982,7 @@ def _capture_live_board_from_client(
         check_deadline()
         api_version = _version_string(client.get_api_version())
         check_deadline()
-        compatibility = "compatible"
-        try:
-            version_ok = client.check_version()
-        except Exception as error:
-            if error.__class__.__name__ != "FutureVersionError":
-                raise KicadIpcVersionError("KiCad IPC version validation failed") from error
-            if not allow_future_api:
-                raise KicadIpcVersionError(
-                    "connected KiCad is newer than the installed kicad-python API"
-                ) from error
-            compatibility = "future_api_unverified"
-        else:
-            if version_ok is not True:
-                raise KicadIpcVersionError("KiCad IPC version validation was inconclusive")
+        compatibility = _resolve_api_compatibility(client, kicad_version, api_version)
         check_deadline()
         board = client.get_board()
         check_deadline()
@@ -939,7 +1060,6 @@ def inspect_live_board(
     settings: Settings | None = None,
     *,
     client_factory: Callable[..., _KiCadLike] | None = None,
-    allow_future_api: bool = False,
     timeout_ms: int = _DEFAULT_TIMEOUT_MS,
 ) -> LiveBoardObservation:
     """Observe the first open PCB through a local KiCad IPC session.
@@ -952,6 +1072,5 @@ def inspect_live_board(
     return capture_live_board(
         settings,
         client_factory=client_factory,
-        allow_future_api=allow_future_api,
         timeout_ms=timeout_ms,
     ).observation
