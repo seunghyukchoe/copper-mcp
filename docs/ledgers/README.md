@@ -23,9 +23,9 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-239` | `D-240` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-241` | `D-242` |
 | [Risk register](risk-register.md) | `R-` | `R-188` | `R-189` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-173` | `SEC-174` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-174` | `SEC-175` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-141` | `B-142` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
@@ -41,14 +41,14 @@ The same wave reserved `B-125`–`B-127` for sibling lanes and `B-128` for M3 E4
 consumed here; the sibling reservations remain unavailable until their lanes land or explicitly
 release them.
 
-The 2026-09-02 checker-population lane (#244) stepped over `D-237`/`D-238` and `R-187` rather
-than racing them: `D-237`/`R-187` are held by the concurrent #242 branch, and `D-238` by the CI
-suite-speed lane, which #251 records as holding `D-238`/`B-143`. This record therefore takes
-`D-239`/`R-188` under rule 1, re-verified against `main` at 8663418 — whose highest rows are
-`D-236` and `R-186` — and against every open branch: nothing else claims `D-239` or `R-188`, and
-the two live claims above it, `D-240`/`R-189` (#251) and `D-241` (#252), are untouched. If a
-sibling is abandoned its numbers remain spent under rule 2, so the checker's gap notes for
-`D-237`, `D-238` and `R-187` are expected until those branches land.
+The 2026-09-02 checker-population lane (#244) takes `D-239`/`R-188` under rule 1, re-derived
+against `main`'s **rows** at `f8b4daa` rather than against the registry line. `main` carries
+`D-237` and `D-241` — allocated by #254 and #252 — with `D-238`–`D-240` unallocated, and `R-187`
+as its highest risk row. `D-239` sits in that verified gap and `R-188` is the next free risk
+number; no open branch claims either. The live claims around them are left untouched:
+`D-238`/`B-143` by the CI suite-speed lane, which both #251 and #242 record as holding them, and
+`D-240`/`R-189` by #251. If a sibling lane is abandoned its numbers remain spent under rule 2, so
+the checker's gap notes for `D-238` and `D-240` are expected until those branches land.
 
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`
