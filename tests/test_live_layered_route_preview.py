@@ -30,10 +30,19 @@ def _fake_kicad_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(kicad_ipc, "_SESSION_REVISION_SALT", b"\x42" * 32)
 
 
+class FutureVersionError(Exception):
+    """Stands in for ``kipy.errors.FutureVersionError``.
+
+    The name is load-bearing: the adapter matches this exception by class *name* because
+    ``kicad-python`` is an optional dependency that cannot be imported for an isinstance check.
+    """
+
+
 class _FakeVersion:
-    major = 10
-    minor = 0
-    patch = 5
+    def __init__(self, major: int = 10, minor: int = 0, patch: int = 5) -> None:
+        self.major = major
+        self.minor = minor
+        self.patch = patch
 
 
 class _FakeLiveBoard:
@@ -52,17 +61,28 @@ class _FakeKipyClient:
 
 
 class _FakeLiveKiCad:
-    def __init__(self, source: str, instance_token: str = EDITOR_INSTANCE_TOKEN) -> None:
+    def __init__(
+        self,
+        source: str,
+        instance_token: str = EDITOR_INSTANCE_TOKEN,
+        kicad: tuple[int, int, int] = (10, 0, 5),
+        api: tuple[int, int, int] = (10, 0, 5),
+    ) -> None:
         self._board = _FakeLiveBoard(source)
         self._client = _FakeKipyClient(instance_token)
+        self._kicad = kicad
+        self._api = api
 
     def get_version(self) -> _FakeVersion:
-        return _FakeVersion()
+        return _FakeVersion(*self._kicad)
 
     def get_api_version(self) -> _FakeVersion:
-        return _FakeVersion()
+        return _FakeVersion(*self._api)
 
     def check_version(self) -> bool:
+        # Reproduces kipy 0.7.1's asymmetry: raises only for a strictly newer editor.
+        if self._kicad > self._api:
+            raise FutureVersionError()
         return True
 
     def get_board(self) -> _FakeLiveBoard:
@@ -237,9 +257,58 @@ def test_live_session_revision_pbkdf2_work_is_fixed_and_bounded() -> None:
     assert elapsed_seconds < 5.0
 
 
-def _factory(source: bytes, instance_token: str = EDITOR_INSTANCE_TOKEN):
+def _factory(
+    source: bytes,
+    instance_token: str = EDITOR_INSTANCE_TOKEN,
+    kicad: tuple[int, int, int] = (10, 0, 5),
+    api: tuple[int, int, int] = (10, 0, 5),
+):
     text = source.decode("utf-8")
-    return lambda **_: _FakeLiveKiCad(text, instance_token)
+    return lambda **_: _FakeLiveKiCad(text, instance_token, kicad, api)
+
+
+@pytest.mark.parametrize(
+    ("kicad", "api"),
+    [((10, 0, 5), (10, 0, 1)), ((10, 0, 0), (10, 0, 1)), ((10, 0, 1), (10, 0, 1))],
+)
+def test_live_preview_runs_across_the_whole_declared_window(
+    tmp_path: Path, kicad: tuple[int, int, int], api: tuple[int, int, int]
+) -> None:
+    """ADR-0129: a read surface accepts every pair inside the window, drifted or not.
+
+    Before ADR-0129 the first of these pairs -- the one B-138 measured against a real editor --
+    reached a `KicadIpcVersionError` here, so the preview could not run against the KiCad the
+    operator actually had installed.
+    """
+
+    settings, start, end, board_revision, snapshot_digest = _workspace(tmp_path)
+    result = live_preview.preview_live_layered_route(
+        _request(start, end, board_revision, snapshot_digest),
+        settings,
+        client_factory=_factory(FIXTURE.read_bytes(), kicad=kicad, api=api),
+    )
+    # The version binding is not what decides the route; it decides whether we get to try.
+    assert result["status"] in {"routed", "not_routed"}
+    assert result["diagnostic"] is None or result["diagnostic"]["code"] != "unsupported_version"
+
+
+def test_live_preview_refuses_a_major_boundary_before_it_converts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings, start, end, board_revision, snapshot_digest = _workspace(tmp_path)
+
+    def unexpected_conversion(*_: object, **__: object) -> object:
+        raise AssertionError("a refused version must not reach Board IR conversion")
+
+    monkeypatch.setattr(live_preview, "parse_kicad_bytes", unexpected_conversion)
+    with pytest.raises(kicad_ipc.KicadIpcVersionError) as error:
+        live_preview.preview_live_layered_route(
+            _request(start, end, board_revision, snapshot_digest),
+            settings,
+            client_factory=_factory(FIXTURE.read_bytes(), kicad=(9, 0, 0), api=(10, 0, 1)),
+        )
+    assert "9.0.0" in str(error.value)
+    assert "10.0.1" in str(error.value)
 
 
 def test_public_live_observation_scene_and_preview_outputs_compose(
