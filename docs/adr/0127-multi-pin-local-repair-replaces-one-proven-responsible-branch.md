@@ -310,7 +310,7 @@ This is the structural successor the amendment above asks for, and it supersedes
 *binding* while leaving its record intact. The two relate as follows, and neither edits the other:
 the first amendment (and `D-241`) rebound B-141 to squash commit
 `86634180e5a3f0956cf2ede4168710f1fce8fbcb` as a one-time unblock, correctly, under a contract that
-required a recorded revision to resolve. This amendment (`D-242`) removes that requirement, so the
+required a recorded revision to resolve. This amendment (`D-245`) removes that requirement, so the
 field the first amendment repaired is no longer load-bearing: `source_commit` is informational at
 every guarantee level and no validation path resolves it. The rebinding was not wasted — it kept
 `main` green while this change was built — but it was a repair of one instance of a class, and the
@@ -427,7 +427,7 @@ Focused evidence validation is **200/200 tests**, and the committed mutation spe
 with zero survivors, zero stale anchors, zero control failures, zero invalid runs and zero
 `not_run` — distinct from #238's **35/35** capability mutants, which are not added to this count.
 The set moved from 78 to 79: seven anchors went stale against the edited source, five mutants whose
-code this amendment deletes were retired rather than silently dropped (they are named in `D-242`),
+code this amendment deletes were retired rather than silently dropped (they are named in `D-245`),
 two were re-anchored onto successor code whose names remain exactly true, and six new mutants pin
 the new guards. One survived the first run, and it was a real coverage gap rather than a mapping
 typo: nothing exercised the whole-configuration comparison, so `seed`, the router version, the

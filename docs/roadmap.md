@@ -778,7 +778,7 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   disabled control (`repair_settings: null`) forbids `completed_with_repair`, `repair_published`,
   and every non-zero repair-work field; and all six status categories (`completed`, `no_path`,
   `partial`, `invalid_request`, `cancelled`, `not_run`) reconcile to the outcome taxonomy.
-  The closed report and companion commitment bind **content, not revision** (D-242): the verified
+  The closed report and companion commitment bind **content, not revision** (D-245): the verified
   provenance set is runner
   `sha256:33bd81c80bd6c2ad8f970c5477fd236b4c05759c99b50145a66152451672f3bb` plus the B-140 runner
   and artifact and the B-088 runner, adapter and artifact, each re-digested against the file this

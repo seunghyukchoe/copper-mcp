@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-242` | `D-243` |
-| [Risk register](risk-register.md) | `R-` | `R-188` | `R-189` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-175` | `SEC-176` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-141` | `B-142` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-245` | `D-246` |
+| [Risk register](risk-register.md) | `R-` | `R-191` | `R-192` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-176` | `SEC-177` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-142` | `B-143` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -40,6 +40,33 @@ its identifiers remain spent under rule 2.
 The same wave reserved `B-125`–`B-127` for sibling lanes and `B-128` for M3 E4. B-128 is now
 consumed here; the sibling reservations remain unavailable until their lanes land or explicitly
 release them.
+
+`B-142` was allocated while `B-141` was still held by open pull request
+[#239](https://github.com/seunghyukchoe/copper-mcp/pull/239), stepping over it under rule 1 rather
+than racing it. #239 has since landed, so `B-141` and `B-142` now sit adjacent with no gap. The
+same wave's `D-`/`R-` numbers collided twice. First, #239 and the live-version-binding lane both
+allocated `D-236`/`R-186` from the same stale registry, and the second to merge renumbered to
+`D-237`/`R-187` under rule 1. Then
+[#254](https://github.com/seunghyukchoe/copper-mcp/pull/254) landed that same `D-237`/`R-187` pair
+first, so this lane renumbered again — to `D-242`/`R-188`, the registry's next free numbers at
+main's tip, rather than reusing any number below `D-242` under rule 2 or adding a seventh and
+eighth double-named identifier to the list above.
+
+The 2026-09-02 blob-bound-provenance lane (PR
+[#259](https://github.com/seunghyukchoe/copper-mcp/pull/259)) takes
+`D-245`/`R-191`/`SEC-176` under rule 1, re-derived against `main`'s **rows** at `13e2819` rather
+than against the registry line. It originally held `D-242`/`R-188`/`SEC-175`, and the first two
+**had to move**: #242's own re-arbitration landed `D-242`/`R-188` on `main` first, so keeping them
+would have put two unrelated entries on one number. Rather than take the lowest free number in
+each space and race three sibling lanes open on this same base, it steps over all of them —
+[#251](https://github.com/seunghyukchoe/copper-mcp/pull/251) holds `D-243`/`R-189`/`SEC-175`/
+`B-144`/`ADR-0130`, the CI suite-speed lane holds `D-244`/`B-143`, and the checker-population lane
+holds `D-239`/`R-190`. `SEC-175` moved for that reason alone: nothing has landed on it, but #251
+holds it, and a security number two branches both carry is the collision rule 1 exists to avoid.
+This record needed no `B-` number under rule 4 — it re-binds and republishes `B-141`'s existing
+artifact under a new provenance contract and re-measures nothing, so `B-141`'s own amendment row
+carries the outcome. The checker's gap notes for `D-243`, `D-244`, `R-189`, `R-190` and `SEC-175`
+are expected until those lanes land.
 
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`
