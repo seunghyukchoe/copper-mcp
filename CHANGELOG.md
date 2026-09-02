@@ -6,6 +6,27 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/check_doc_links.py` no longer passes over Markdown it never opened. Its population was
+  `git ls-files "*.md"`, so a document written but not yet staged was not checked at all: the
+  checker reported **261** files, and the same **261**, with and without an untracked note carrying
+  an unresolvable link planted beside them. That is an absence that was never capable of reporting
+  a presence, and it went green during v0.12.0's preparation minutes before the full suite failed
+  on two unresolved ADR links in a freshly written migration note. The population is now the
+  working tree: tracked Markdown plus `git ls-files --others --exclude-standard` under a `*.md`
+  pathspec, the same scoping `scripts/check_secrets.py` already uses, so `.gitignore` and
+  `.git/info/exclude` still decide what counts as repository content and a scratch file of another
+  kind is never read. The widening is announced rather than silent — every untracked file that was
+  read is named on stdout — and the printed count now reconciles with what is on disk: it counts
+  files actually read, names any tracked path that is absent from the working tree, and treats a
+  Markdown file that cannot be decoded as a failure rather than a skip. Every other repository-wide
+  checker was audited for the same shape and none was found: `check_adr_numbers`, `check_ledgers`,
+  `check_schema_sets`, `check_drc_comparability`, `check_ci_budgets` and the mutation-anchor sweep
+  all walk the filesystem already, `check_secrets` already includes untracked files, and
+  `check_audio_benchmarks`, `check_circuit_intents` and `check_version` are manifest- or
+  artifact-driven rather than population walks. (D-239, R-188, issue #244)
+
 ## [0.12.0] - 2026-09-01
 
 Upgrading from 0.11.0: see the
