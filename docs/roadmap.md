@@ -803,15 +803,26 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   nonblocking, so FIFO and other special files refuse before decode/JSON. This is a deterministic
   completion differential, not held-out routing quality, KiCad DRC, electrical, SI/PI/EMC,
   thermal, DFM, fabrication, apply, editor, hardware or generalisation evidence. #90 remains open
-  for human review/calibration and the next agent-only direction is #91's private surrogate ranking
-  with authoritative signoff.
-- [ ] **SI/PI/thermal/DFM surrogate hooks with authoritative signoff, parked behind #99**
+  for human review/calibration. #91's completed private ranking slice and its remaining
+  authoritative-adapter and reviewed-exposure gates are recorded below.
+- [x] **Private bounded surrogate ranking slice; authoritative signoff remains domain-gated**
   ([#91](https://github.com/seunghyukchoe/copper-mcp/issues/91)). The half of this that carries the
   safety property is the signoff, not the surrogate — any claim surfaced to a caller comes from an
   authoritative tool run or is declared a non-claim — and that is the same evidence-binding contract
   #99 has to define first. Design the hook contract against #99's vocabulary rather than inventing a
   second one.
-  Current slice disposition (2026-08-23): the coordinator-owned bounded executor ADR-0118 named
+  Current slice disposition (2026-09-02): ADR-0128 adds a direct-import-only deterministic
+  candidate-ranking seam. It accepts immutable candidates only when base revision, net, ordered
+  endpoints, layer/width/pad count, ordering policy, fill binding, router version, policy and all
+  nine A* settings match; seed, geometry, cost and metrics may differ for ranking. A separate
+  `comparison_digest` is emitted because legacy candidate IDs omit some settings, and mismatches
+  refuse as `incomparable_candidates`. It uses fixed integer scoring and bounded redacted advisory
+  output. It is not exposed through MCP, CLI, apply, persistence, or
+  a backend and cannot produce `SIGNED_OFF`; DFM remains the repeated KiCad DRC authority, while
+  SI, PI and thermal remain unregistered. The slice proves neither routing quality nor physics,
+  fabrication, or hardware validity. Issue #91 remains open for authoritative adapters, reviewed
+  exposure, and human or external validation.
+  Prior disposition (2026-08-23): the coordinator-owned bounded executor ADR-0118 named
   now exists, and `SIGNED_OFF` is reachable — **for `dfm` only**. The reason it is only `dfm` is
   the reason the deferral could be lifted at all: this repository has exactly one authority that
   answers a physics-or-fabrication question about a candidate, and ADR-0004 made it KiCad's DRC.
