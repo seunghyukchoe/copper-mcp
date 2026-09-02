@@ -768,7 +768,8 @@
       "expectation": "killed",
       "killing_tests": [
         "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_is_never_reported_as_a_date_disagreement",
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_a_squash_orphaned_source_commit_stays_fail_closed_even_though_the_runner_survives"
       ]
     },
     {
@@ -798,7 +799,8 @@
       "replacement": "    if False:\n        return GUARANTEE_OFFLINE\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request"
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_an_absent_commit_refuses_by_default_and_downgrades_only_on_request",
+        "tests/test_benchmark_negotiated_multipin_branch_repair.py::test_a_squash_orphaned_source_commit_stays_fail_closed_even_though_the_runner_survives"
       ]
     }
   ]
