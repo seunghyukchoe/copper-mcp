@@ -6,6 +6,50 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Added the private, direct-import-only surrogate-ranking slice for issue #91. It accepts only
+  immutable, revision-bound route candidates, applies fixed integer scoring under 32-candidate and
+  16,384-vertex ceilings, and returns redacted deterministic advisory rankings. Candidates must
+  share the full comparison context and are refused as `incomparable_candidates` otherwise; the
+  accepted output includes a separate `comparison_digest` because legacy candidate IDs omit some
+  settings. The final focused suite is 62 passed and the official mutation result is 23/23 killed.
+  It has no MCP, CLI,
+  apply, persistence, backend, or sign-off surface; DFM authority remains the coordinator-owned
+  repeated KiCad DRC path, while SI, PI, and thermal remain unregistered. See ADR-0128, D-237,
+  R-187, and SEC-174. Issue #91 remains open.
+
+### Fixed
+
+- B-141's committed artifact is rebound to the squash-merge commit
+  `86634180e5a3f0956cf2ede4168710f1fce8fbcb` that the default branch carries, replacing the
+  branch commit `b7c71d4d643df155c7bdcee5bac25e7d943b7031` that squash-merging discarded. In
+  any fresh clone of main the artifact refused to load, naming its recorded source commit as
+  absent -- the correct verdict about an incorrect recorded value, and the v0.5.0 orphaned-SHA
+  class recurring. Binding the tree instead was considered and refuted by measurement: the
+  branch and squash trees differ because main advanced between publication and merge, so a
+  squash preserves file content but not the tree. Accepting content-only provenance as
+  `repository_bound` was rejected as certifying a claim no clone can check; `load_artifact`
+  stays fail-closed. A clean replay reproduced the pinned whole-metrics digest
+  `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly, while
+  freshly observing descriptive mean timings of **39.224s** control and **40.042s** treatment;
+  the semantic result is unchanged, but this is a new measurement record rather than a
+  byte-only re-signing. The runner file is byte-identical to the one the squash commit carries.
+  Hosted CI injects the exact pull-request base into a new ancestry test, so a pull request that
+  binds a feature-branch-only commit is refused before squash-merging without requiring every
+  local checkout to have a remote named `origin` or to trust a possibly stale local branch.
+  Unconfigured source snapshots skip this repository-only assertion. `main`
+  sets `required_linear_history=true`, so no merge strategy this repository allows preserves
+  a branch commit's SHA -- an artifact cannot bind its own revision and survive its own
+  merge, and this fix binds a commit already on the default branch rather than any of its
+  own. The structural successor, binding the runner blob that every strategy preserves, is a
+  separate change: implementing it edits the runner and moves `runner_sha256`, which is what
+  would stop the squash commit from carrying the bound bytes. The exact prior report and
+  commitment bytes remain under `benchmarks/results/routing/archive/`; they validate their own
+  digests offline but are deliberately not accepted as the current canonical pair. The corrected
+  record passes **190/190** focused tests and **78/78** evidence-contract mutants (`D-241`,
+  `B-141`, `ADR-0127`).
+
 ## [0.12.0] - 2026-09-01
 
 Upgrading from 0.11.0: see the
