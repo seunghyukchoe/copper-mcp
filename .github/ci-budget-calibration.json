@@ -1,8 +1,8 @@
 {
   "schema": "ci-budget-calibration/1",
   "repository": "seunghyukchoe/copper-mcp",
-  "recorded": "2026-09-01",
-  "why": "The v0.7.0 release run was cancelled by its own 20-minute budget and the release shipped without provenance (D-196). Re-measured for the v0.12.0 cut because the suite materially grew again: the outline-arc (#228), footprint-copper-graphic (#230), live-probe (#234), benchmark-replay (#235), root-zone-census (#236) and multi-pin routing (#237, #238) arc took it from 3,583 tests at the v0.11.0 boundary to 3,799 collected. No budget is raised by this re-record. Every ceiling still clears the half rule -- but the ci.yml:test margin has narrowed sharply and this is the first boundary at which that is the headline rather than a footnote: the worst leg moved from 2,332s to 3,302s (+41.6%), which is 91.7% of the way to the 3,600s half-rule limit on the 120-minute ceiling. A further ~9% growth in the worst leg breaches the rule. The two lanes open at this cut (feat/live-version-binding and the multi-pin repair hardening on PR #239) are not in this release and will land under a fresh Unreleased; whichever release wave takes them must re-measure this job first and expect to confront the ceiling rather than re-record past it.",
+  "recorded": "2026-09-02",
+  "why": "The v0.7.0 release run was cancelled by its own 20-minute budget and the release shipped without provenance (D-196). Re-measured here because `ci.yml:test` **changed shape** rather than because the suite grew: its `Unit tests` step went from one process to four xdist workers with `--dist loadfile` (D-242, B-143). The serial observations recorded at the v0.12.0 boundary no longer describe the job that exists, so they are replaced rather than kept -- `update` below says which rule that is, and `docs/development.md` records why 'every recorded observation binds' is a rule about runs and not about a job that has been reshaped. The retired figures are kept in prose because the comparison is the point. The previous `why` made a narrow margin the headline: the worst serial leg was 3302s, 91.7% of the 3600s half-rule limit on the 120-minute ceiling, leaving 9.93 minutes of margin and a warning that the next wave must confront the ceiling rather than re-record past it. That framing is now this: the parallel job's worst leg is 2745s, which needs 91.50 minutes and leaves 28.50 minutes of margin against the same unchanged ceiling -- growth headroom of 31.1% where it was 9.0%. **The alarm is quieted, not removed, and the ceiling is deliberately not lowered to match the faster job**: a budget that follows every speed-up down loses the only thing it is for, which is reporting the next growth. The headroom is also far smaller than the change promised -- a twelve-core local measurement predicted the step at 0.2833 of serial and the four-vCPU runner measured 0.814 (B-143) -- so the next wave will meet this ceiling sooner than a local benchmark would suggest. No budget is raised or lowered by this re-record. Every ceiling still clears the half rule.",
   "source": "GitHub Actions REST API, read-only: GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs and GET /repos/{owner}/{repo}/actions/jobs/{job_id}. `seconds` is completed_at - started_at for the hosted job, including runner setup, checkout and post-steps -- the same wall clock bounded by job-level `timeout-minutes`.",
   "half_rule": "A budget must be at least twice the longest recorded duration of the job it bounds. Equivalently, when a measured gate exceeds half of an explicit timeout budget, raise or re-measure that budget before release.",
   "update": "Re-record before raising or lowering any budget and before every release wave that materially grows the suite. Use only completed jobs whose GitHub conclusion is exactly `success`; failed and cancelled runs stop early and therefore do not measure the work. Replace the affected job's observations with the newest representative successful sample, then run `python scripts/check_ci_budgets.py`.",
@@ -12,61 +12,34 @@
     {
       "workflow": ".github/workflows/ci.yml",
       "job": "test",
-      "note": "The two newest successful ci.yml runs at the v0.12.0 release boundary, both post-merge `main` pushes: the multi-pin branch-repair tip (63de4c3, #238) and the multi-pin lattice merge (30ef71f, #237). All three Python matrix legs of each are recorded because they share one job-level budget. The worst leg is Python 3.12 at 3302s (55.03 min), against 2332s (38.87 min) at the v0.11.0 boundary -- a 41.6% increase in one wave, and the largest single-boundary jump this file has recorded. It still clears the half rule (110.07 min needed against a 120-minute ceiling) but with only 9.93 minutes of headroom. This job, not release.yml:verify, is now the longest duration recorded anywhere in this file; that changed at this boundary.",
+      "note": "**Replaced, not appended.** The `Unit tests` step now runs `python -m pytest -n 4 --dist loadfile` (D-242, B-143), so the six serial legs recorded at the v0.12.0 boundary measure a job that no longer exists; keeping the slowest of them would bound a process count this job no longer uses. These are the newest successful run of the parallel job (33639322391), all three Python matrix legs of each because they share one job-level budget. **They are `workflow_dispatch` runs on the `feat/ci-suite-speed` branch, not post-merge `main` pushes** -- the four-worker job does not exist on `main` until that change lands, so no post-merge sample of it can exist yet, and the next release wave should re-record from `main` pushes. The worst leg is 2745s (45.75 min), against 3302s (55.03 min) for the serial job it replaces. This job, not release.yml:verify, is still the longest duration recorded anywhere in this file.",
       "observations": [
         {
-          "run_id": 33271133579,
-          "job_id": 99149689210,
+          "run_id": 33639322391,
+          "job_id": 100278100661,
           "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-29T19:32:40Z",
-          "completed_at": "2026-08-29T20:20:23Z",
+          "started_at": "2026-09-02T14:01:10Z",
+          "completed_at": "2026-09-02T14:38:11Z",
           "conclusion": "success",
-          "seconds": 2863
+          "seconds": 2221
         },
         {
-          "run_id": 33271133579,
-          "job_id": 99149689395,
+          "run_id": 33639322391,
+          "job_id": 100278100766,
           "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-29T19:32:42Z",
-          "completed_at": "2026-08-29T20:27:12Z",
+          "started_at": "2026-09-02T14:01:09Z",
+          "completed_at": "2026-09-02T14:46:54Z",
           "conclusion": "success",
-          "seconds": 3270
+          "seconds": 2745
         },
         {
-          "run_id": 33271133579,
-          "job_id": 99149689477,
+          "run_id": 33639322391,
+          "job_id": 100278100408,
           "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-29T19:32:40Z",
-          "completed_at": "2026-08-29T20:20:06Z",
+          "started_at": "2026-09-02T14:01:09Z",
+          "completed_at": "2026-09-02T14:42:36Z",
           "conclusion": "success",
-          "seconds": 2846
-        },
-        {
-          "run_id": 33256062797,
-          "job_id": 99109861181,
-          "hosted_job_name": "Python 3.11",
-          "started_at": "2026-08-29T13:51:09Z",
-          "completed_at": "2026-08-29T14:42:38Z",
-          "conclusion": "success",
-          "seconds": 3089
-        },
-        {
-          "run_id": 33256062797,
-          "job_id": 99109861144,
-          "hosted_job_name": "Python 3.12",
-          "started_at": "2026-08-29T13:51:07Z",
-          "completed_at": "2026-08-29T14:46:09Z",
-          "conclusion": "success",
-          "seconds": 3302
-        },
-        {
-          "run_id": 33256062797,
-          "job_id": 99109861255,
-          "hosted_job_name": "Python 3.13",
-          "started_at": "2026-08-29T13:51:08Z",
-          "completed_at": "2026-08-29T14:38:17Z",
-          "conclusion": "success",
-          "seconds": 2829
+          "seconds": 2487
         }
       ]
     },

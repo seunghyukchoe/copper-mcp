@@ -479,20 +479,30 @@ def test_every_committed_job_that_runs_the_suite_declares_a_budget() -> None:
 
 
 def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
-    """The release boundary pins the newest successful CI pair and last release run.
+    """The file pins the exact hosted runs it calibrates from, and nothing else.
 
-    Re-pinned at the v0.12.0 boundary. The CI sample is the two newest successful
-    post-merge `main` pushes -- the multi-pin branch-repair tip (#238) and the
-    multi-pin lattice merge (#237) -- all three matrix legs from each because one
-    job-level budget bounds them. The release sample moves to v0.11.0, the latest
-    completed tag-triggered workflow.
+    Re-pinned because `ci.yml:test` **changed shape**, not because the suite grew.
+    Its `Unit tests` step now runs four xdist workers with `--dist loadfile`
+    (D-242, B-143), so the six serial legs pinned at the v0.12.0 boundary measured
+    a job that no longer exists and were replaced rather than kept. The v0.12.0
+    sample was two post-merge `main` pushes; this one is `workflow_dispatch` runs
+    on the branch that makes the change, because the four-worker job does not
+    exist on `main` until it lands and no post-merge sample of it can exist yet.
+    That is a real weakening of the sample, the calibration file's `note` says so,
+    and it carries the instruction to re-record from `main` pushes next wave.
 
-    The longest duration in the file changed hands at this boundary: ci.yml:test
-    grew from 2332s to 3302s (+41.6%) while release.yml:verify shrank slightly to
-    2325s, so the matrix leg -- which runs the real-KiCad nodes the hosted release
-    gate skips -- is now the binding measurement. 3302s is 91.7% of the 3600s half
-    of the 120-minute ceiling; it still clears, and the calibration file's `why`
-    records that the next wave to grow this job must confront the ceiling.
+    The release sample is deliberately untouched at v0.11.0, and that matters
+    beyond tidiness: `docs/mutants/2026-08-14-ci-budget-gate.json` anchors mutant
+    CB11 on the string `"seconds": 2325`, which belongs to release.yml:verify.
+    Replacing only the ci.yml:test observations keeps that anchor matching exactly
+    once, which is the harness's requirement -- an observation that happened to be
+    2325s would make it ambiguous, and the mutant would report a stale anchor
+    instead of a kill.
+
+    ci.yml:test is still the longest duration in the file, at 2745s against
+    release.yml:verify's 2325s. Serially it was 3302s, which was 91.7% of the
+    3600s half of the 120-minute ceiling; the parallel job needs 91.50 minutes and
+    leaves 28.50 minutes of margin against that same unchanged ceiling.
 
     This assertion is why the calibration file cannot drift silently: re-recording
     it is a reviewed edit that must move these numbers too.
@@ -506,12 +516,14 @@ def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
     assert verify["observations"][0]["run_id"] == 33162621059
 
     ci = by_job[(".github/workflows/ci.yml", "test")]
-    assert len(ci["observations"]) == 6
-    assert {observation["run_id"] for observation in ci["observations"]} == {
-        33256062797,
-        33271133579,
-    }
-    assert max(observation["seconds"] for observation in ci["observations"]) == 3302
+    assert len(ci["observations"]) == 3
+    assert {observation["run_id"] for observation in ci["observations"]} == {33639322391}
+    assert max(observation["seconds"] for observation in ci["observations"]) == 2745
+
+    # The retired serial figure is not an observation any more, and no observation
+    # may collide with the release sample the CB11 mutant anchors on.
+    assert 3302 not in {observation["seconds"] for observation in ci["observations"]}
+    assert 2325 not in {observation["seconds"] for observation in ci["observations"]}
 
     # Every committed observation is a completed successful run, which is the only
     # kind the checker will calibrate from.
