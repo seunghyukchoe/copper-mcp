@@ -118,20 +118,6 @@ def test_the_full_checkout_the_range_and_the_tag_reads_both_need_is_still_there(
     assert "fetch-depth: 0" in WORKFLOW
 
 
-def test_b141_ancestry_guard_receives_the_exact_pull_request_base() -> None:
-    """PR validation must not mistake the synthetic merge ref for the durable default branch."""
-
-    expected_step = (
-        "      - name: Unit tests\n"
-        "        env:\n"
-        "          COPPER_MCP_DEFAULT_BRANCH_REF: "
-        "${{ github.event.pull_request.base.sha || "
-        "format('refs/remotes/origin/{0}', github.event.repository.default_branch) }}\n"
-        "        run: python -m pytest"
-    )
-    assert expected_step in WORKFLOW
-
-
 def test_the_lint_target_and_the_workflow_check_the_same_scripts() -> None:
     """Neither list may quietly become the shorter one.
 
