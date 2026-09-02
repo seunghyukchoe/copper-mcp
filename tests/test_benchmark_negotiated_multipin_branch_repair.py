@@ -33,6 +33,14 @@ EXPECTED_ARTIFACT = (
     benchmark.ROOT
     / "benchmarks/results/routing/2026-08-30-negotiated-multipin-branch-repair-v1.json"
 )
+ARCHIVED_ARTIFACT = (
+    benchmark.ROOT / "benchmarks/results/routing/archive/"
+    "2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.json"
+)
+ARCHIVED_COMMITMENT = (
+    benchmark.ROOT / "benchmarks/results/routing/archive/"
+    "2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.commitment.json"
+)
 EXPECTED_POPULATION = {
     "boards_offered": 20,
     "boards_imported": 20,
@@ -3140,3 +3148,74 @@ def test_the_verified_set_is_the_only_source_of_published_file_digests() -> None
     assert published == set(benchmark._bound_input_paths())
     for key, path in benchmark._bound_input_paths().items():
         assert configuration[key] == _file_digest(path)
+
+
+# --- The retired publication stays retired -----------------------------------------------------
+
+
+def test_the_orphaned_publication_stays_archived_and_never_becomes_canonical() -> None:
+    """The retired `b7c71d4d` bytes are preserved unchanged and can never be loaded as canonical.
+
+    #252 archived the publication whose recorded revision a squash discarded, and asserted the
+    frozen bytes still validated offline.  That assertion cannot survive this change, and it is
+    not dropped silently: `not_claimed` gained the `source_commit` demotion entry, a report's
+    claim list is validated exactly, and the archived document therefore no longer matches the
+    current published contract.  That is the correct reading of an append-only archive -- it
+    records what was published, and is not a document the current validator certifies.  What the
+    archive exists for is still pinned here: the bytes, the identities they carry, the fact that
+    the document was internally coherent when it was signed, and the refusal to let the archived
+    path stand in for the canonical artifact.
+    """
+
+    report_bytes = ARCHIVED_ARTIFACT.read_bytes()
+    commitment_bytes = ARCHIVED_COMMITMENT.read_bytes()
+    assert hashlib.sha256(report_bytes).hexdigest() == (
+        "ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c"
+    )
+    assert hashlib.sha256(commitment_bytes).hexdigest() == (
+        "129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9"
+    )
+
+    report = json.loads(report_bytes)
+    commitment = json.loads(commitment_bytes)
+    assert report["source_commit"] == "b7c71d4d643df155c7bdcee5bac25e7d943b7031"
+    assert report["run_id"] == (
+        "sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3"
+    )
+    assert report["timing"]["mean_wall_seconds"] == {
+        "control": 40.574,
+        "treatment": 41.039,
+    }
+    assert commitment["artifact_sha256"] == "sha256:" + hashlib.sha256(report_bytes).hexdigest()
+    assert commitment["artifact_run_id"] == report["run_id"]
+    assert commitment["run_id"] == (
+        "sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397"
+    )
+    assert not _nested_keys(report).intersection(benchmark.FORBIDDEN_PUBLIC_KEYS)
+
+    # It was a coherent publication: its own self-digest still holds over its own body.
+    assert report["run_id"] == _canonical_digest(
+        {key: value for key, value in report.items() if key != "run_id"}
+    )
+
+    # The published claim list has moved, so the current validator refuses it, by name.
+    assert report["not_claimed"] != EXPECTED_NOT_CLAIMED
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape("the B-141 report claims are malformed"),
+    ):
+        benchmark.validate_report(report)
+
+    # The archived publication is a different one from the artifact this repository carries.
+    assert _artifact()["source_commit"] != report["source_commit"]
+    assert _artifact()["run_id"] != report["run_id"]
+
+    # And the archived path is refused as a canonical artifact path, in isolation from anything
+    # the archived document itself would fail: the current, valid report is refused there too.
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape("the B-141 commitment artifact path is malformed"),
+    ):
+        benchmark._validate_authoritative_bindings(
+            _artifact(), artifact_path=ARCHIVED_ARTIFACT, require_commitment=True
+        )

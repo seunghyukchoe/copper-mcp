@@ -2767,9 +2767,11 @@ def _validate_report_shape(document: Any) -> dict[str, Any]:
         or record["differential_definition"] != DIFFERENTIAL_DEFINITION
     ):
         raise NegotiatedDifferentialError("the B-141 report shape is malformed")
-    # The shape check no longer pins a literal date: the value is bound to the recorded commit by
-    # `_validate_evidence_date_binding`.  It must still be a real calendar day, so `9999-99-99`
-    # cannot pass the regex and then be excused as merely unverified.
+    # The shape check does not pin a literal date, and nothing here relates the value to history:
+    # `date_utc` is informational, pinned against re-signing by the companion's `artifact_run_id`
+    # and related to the default branch only by the opt-in
+    # `verify_evidence_date_against_history`.  It must still be a real calendar day, so
+    # `9999-99-99` cannot pass the regex and then be excused as merely unverified.
     try:
         date.fromisoformat(record["date_utc"])
     except ValueError as error:
