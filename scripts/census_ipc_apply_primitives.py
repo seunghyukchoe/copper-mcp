@@ -64,7 +64,22 @@ _STATE_TOKENS = (
     "if_match",
     "precondition",
     "token",
+    # Conditional-write vocabulary.  Added after the first version of this census swept only
+    # field names and only these state words: a message named ``ConditionalUpdate`` escaped
+    # *both* filters at once.  The surface widening alone would not have caught it.
+    "conditional",
+    "compare",
+    "swap",
+    "conflict",
 )
+
+#: The residual this census cannot close.  The sweep is exhaustive over *surfaces* -- every named
+#: message, field, field type, enum, enum value, service and method in the vendored descriptors --
+#: but its vocabulary is a list, and no list of substrings is provably complete.  So the published
+#: negative says exactly this and no more: **no name on any swept surface contains any of these
+#: tokens.**  A primitive named in vocabulary none of these tokens reach would still be invisible,
+#: which is why ``B-144`` states the claim in those words rather than as "the protocol has none".
+_VOCABULARY_IS_NOT_PROVABLY_COMPLETE = True
 
 #: The primitives a one-undo-commit apply would rest on, as method names on ``kipy.board.Board``
 #: (plus the two client-level calls).  Naming them here rather than pattern-matching is the point:
@@ -208,6 +223,84 @@ def _message_descriptors(files: list[tuple[str, Any]]) -> list[dict[str, Any]]:
             )
             stack.extend((nested, f"{full_name}.{nested.name}") for nested in message.nested_type)
     return sorted(rows, key=lambda row: row["full_name"])
+
+
+#: Every *named* surface a protocol can carry a document-state primitive on.  Sweeping field
+#: names alone was the first version of this census and it was not exhaustive: a message called
+#: ``ConditionalUpdate`` whose fields are an ordinary ``header`` and ``items`` carries a
+#: conditional write and shows no field-name hit at all.  A negative drawn from a field-name
+#: sweep can only say "no field is named like document state", which is a weaker sentence than
+#: the one B-144 needs.  These are the surfaces enumerated instead.
+_NAMED_SURFACES = (
+    "message",
+    "field",
+    "enum",
+    "enum_value",
+    "service",
+    "method",
+    "field_type",
+)
+
+
+def _named_surface_rows(files: list[tuple[str, Any]]) -> list[dict[str, str]]:
+    """Every named descriptor surface, as ``(surface, owner, name)`` rows.
+
+    The sweep below matches against ``name``.  Owners are recorded so a hit names where it
+    lives rather than only what it is called.
+    """
+
+    rows: list[dict[str, str]] = []
+
+    def _walk_message(message: Any, full_name: str, file_name: str) -> None:
+        rows.append({"surface": "message", "owner": file_name, "name": full_name})
+        for field in message.field:
+            rows.append({"surface": "field", "owner": full_name, "name": field.name})
+            # A field whose *type* is a document-state message would otherwise be invisible:
+            # the field may be called `header` while its type is `RevisionPrecondition`.
+            type_name = getattr(field, "type_name", "") or ""
+            if type_name:
+                rows.append(
+                    {
+                        "surface": "field_type",
+                        "owner": f"{full_name}.{field.name}",
+                        "name": type_name,
+                    }
+                )
+        for enum in message.enum_type:
+            rows.append({"surface": "enum", "owner": full_name, "name": enum.name})
+            for value in enum.value:
+                rows.append(
+                    {
+                        "surface": "enum_value",
+                        "owner": f"{full_name}.{enum.name}",
+                        "name": value.name,
+                    }
+                )
+        for nested in message.nested_type:
+            _walk_message(nested, f"{full_name}.{nested.name}", file_name)
+
+    for _, file_descriptor in files:
+        prefix = file_descriptor.package
+        for message in file_descriptor.message_type:
+            _walk_message(
+                message,
+                f"{prefix}.{message.name}" if prefix else message.name,
+                file_descriptor.name,
+            )
+        for enum in file_descriptor.enum_type:
+            owner = prefix or file_descriptor.name
+            rows.append({"surface": "enum", "owner": owner, "name": enum.name})
+            for value in enum.value:
+                rows.append(
+                    {"surface": "enum_value", "owner": f"{owner}.{enum.name}", "name": value.name}
+                )
+        for service in file_descriptor.service:
+            service_name = f"{prefix}.{service.name}" if prefix else service.name
+            rows.append({"surface": "service", "owner": file_descriptor.name, "name": service_name})
+            for method in service.method:
+                rows.append({"surface": "method", "owner": service_name, "name": method.name})
+
+    return sorted(rows, key=lambda row: (row["surface"], row["owner"], row["name"]))
 
 
 def _field_rows(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -380,8 +473,15 @@ def build_census() -> dict[str, Any]:
     files = _serialized_file_descriptors(kipy_root / "proto")
     descriptors = _message_descriptors(files)
     fields = _field_rows(descriptors)
+    named = _named_surface_rows(files)
 
-    hits = [row for row in fields if any(token in row["field"].lower() for token in _STATE_TOKENS)]
+    hits = [row for row in named if any(token in row["name"].lower() for token in _STATE_TOKENS)]
+    swept_by_surface = {
+        surface: sum(1 for row in named if row["surface"] == surface) for surface in _NAMED_SURFACES
+    }
+    hits_by_surface = {
+        surface: sum(1 for row in hits if row["surface"] == surface) for surface in _NAMED_SURFACES
+    }
 
     commit_messages = {
         name: _fields_of(descriptors, name)
@@ -419,7 +519,10 @@ def build_census() -> dict[str, Any]:
             "platform": platform.platform(),
             "kicad_python_version": version("kicad-python"),
             "bundled_kicad_api_version": KICAD_API_VERSION,
-            "site_packages": str(site_packages),
+            # Package-relative by construction: an absolute path would publish the operator's
+            # username and directory layout, and would make the self-digest vary with nothing
+            # but the virtual-environment location.
+            "installed_package": kipy_root.name,
         },
         "proto_surface": {
             "file_count": len(files),
@@ -427,7 +530,11 @@ def build_census() -> dict[str, Any]:
             "message_count": len(descriptors),
             "field_count": len(fields),
             "state_token_substrings": list(_STATE_TOKENS),
+            "swept_surfaces": list(_NAMED_SURFACES),
+            "swept_name_count": len(named),
+            "swept_by_surface": swept_by_surface,
             "state_token_hit_count": len(hits),
+            "state_token_hits_by_surface": hits_by_surface,
             "state_token_hits": hits,
         },
         "commit_messages": commit_messages,
