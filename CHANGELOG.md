@@ -19,6 +19,24 @@ All notable changes are documented here. The format follows
   repeated KiCad DRC path, while SI, PI, and thermal remain unregistered. See ADR-0128, D-237,
   R-187, and SEC-174. Issue #91 remains open.
 
+### Changed
+
+- CI's `Unit tests` step now runs `python -m pytest -n 4 --dist loadfile` instead of a single
+  process, and `pytest-xdist>=3.8,<4` joins the `dev` extra. Four workers because a hosted
+  `ubuntu-latest` runner reports four vCPUs -- recorded by a new `Record runner CPU count` step
+  rather than cited from documentation, because no archived hosted log in this repository carried
+  the core count. `--dist loadfile` because this suite's cost sits in module-scoped fixtures that
+  anything finer would rebuild once per worker. **The hosted speed-up is 1.23x, not the 3.22x-3.31x
+  measured locally**: the prediction was `serial x 0.2833` and the measurement was `serial x 0.814`,
+  a 2.87x undershoot, because the local host has twelve cores and the runner has four, so four
+  workers that each owned a core locally saturate every vCPU hosted. The worst `ci.yml:test` job leg
+  moves from 3,302 s to 2,745 s, widening the half-rule margin from 9.93 to 28.50 minutes;
+  `timeout-minutes: 120` is deliberately unchanged so the ceiling can still report the next growth.
+  Coverage stays on all three matrix legs and `make test` stays serial. `-n 4` is accepted as better
+  than serial rather than as optimal -- the predeclared hosted `-n 2` comparison was not run. The
+  ceiling on any worker count is one 610 s file, and raising it is a separate change. See B-143 and
+  D-242.
+
 ### Fixed
 
 - B-141's committed artifact is rebound to the squash-merge commit

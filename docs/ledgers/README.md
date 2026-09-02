@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-241` | `D-242` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-242` | `D-243` |
 | [Risk register](risk-register.md) | `R-` | `R-187` | `R-188` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-174` | `SEC-175` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-141` | `B-142` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-143` | `B-144` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -208,6 +208,19 @@ release them.
    The rule forbids **claiming a spent number to tidy the sequence**; it does not require merge
    order to match numeric order, and the ledgers are ordered by ID rather than by merge date
    precisely so that this case reads correctly afterwards.
+
+   The CI suite-speed lane is the round where a stepped-over number was **withdrawn rather than
+   claimed**. It opened against a base whose highest decision row was `D-236` and took `D-238`,
+   stepping over two open branches. By the time it pushed, `main` had merged `D-237` and `D-241`,
+   and `D-238` was no longer available in the sense that matters: the decision ledger is strictly
+   increasing in document order, so a `D-238` row appended after `D-241` fails the checker, and
+   inserting it at its numeric position would have filled a gap to tidy the sequence -- which rule 2
+   forbids -- while leaving the `Highest allocated` line untouched and therefore producing **no
+   textual conflict at all** with the open branch also holding `D-240`. Losing that conflict is
+   losing the safety net, so the lane re-read the tip and took `D-242`. `B-143` needed no such move:
+   the benchmark ledger makes no ordering claim, `B-143` was still free, and it steps over `B-142`,
+   a live claim on [#242](https://github.com/seunghyukchoe/copper-mcp/pull/242). `D-238` and `D-239`
+   are live claims or spent numbers like any other, not an invitation to backfill.
 3. **A correction gets a new ID.** Because rows are append-only, a superseding or clarifying entry
    is a new entry that names what it corrects — never an edit to the original. `B-075`
    ("held-out audio evidence-source provenance correction") is the model: it states what it
