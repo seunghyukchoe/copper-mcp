@@ -13,12 +13,63 @@ would have missed and requiring each to be found.
 from __future__ import annotations
 
 import importlib.util
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any
 
-from google.protobuf import descriptor_pb2
-
 _SCRIPT = Path(__file__).parent.parent / "scripts" / "census_ipc_apply_primitives.py"
+
+
+# `kicad-python` — and with it protobuf — is an optional extra (`[kicad]`), and CI installs only
+# `[dev,security]`. The census reads protobuf lazily inside one function for that reason, and the
+# suite's house rule is the same: stand in for the shape rather than importing the package, the
+# way `tests/test_kicad_ipc.py` mirrors `kipy`'s classes. These mirror exactly the attributes
+# `_named_surface_rows` reads, so the sweep is tested against the descriptor *contract* rather
+# than against protobuf's implementation of it -- and the test runs everywhere the suite does.
+@dataclass
+class _Field:
+    name: str
+    type_name: str = ""
+
+
+@dataclass
+class _EnumValue:
+    name: str
+
+
+@dataclass
+class _Enum:
+    name: str
+    value: list[_EnumValue] = dataclass_field(default_factory=list)
+
+
+@dataclass
+class _Method:
+    name: str
+
+
+@dataclass
+class _Service:
+    name: str
+    method: list[_Method] = dataclass_field(default_factory=list)
+
+
+@dataclass
+class _Message:
+    name: str
+    field: list[_Field] = dataclass_field(default_factory=list)
+    enum_type: list[_Enum] = dataclass_field(default_factory=list)
+    nested_type: list[_Message] = dataclass_field(default_factory=list)
+
+
+@dataclass
+class _File:
+    name: str = "synthetic/planted.proto"
+    package: str = "planted"
+    message_type: list[_Message] = dataclass_field(default_factory=list)
+    enum_type: list[_Enum] = dataclass_field(default_factory=list)
+    service: list[_Service] = dataclass_field(default_factory=list)
 
 
 def _census() -> Any:
@@ -31,28 +82,15 @@ def _census() -> Any:
 
 def _file_with(
     *,
-    messages: list[Any] | None = None,
-    enums: list[Any] | None = None,
-    services: list[Any] | None = None,
-) -> Any:
-    descriptor = descriptor_pb2.FileDescriptorProto()
-    descriptor.name = "synthetic/planted.proto"
-    descriptor.package = "planted"
-    descriptor.message_type.extend(messages or [])
-    descriptor.enum_type.extend(enums or [])
-    descriptor.service.extend(services or [])
-    return descriptor
+    messages: list[_Message] | None = None,
+    enums: list[_Enum] | None = None,
+    services: list[_Service] | None = None,
+) -> _File:
+    return _File(message_type=messages or [], enum_type=enums or [], service=services or [])
 
 
-def _message(name: str, fields: list[tuple[str, str]]) -> Any:
-    message = descriptor_pb2.DescriptorProto()
-    message.name = name
-    for field_name, type_name in fields:
-        field = message.field.add()
-        field.name = field_name
-        if type_name:
-            field.type_name = type_name
-    return message
+def _message(name: str, fields: list[tuple[str, str]]) -> _Message:
+    return _Message(name=name, field=[_Field(name=n, type_name=t) for n, t in fields])
 
 
 def _hits(descriptor: Any) -> list[dict[str, str]]:
@@ -91,12 +129,7 @@ def test_a_precondition_carried_only_in_a_field_type_is_detected() -> None:
 def test_a_document_state_rpc_is_detected_by_its_method_name() -> None:
     """Services and their methods are swept; the vendored descriptors happen to declare none."""
 
-    service = descriptor_pb2.ServiceDescriptorProto()
-    service.name = "BoardService"
-    method = service.method.add()
-    method.name = "GetDocumentRevision"
-    method.input_type = ".planted.Empty"
-    method.output_type = ".planted.Empty"
+    service = _Service(name="BoardService", method=[_Method(name="GetDocumentRevision")])
 
     found = _hits(_file_with(services=[service]))
 
@@ -104,11 +137,9 @@ def test_a_document_state_rpc_is_detected_by_its_method_name() -> None:
 
 
 def test_a_dirty_bit_spelled_as_an_enum_value_is_detected() -> None:
-    enum = descriptor_pb2.EnumDescriptorProto()
-    enum.name = "DocumentState"
-    for value_name in ("DS_CLEAN", "DS_MODIFIED"):
-        value = enum.value.add()
-        value.name = value_name
+    enum = _Enum(
+        name="DocumentState", value=[_EnumValue(name="DS_CLEAN"), _EnumValue(name="DS_MODIFIED")]
+    )
 
     found = _hits(_file_with(enums=[enum]))
 
@@ -127,15 +158,8 @@ def test_every_named_surface_the_census_declares_is_actually_collected() -> None
     """A surface named in the artifact but never walked would be a silent gap in the claim."""
 
     module = _census()
-    service = descriptor_pb2.ServiceDescriptorProto()
-    service.name = "S"
-    method = service.method.add()
-    method.name = "M"
-    method.input_type = ".planted.Empty"
-    method.output_type = ".planted.Empty"
-    enum = descriptor_pb2.EnumDescriptorProto()
-    enum.name = "E"
-    enum.value.add().name = "V"
+    service = _Service(name="S", method=[_Method(name="M")])
+    enum = _Enum(name="E", value=[_EnumValue(name="V")])
     planted = _file_with(
         messages=[_message("M1", [("f", ".planted.T")])], enums=[enum], services=[service]
     )
