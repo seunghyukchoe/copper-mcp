@@ -1,0 +1,121 @@
+{
+  "budget": {
+    "ipc_calls": 7,
+    "seconds": 0.403885583000374
+  },
+  "commit": "3e4c10e0d3612707fe10871fff64d5c43d23ae7b",
+  "committed_board": {
+    "bytes": 166070,
+    "digest": "sha256:3bcd01ec4942fccabfaf1c21bdae050a31a7bf99af7ab1bcb0dbb3d0aabcfb94",
+    "path": "hardware/coppertone-buffer/coppertone-buffer.kicad_pcb"
+  },
+  "committed_board_text_strings": 0,
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "net_evidence": {
+    "editor_get_nets_count": 15,
+    "live_object_counts_net_declarations": 0,
+    "old_key_nets_present": false
+  },
+  "raw_binding": {
+    "api_version": "10.0.1",
+    "check_version_raised": "FutureVersionError",
+    "check_version_returned": null,
+    "editor_is_newer_than_binding": true,
+    "kicad_version": "10.0.5"
+  },
+  "read_only": true,
+  "recorded_at_utc": "2026-09-01T13:24:46.796363+00:00",
+  "revision_binding": {
+    "board_digest": "sha256:7e0ea855d98ae63f8dbb96db88c29b5963ed5609d1d9fa2567c714d4c1d6ec22",
+    "session_revision": "pbkdf2-hmac-sha256:c791362bde6df167a2959f5e79e1515a2ad71a175febf5e41463986219f3f841"
+  },
+  "run_id": "sha256:ea67b2e11e0b5f7673903297cafb982a5e01816c8be574054114bd940458b0ab",
+  "runner_digest": "sha256:ac6f5731f5b42a3a16ca2b8021cf1fbcadf5c0b23abd1a953ed9d0539bd3202f",
+  "schema": "copper.live-version-binding-probe",
+  "schema_version": "0.1.0",
+  "socket_kind": "configured-local-ipc",
+  "surfaces": {
+    "capture_live_editor_context": {
+      "active_layer_index": 3,
+      "active_layer_name": "F.Cu",
+      "api_version": "10.0.1",
+      "board_bytes": 165571,
+      "board_revision": "sha256:7e0ea855d98ae63f8dbb96db88c29b5963ed5609d1d9fa2567c714d4c1d6ec22",
+      "compatibility": "future_api_unverified",
+      "document_binding": "in_memory_unsaved_state_unobservable",
+      "kicad_version": "10.0.5",
+      "selection_count": 0,
+      "verdict": "observed"
+    },
+    "inspect_live_board": {
+      "observation": {
+        "api_version": "10.0.1",
+        "board_bytes": 165571,
+        "board_digest": "sha256:7e0ea855d98ae63f8dbb96db88c29b5963ed5609d1d9fa2567c714d4c1d6ec22",
+        "compatibility": "future_api_unverified",
+        "document_binding": "in_memory_unsaved_state_unobservable",
+        "kicad_version": "10.0.5",
+        "object_counts": {
+          "dimensions": 0,
+          "footprints": 26,
+          "groups": 0,
+          "net_declarations": 0,
+          "pads": 55,
+          "shapes": 1,
+          "text": 4,
+          "tracks": 53,
+          "vias": 9,
+          "zones": 4
+        },
+        "read_only": true,
+        "schema_version": "0.2.0",
+        "session_revision": "pbkdf2-hmac-sha256:c791362bde6df167a2959f5e79e1515a2ad71a175febf5e41463986219f3f841",
+        "socket_kind": "configured-local-ipc",
+        "source": "kicad-ipc-live"
+      },
+      "verdict": "observed"
+    },
+    "inspect_live_editor_context": {
+      "context": {
+        "active_layer": {
+          "id": "layer:F.Cu",
+          "index": 3,
+          "name": "F.Cu"
+        },
+        "api_version": "10.0.1",
+        "board_revision": "sha256:7e0ea855d98ae63f8dbb96db88c29b5963ed5609d1d9fa2567c714d4c1d6ec22",
+        "compatibility": "future_api_unverified",
+        "context_digest": "sha256:baf1ddd101f79443c1245995aecdc5e808a0671d048c4ef0c58f617cf42e99e9",
+        "document_binding": "in_memory_unsaved_state_unobservable",
+        "kicad_version": "10.0.5",
+        "read_only": true,
+        "schema": "copper.live-editor-context",
+        "schema_version": "0.2.0",
+        "selection_count": 0,
+        "snapshot_digest": "sha256:7e0ea855d98ae63f8dbb96db88c29b5963ed5609d1d9fa2567c714d4c1d6ec22",
+        "source": "kicad-ipc-live"
+      },
+      "verdict": "observed"
+    },
+    "probe_live_kicad_ipc": {
+      "result": {
+        "board_digest": null,
+        "board_ir_snapshot_digest": null,
+        "capability": "kicad_api_token_missing",
+        "compatibility": null,
+        "digest_matches": null,
+        "exact_source_digest": null,
+        "read_only": true,
+        "scene_snapshot_digest": null,
+        "schema_version": "0.1.0",
+        "socket_configured": true,
+        "status": "skipped",
+        "token_configured": false
+      },
+      "verdict": "skipped"
+    }
+  }
+}
