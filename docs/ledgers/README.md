@@ -23,10 +23,10 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-241` | `D-242` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-242` | `D-243` |
 | [Risk register](risk-register.md) | `R-` | `R-190` | `R-191` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-174` | `SEC-175` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-141` | `B-142` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-142` | `B-143` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
@@ -41,18 +41,34 @@ The same wave reserved `B-125`–`B-127` for sibling lanes and `B-128` for M3 E4
 consumed here; the sibling reservations remain unavailable until their lanes land or explicitly
 release them.
 
-The 2026-09-02 checker-population lane (#244) takes `D-239`/`R-190` under rule 1, re-derived
-against `main`'s **rows** at `f8b4daa` rather than against the registry line and re-checked
-against every open branch immediately before merging. `main` carries `D-237` and `D-241` — #254
-took `D-237`/`R-187`/`SEC-174` and #252 took `D-241` — leaving `D-238`–`D-240` unallocated and
-`R-187` as the highest risk row. `D-239` sits in that verified gap and nothing else claims it.
-`R-188` was this lane's original claim and **had to move**: #254 landing displaced #242's entire
-set, #242's re-arbitration took `D-242`/`R-188`, and #251 took `D-243`/`R-189`. Rather than race
-#242 for a number two branches would otherwise both carry, this record steps up to `R-190`, above
-every live claim — the same half of rule 1 that allocated `D-181`/`R-138`. `D-238` stays reserved
-for the CI suite-speed lane, which both #242 and #251 record as holding `D-238`/`B-143`. The
-checker's gap notes for `D-238`, `D-240`, `R-188` and `R-189` are therefore expected until those
-branches land.
+`B-142` was allocated while `B-141` was still held by open pull request
+[#239](https://github.com/seunghyukchoe/copper-mcp/pull/239), stepping over it under rule 1 rather
+than racing it. #239 has since landed, so `B-141` and `B-142` now sit adjacent with no gap. The
+same wave's `D-`/`R-` numbers collided twice. First, #239 and the live-version-binding lane both
+allocated `D-236`/`R-186` from the same stale registry, and the second to merge renumbered to
+`D-237`/`R-187` under rule 1. Then
+[#254](https://github.com/seunghyukchoe/copper-mcp/pull/254) landed that same `D-237`/`R-187` pair
+first, so this lane renumbered again — to `D-242`/`R-188`, the registry's next free numbers at
+main's tip, rather than reusing any number below `D-242` under rule 2 or adding a seventh and
+eighth double-named identifier to the list above.
+
+The 2026-09-02 checker-population lane (#244, PR
+[#257](https://github.com/seunghyukchoe/copper-mcp/pull/257)) takes `D-239`/`R-190` under rule 1,
+re-derived against `main`'s **rows** at `13e2819` rather than against the registry line and
+re-checked against every open branch immediately before merging. `main` carries `D-237`, `D-241`
+and `D-242` — #254 took `D-237`/`R-187`/`SEC-174`, #252 took `D-241`, and #242 took
+`D-242`/`R-188`/`B-142` — leaving `D-238`, `D-239` and `D-240` unallocated and `R-188` as the
+highest risk row. `D-239` sits in that verified gap, it is **this lane's own claim** rather than
+someone else's spent number, and nothing else claims it; filling one's own live claim at its
+numeric position is rule 1 working, not the backfill rule 2 forbids. `R-188` was this lane's
+original claim and **had to move**: #254 landing displaced #242's entire set, #242's
+re-arbitration took `D-242`/`R-188` and has since landed them, and #251 took `D-243`/`R-189`.
+Rather than race for a number two branches would otherwise both carry, this record steps up to
+`R-190`, above every live claim — the same half of rule 1 that allocated `D-181`/`R-138`. `D-238`
+and `D-240` are **withdrawn claims and therefore permanently spent**: the CI suite-speed lane
+withdrew `D-238` and now holds `D-244`/`B-143`, and #251 moved off `D-240` to `D-243`/`R-189`.
+Neither is an invitation to backfill. The checker's gap notes for `D-238`, `D-240` and `R-189`
+are therefore expected — the first two permanently, the third until #251 lands.
 
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`

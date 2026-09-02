@@ -484,13 +484,23 @@ Call the read-only MCP tool `inspect_live_board` for a redacted digest/metadata 
 semantic geometry from the active editor, call `observe_live_board_scene` with the same constraints
 and region fields as `observe_board_scene`, but set `board` to the literal `live`.
 
-KiCad 9/10 requires a running GUI session, and the tools refuse a newer KiCad than the installed
-`kicad-python` binding by default. Include both returned digests on a repeat call when you need a
+KiCad 9/10 requires a running GUI session. The tools accept any editor within the **same major
+version** as the installed `kicad-python` binding and publish a `compatibility` verdict saying
+what was checked: `compatible` only when the editor and the binding report the same
+`major.minor.patch`, `future_api_unverified` when the editor is newer, and
+`legacy_api_unverified` when it is older. A pair spanning a major boundary is refused, naming both
+versions. **`compatible` is the only verdict that means the binding proved anything** — treat the
+other two as observed-but-unverified rather than interchangeable with it. Live *apply* is stricter
+and requires `compatible`. Include both returned digests on a repeat call when you need a
 stale-session refusal. Live routing, placement, DRC, and apply remain separate gates.
 
 The IPC observer and the KiCad PCB-editor plugin report only a live board digest, version
 compatibility, and bounded object counts; they never mutate KiCad or expose board text, net names,
-UUIDs, or geometry.
+UUIDs, or geometry. The digest binds KiCad's **in-memory** document and never a file on disk —
+`document_binding` says so, and the API exposes no dirty flag, so no save-state claim accompanies
+it. `object_counts` reports `net_declarations`, which counts top-level `(net …)` declarations; a
+KiCad 10 document carries none, so a board with nets reports `0` here. That is not the board's net
+count, and none is published; convert to Board IR if you need one.
 
 ### Install the KiCad plugin from the Plugin and Content Manager
 

@@ -14,7 +14,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from copper_mcp.config import Settings
-from copper_mcp.kicad_ipc import LiveEditorContextSnapshot, capture_live_editor_context
+from copper_mcp.kicad_ipc import (
+    ACCEPTED_API_COMPATIBILITY,
+    DOCUMENT_BINDING_IN_MEMORY,
+    LiveEditorContextSnapshot,
+    capture_live_editor_context,
+)
 from copper_mcp.request_boundary import (
     MAX_JSON_SAFE_INTEGER,
     RequestError,
@@ -25,7 +30,7 @@ from copper_mcp.request_boundary import (
     text,
 )
 
-LIVE_EDITOR_CONTEXT_VERSION = "0.1.0"
+LIVE_EDITOR_CONTEXT_VERSION = "0.2.0"
 _SHA256_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
 _MAX_SELECTION = 256
 _REQUIRED_FIELDS = ("board", "expect_board_revision")
@@ -120,6 +125,14 @@ class LiveEditorContext:
     active_layer_index: int
     active_layer_name: str
     selection: tuple[dict[str, str], ...]
+    #: Carried from the capture so this surface answers the same compatibility question
+    #: ``inspect_live_board`` answers. B-138 measured this path refusing a real editor the board
+    #: surface could observe, and even on its internal accept path it published no verdict at
+    #: all -- so a caller had no way to learn that a context had been read across a drifted API.
+    kicad_version: str = ""
+    api_version: str = ""
+    compatibility: str = "compatible"
+    document_binding: str = "in_memory_unsaved_state_unobservable"
     read_only: bool = True
     schema: str = "copper.live-editor-context"
     schema_version: str = LIVE_EDITOR_CONTEXT_VERSION
@@ -130,6 +143,10 @@ class LiveEditorContext:
             raise LiveEditorContextError("live editor context provenance is invalid")
         if not self.read_only:
             raise LiveEditorContextError("live editor context is read-only")
+        if self.compatibility not in ACCEPTED_API_COMPATIBILITY:
+            raise LiveEditorContextError("live editor context compatibility is invalid")
+        if self.document_binding != DOCUMENT_BINDING_IN_MEMORY:
+            raise LiveEditorContextError("live editor context document binding is invalid")
         for name, value in (
             ("board_revision", self.board_revision),
             ("snapshot_digest", self.snapshot_digest),
@@ -154,6 +171,10 @@ class LiveEditorContext:
             },
             "selection": [dict(item) for item in self.selection],
             "selection_count": len(self.selection),
+            "kicad_version": self.kicad_version,
+            "api_version": self.api_version,
+            "compatibility": self.compatibility,
+            "document_binding": self.document_binding,
             "read_only": self.read_only,
         }
 
@@ -193,6 +214,9 @@ def inspect_live_editor_context_raw(
         active_layer_index=snapshot.active_layer_index,
         active_layer_name=snapshot.active_layer_name,
         selection=selection,
+        kicad_version=snapshot.kicad_version,
+        api_version=snapshot.api_version,
+        compatibility=snapshot.compatibility,
     )
 
 
