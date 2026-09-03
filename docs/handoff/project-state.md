@@ -1,9 +1,9 @@
 # CopperMCP project state
 
-**This is a living document. It is current as of the `0.8.0` release line and must be updated in
+**This is a living document. It is current as of the `0.12.0` release line and must be updated in
 the release pull request of every subsequent release** — the version, the contract versions, the
 tool counts, the milestone state, and the limitations all move, and this document asserts them in
-the present tense. Last verified against the repository on **2026-08-13**, at `main` `73334b0`.
+the present tense. Last verified against the repository on **2026-09-04**, at `main` `1bb3b6f`.
 
 It is not release authorization. A release is authorized only by a `Ready` row in the
 [release ledger](../ledgers/release-ledger.md) naming a validated source commit.
@@ -16,18 +16,22 @@ here.
 
 ## 1. Where the project stands
 
-**Released:** `v0.1.0` → `v0.7.0`, with attested wheel and sdist artifacts. `v0.7.0` was tagged and
-published on 2026-08-12 from the `Ready` authorization at `09deaaf`, and
-[the `0.7.0` migration notes](../migrations/copper-mcp-0.7.0.md) shipped with it. `pyproject.toml`
-still reads `0.7.0`; the `0.8.0` bump belongs to the release pull request, not here.
+**Released:** `v0.1.0` → `v0.12.0`, with attested wheel, sdist, and KiCad PCM
+artifacts. `v0.12.0` was tagged and published on 2026-09-01 from the `Ready`
+authorization at `56248fb`, and
+[the `0.12.0` migration notes](../migrations/copper-mcp-0.12.0.md) shipped with it.
+`pyproject.toml` reads `0.12.0`; the next version bump belongs to the next release
+pull request, not here.
 
-**Two published-release rows are outstanding**, and this document does not supply them: the
-[release ledger](../ledgers/release-ledger.md)'s published table records `0.1.0`–`0.4.0` and
-`0.6.0` and has no row for `0.5.0` or for `0.7.0`, even though both tags and both GitHub releases
-exist. That is an open post-release step in the ledger, recorded here so it is not mistaken for a
-publication that never happened. **The release ledger, not this document and not the changelog,
-authorizes a release** — but where publication is concerned it is currently behind the repository,
-and `gh release list` is the observation to trust.
+**The release ledger is current through `0.12.0`.** The two once-outstanding
+published-release rows the 0.8.0 line of this document recorded as missing are now
+filed: `0.5.0` (verified attestations, tag ancestor of `main`) and `0.7.0`
+(recorded with an explicitly weaker provenance posture -- locally built assets
+after the release workflow was cancelled, no Sigstore bundle -- rather than
+corrected, because replacing a published asset is the larger action). **The
+release ledger, not this document and not the changelog, authorizes a release**
+— and where publication is concerned `gh release list` remains the observation
+to trust over any paragraph here.
 
 **Contract versions in force.** These are the numbers a caller pins, and they move independently of
 the package version:
@@ -40,7 +44,7 @@ the package version:
 | Router | `astar-grid/0.7.0` | `routing.astar.ROUTER_VERSION` | Advanced in `0.7.0`; every stored candidate and bundle identity must be re-derived. No path geometry changed. Candidates recorded under `0.4.0`–`0.6.0` still select their historical search behaviour for replay. |
 
 **Tool surface.** Measured by calling `list_tools()` under each transport rather than by counting a
-list: **28 tools on `stdio`, 27 on `streamable-http`.** The single difference is
+list: **29 tools on `stdio`, 28 on `streamable-http`.** The single difference is
 `render_circuit_schematic`, which is registered only under `stdio` because it delivers an opaque
 resource. Two resources (`scene_render`, `schematic_artifact`) are likewise stdio-only.
 [The agent contract](../agents.md) and [the usage guide](../usage.md) own the tool-by-tool
@@ -56,6 +60,7 @@ detail; what follows is the shape, not the contract.
 | Judge placement | `preview_placement`, `preview_live_placement` | Board IR-projected subjects, three-valued courtyard overlap, locked-move refusal |
 | Build | `render_circuit_schematic` (**stdio only**), `verify_circuit_schematic_erc`, `verify_source_to_board_parity` | deterministic schematic from Circuit Intent IR; authoritative `kicad-cli` ERC and DRC parity evidence |
 | Check | `run_board_drc`, `validate_candidate`, `compare_candidates` | fixed-argument headless DRC, read-only; candidate normalization and ranking |
+| Verify foreign | `verify_external_route_candidate` | versioned, reference-only, read-only MCP disposal of one closed v1/v2 foreign route through bounded Board IR validation and mandatory authoritative KiCad DRC; no CLI, persistence, repair, apply, or live-IPC peer |
 | Queue | `start_routing`, `get_routing_job`, `cancel_routing_job`, `export_routing_candidate` | durable file-backed layered proposals; geometry export is separately authorized |
 | **Apply route** | `apply_candidate` | route candidates written to the real file, **default off** (`COPPER_MCP_ALLOW_APPLY=1`) |
 | **Apply placement** | `apply_placement_candidate` | bounded front-side pose candidates, placement-scoped token, CAS, backup, atomic replacement, **default off** |
@@ -66,27 +71,31 @@ apply tool requires its own single-use token in addition to its operator gate, a
 `apply_live_candidate` needs **both** `COPPER_MCP_ALLOW_LIVE_APPLY=1` and
 `COPPER_MCP_ALLOW_LIVE_IPC=1`; neither is implied by `COPPER_MCP_ALLOW_APPLY`.
 
-**Milestone state,** read from the milestone API on 2026-08-13:
+**Milestone state,** read from the milestone API on 2026-09-04:
 
 | Milestone | Closed | Open | Remaining |
 |---|---|---|---|
-| M1 — KiCad inspection completion | 7 | 1 | [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116), the conversion tracker |
-| M2 — Routing depth | 4 | 1 | [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65), open-baseline comparison |
-| M3 — Safe application completion | 0 | 1 | [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68), IPC one-undo-commit apply |
-| M4 — Scene, policy, and evaluation | 3 | 0 | **complete as an accounting fact**, not as a claim that every `[~]` under it is finished |
-| M5 — Performance and physics | 0 | 6 | nothing has landed |
+| M1 — KiCad inspection completion | 11 | 1 | [#215](https://github.com/seunghyukchoe/copper-mcp/issues/215), the closed public setup-field census; #188 (the third-party conversion wall) is closed |
+| M2 — Routing depth | 6 | 1 | the milestone itself is closed; [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53) remains open and operator-blocked for a contained FreeRouting comparison provider |
+| M3 — Safe application completion | 2 | 2 | [#68](https://github.com/seunghyukchoe/copper-mcp/issues/68), IPC one-undo-commit apply, and [#52](https://github.com/seunghyukchoe/copper-mcp/issues/52), placement apply (file-backed halves shipped; live halves wait on a real-editor operator gate) |
+| M4 — Scene, policy, and evaluation | 4 | 0 | **complete as an accounting fact**, not as a claim that every `[~]` under it is finished |
+| M5 — Verification and physics | 6 | 2 | [#90](https://github.com/seunghyukchoe/copper-mcp/issues/90), negotiated repair integration, and [#91](https://github.com/seunghyukchoe/copper-mcp/issues/91), SI/PI/thermal/DFM surrogate hooks (`dfm` sign-off reachable, SI/PI/thermal unbacked) |
 
-M1's two remaining tracked issues are #116, retitled from the original real-board conversion survey
-to the M1 conversion tracker it had become ([D-191](../ledgers/decision-ledger.md)), and #188, the
-copper-text/curved-outline third-party conversion arc. #152, #153 and #172 are closed; ADR-0111
-resolves the custom-pad front blocker and B-117 measures 15/18. [The roadmap](../roadmap.md)
+M1's only open tracked issue is #215, and its acceptance is already satisfied on
+`main`: the closed public setup-field census instrument, its 43-test synthetic
+specification, the B-130/B-131 evidence, and the ADR-0122 follow-on decision have
+all landed. It reads as close-ready pending maintainer close-out; closing it marks
+M1 complete. #188 (the third-party conversion wall: `Edge.Cuts` curves plus copper
+text) is closed: outline arcs shipped in `0.12.0` converting nothing new by
+predeclared measurement (B-134/B-135), and copper text stays refused by decision
+(ADR-0095). [The roadmap](../roadmap.md)
 describes each milestone as outcomes; **GitHub is the source of truth over both**, so read it with
 `gh issue list -R seunghyukchoe/copper-mcp` and
 `gh api repos/seunghyukchoe/copper-mcp/milestones` rather than trusting a checkbox.
 
-**Record ranges.** ADR-0001 … ADR-0111, next unused **0112**; five numbers (0027, 0082, 0083, 0085,
-0086) are spent and never recycled. Ledgers: `D-207`, `R-160`, `SEC-146`, `B-117` are the highest
-allocated (`B-109` was declined under rule 4 and is spent). Allocate in the pull request that lands the entry, never before, per
+**Record ranges.** ADR-0001 … ADR-0129, next unused **0130**; five numbers (0027, 0082, 0083, 0085,
+0086) are spent and never recycled. Ledgers: `D-244`, `R-188`, `SEC-174`, `B-143` are the highest
+allocated. Allocate in the pull request that lands the entry, never before, per
 [the ID convention](../ledgers/README.md) — and read the two checkers' own output
 (`scripts/check_adr_numbers.py`, `scripts/check_ledgers.py`) rather than this paragraph, which is
 one release away from being wrong by construction.
@@ -211,7 +220,10 @@ worse than none, because it will be ignored.
   one diagnostic — every gap closed since the survey advanced a refusal on at least one board rather
   than converting it, five times in three days. **No "converts every board" result is claimed at any
   count**, converting is not routing, placing or appliability, and no further count should be stated
-  until a re-measured survey supports it.
+  until a re-measured survey supports it. On the separate ten-board public cohort the figure is
+  **0 of 10 before and after** the `0.12.0` outline-arc and stray-copper slices (B-134/B-135/B-137):
+  the eight boards stopping at the outline gate now stop behind it, six at ADR-0095's copper-text
+  wall. That zero-conversion outcome was predicted in writing before either adapter was touched.
 - **Real-board routing is a small, candidate-only result, not a product claim — and every figure
   from this corpus has a short shelf life.** The latest routing-only measurement remains `B-107`,
   2026-08-13, over
@@ -294,30 +306,25 @@ worse than none, because it will be ignored.
 
 ## 6. What to do next, in priority order
 
-1. **Decide what closing [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116) now
-   requires.** All five gaps it originally named are closed, every number in its original title is
-   wrong, and both gaps that kept it open after that — #152 and #153 — are closed too. It stays open
-   as the **M1 real-board conversion tracker** ([D-191](../ledgers/decision-ledger.md)) because it
-   is the only issue carrying the milestone, and closing it marks M1 complete. **Do not close it on
-   a target count**: one of the five remaining refusals is permanent by decision, so the corpus can
-   never reach 18 of 18, and a completion criterion phrased as a count would be unreachable by
-   construction. The honest close-out is a fresh survey plus an explicit statement of what stays
-   refused and why. **Expect a stack** if you take another construct: every gap closed since the
-   survey advanced the refusal on at least one board instead of converting it — #116's own courtyard
-   causes, then #140, then #151, then the pad `property` field, then the custom pad, and now three
-   topology blockers. **#141 is answered and is not a gap to take**: copper text has no
-   envelope derivable from the board document, measured against `kicad-cli`, so it stays refused by
-   decision rather than by omission
+1. **Close [#215](https://github.com/seunghyukchoe/copper-mcp/issues/215) and mark M1 complete.**
+   [#116](https://github.com/seunghyukchoe/copper-mcp/issues/116) is closed, and so is #188:
+   `Edge.Cuts` arcs shipped in `0.12.0` converting nothing new by predeclared measurement
+   (B-134/B-135), and copper text stays refused by decision rather than by omission
    ([ADR-0095](../adr/0095-copper-text-has-no-derivable-envelope.md)) — the board it blocks stays
-   blocked and the count is unchanged. Treat a stack of blockers as the default and measure after
-   each, never before.
+   blocked and the count is unchanged. **Expect a stack** if you take another construct: every gap
+   closed since the survey advanced the refusal on at least one board instead of converting it.
+   Treat a stack of blockers as the default and measure after each, never before. **Do not close
+   anything on a target count**: one third-party refusal is permanent by decision, so a count-based
+   completion criterion is unreachable by construction.
 2. **Make the real-board routing result mean something.** 16 of 465 is a floor, not a capability,
    and 324 of those previews are `already_connected` — this corpus is mostly routed, so it can no
    longer answer the question, and the figure has now moved three times without the router changing.
    The next step is DRC evidence and cross-net compatibility on a real board with genuinely open
-   nets, not a larger sweep over boards the designer has finished. Note that DRC evidence from this
-   corpus needs [#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) answered first:
-   KiCad's own counts do not reproduce run to run on identical bytes.
+   nets, not a larger sweep over boards the designer has finished. DRC evidence from this
+   corpus now has its policy ([#170](https://github.com/seunghyukchoe/copper-mcp/issues/170) is
+   closed by ADR-0109): every published count carries its comparability, and no differential may
+   cite one that is not `repeated_agreement` — KiCad's own counts do not reproduce run to run on
+   identical bytes.
 3. **Close placement data-fidelity and post-action gates.** Model and replay author text,
    fabrication graphics, library identity, properties, and 3D-model pose affected by a move, then
    add post-placement KiCad DRC/scene evidence, undo semantics, and live-editor CAS as separate
@@ -327,14 +334,28 @@ worse than none, because it will be ignored.
    Note that per-layer courtyards now exist ([ADR-0097](../adr/0097-courtyard-layer-decides-the-side.md)):
    a side flip has to swap a footprint's two courtyard sets as well as mirror them, and the
    source-preserving serializer still refuses every board carrying a far-side courtyard rectangle.
-5. **IPC apply ([#68](https://github.com/seunghyukchoe/copper-mcp/issues/68)).**
+5. **IPC apply ([#68](https://github.com/seunghyukchoe/copper-mcp/issues/68)) stays parked.**
    `kicad-python`'s `begin_commit` / `push_commit` gives a genuine single-undo-step transaction
    into a running KiCad. The hard part is binding an in-memory document to a file digest;
-   [the research note](../research/safe-apply-references.md) lays out the constraints.
-6. **Open-baseline comparison ([#65](https://github.com/seunghyukchoe/copper-mcp/issues/65))**
+   [the research note](../research/safe-apply-references.md) lays out the constraints. Since this
+   section was last written the park case has grown stronger, not weaker: B-138 observed a real
+   editor and found the default MCP path refusing it on API version, and ADR-0129 now binds live
+   IPC to a declared major-version window with acceptances structurally distinct from proofs.
+   The mutation itself still waits on adversarial review, and the operator's park decision stands.
+   The adjacent file-backed halves of M3 have both shipped.
+6. **Advance #91 through its surrogate half, not its sign-off half.**
+   [ADR-0128](../adr/0128-private-surrogate-ranking-is-bounded-and-never-signs-off.md) lands the
+   private, direct-import-only deterministic ranking seam: fixed integer scoring under
+   32-candidate and 16,384-vertex ceilings, redacted advisory output, ranking only and never
+   approval. DFM sign-off remains the coordinator-owned repeated-DRC path and means "KiCad DRC
+   found nothing", which is narrower than manufacturable (R-174); SI, PI and thermal have no
+   adapter and no authority, so they stay unregistered non-claims.
+7. **Open-baseline comparison ([#65](https://github.com/seunghyukchoe/copper-mcp/issues/65))**
    remains unmeasured: FreeRouting is GPL-3.0 and absent from the recording environment, and every
-   baseline is recorded `not_run` rather than estimated.
-7. **Deferred quality items**: durable single-layer and live routing jobs, the `PlacementBackend`
+   baseline is recorded `not_run` rather than estimated. Note the tracker now carries this as
+   [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53), the contained causal comparison
+   provider, which is operator-blocked rather than agent-executable.
+8. **Deferred quality items**: durable single-layer and live routing jobs, the `PlacementBackend`
    solver seam, and higher-degree RSMT-guided topology behind the existing `ordering_policy` seam.
 
 ---
@@ -413,7 +434,7 @@ src/copper_mcp/
   zone_fill.py, kicad_cli.py           fill authority, bounded KiCad execution
 docs/
   README.md                            documentation index; start here
-  adr/                                 ADR-0001 … ADR-0104, the decision record
+  adr/                                 ADR-0001 … ADR-0129, the decision record
   mutants/                             committed mutation specs; a claim without one is prose
   architecture/                        overview, board-ir, circuit-intent, routing-baseline,
                                        mcp-api, security-model
@@ -431,8 +452,9 @@ Read in this order to get oriented: `README.md`, `AGENTS.md`,
 [`architecture/board-ir.md`](../architecture/board-ir.md),
 [`architecture/routing-baseline.md`](../architecture/routing-baseline.md), then
 [the ADR index](../adr/README.md) — the recent arcs are
-[ADR-0094](../adr/0094-root-board-properties-as-metadata.md) onward, which is where the whole
-`0.8.0` line lives.
+[ADR-0124](../adr/0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md) onward (outline arcs,
+stray copper, multi-pin negotiation and repair, authoritative signoff, refusal classification,
+setup/footprint acceptance), which is where the whole `0.11.0`–`0.12.0` line lives.
 
 ---
 
