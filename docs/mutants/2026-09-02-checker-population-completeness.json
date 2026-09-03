@@ -1,0 +1,81 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "PC1-the-population-reverts-to-tracked-only",
+      "file": "scripts/check_doc_links.py",
+      "anchor": "    untracked = _list_markdown(\"--others\", \"--exclude-standard\")\n",
+      "replacement": "    untracked: list[str] = []\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_doc_links.py::test_the_tracked_only_population_is_the_one_that_could_pass_vacuously",
+        "tests/test_check_doc_links.py::test_an_untracked_markdown_file_with_a_broken_link_cannot_produce_a_green_run",
+        "tests/test_check_doc_links.py::test_reading_an_untracked_file_is_announced_by_name_rather_than_widened_silently"
+      ]
+    },
+    {
+      "id": "PC2-the-widening-becomes-silent-again",
+      "file": "scripts/check_doc_links.py",
+      "anchor": "    if population.untracked:\n",
+      "replacement": "    if False:\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_doc_links.py::test_reading_an_untracked_file_is_announced_by_name_rather_than_widened_silently"
+      ]
+    },
+    {
+      "id": "PC3-the-untracked-sweep-stops-honouring-gitignore",
+      "file": "scripts/check_doc_links.py",
+      "anchor": "    untracked = _list_markdown(\"--others\", \"--exclude-standard\")\n    tracked_present: list[str] = []\n",
+      "replacement": "    untracked = _list_markdown(\"--others\")\n    tracked_present: list[str] = []\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_doc_links.py::test_an_ignored_markdown_file_is_not_swept_into_the_population"
+      ]
+    },
+    {
+      "id": "PC4-the-sweep-loses-its-markdown-pathspec",
+      "file": "scripts/check_doc_links.py",
+      "anchor": "        [git, \"ls-files\", \"-z\", *arguments, \"--\", \"*.md\"],\n",
+      "replacement": "        [git, \"ls-files\", \"-z\", *arguments],\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_doc_links.py::test_a_scratch_file_of_another_kind_is_never_read"
+      ]
+    },
+    {
+      "id": "PC5-a-tracked-path-nobody-read-is-counted-as-read",
+      "file": "scripts/check_doc_links.py",
+      "anchor": "        (tracked_present if (ROOT / name).is_file() else absent).append(name)\n",
+      "replacement": "        tracked_present.append(name)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_doc_links.py::test_a_tracked_path_absent_from_the_working_tree_is_named_rather_than_dropped"
+      ]
+    },
+    {
+      "id": "PC6-an-unreadable-document-is-skipped-instead-of-reported",
+      "file": "scripts/check_doc_links.py",
+      "anchor": "        failures.append(f\"{relative}: cannot be read as UTF-8 Markdown ({error})\")\n        return\n",
+      "replacement": "        return\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_doc_links.py::test_a_markdown_file_that_cannot_be_read_is_a_failure_not_a_skip"
+      ]
+    },
+    {
+      "id": "PC7-the-printed-count-goes-back-to-the-tracked-set",
+      "file": "scripts/check_doc_links.py",
+      "anchor": "        f\"Documentation link check passed ({len(population.checked)} Markdown files read: \"\n",
+      "replacement": "        f\"Documentation link check passed ({len(population.tracked_present)} Markdown files read: \"\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_check_doc_links.py::test_the_printed_count_reconciles_with_the_markdown_that_exists_on_disk"
+      ]
+    }
+  ]
+}

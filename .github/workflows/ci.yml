@@ -18,13 +18,29 @@ jobs:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     # 120 minutes, calibrated rather than chosen. The slowest recorded hosted leg of this job is
-    # 2,178 s (36m18s, Python 3.12), so the half rule -- a budget is at least twice the longest
-    # recorded duration -- needs 73 minutes and this is 120. The measurements are in
-    # `.github/ci-budget-calibration.json` and `scripts/check_ci_budgets.py` enforces the rule; do
-    # not move this number without re-recording that file. This job had no budget at all until
-    # now, which is not the same as having a generous one: an unbounded job cannot be cancelled by
-    # a ceiling, but it also cannot tell anyone the suite has grown.
+    # 2,745 s (45m45s, Python 3.12, run 33639322391) under four xdist workers, so the half rule
+    # -- a budget is at least twice the longest recorded duration -- needs 91.50 minutes and this
+    # is 120. The margin is 28.50 minutes, restored from the 9.93 it had reached: the serial leg
+    # had grown 2,178 s -> 2,311 s -> 2,332 s -> 3,302 s across the 0.9.0 through 0.12.0 cuts, and
+    # running the step on four workers rather than one is what bought the room back. **The
+    # durations recorded from this change on measure a parallel suite and are not comparable with
+    # the serial ones before it**; the budget itself is deliberately unchanged, because a ceiling
+    # that follows the gate down stops being able to report the next growth. The numbers above are
+    # a transcription and go stale on their own; `.github/ci-budget-calibration.json` is the
+    # authority and `scripts/check_ci_budgets.py` enforces the rule against it, so re-read that
+    # file rather than trusting this comment, and do not move this number without re-recording it.
+    # This job had no budget at all before #184, which is not the same as having a generous one: an
+    # unbounded job cannot be cancelled by a ceiling, but it also cannot tell anyone the suite has
+    # grown.
     timeout-minutes: 120
+    # Hypothesis generation is pinned to one fixed example stream on the hosted runner only
+    # (#255). A coverage gate cannot tell "a test was lost" from "the dice rolled differently"
+    # while generation is random, so CI derandomizes; local runs keep the default profile and
+    # stay able to stumble onto a counterexample this fixed stream will never reach. Job-level
+    # rather than step-level so it covers every step that runs Python, and so a step's own
+    # `env:` block can be edited without silently dropping it.
+    env:
+      HYPOTHESIS_PROFILE: deterministic-ci
     strategy:
       fail-fast: false
       matrix:
@@ -62,16 +78,34 @@ jobs:
         run: python -m ruff check .
       - name: Type check
         run: python -m mypy src
+      # `-n 4` is the runner, not a guess: a standard GitHub-hosted `ubuntu-latest` runner has four
+      # vCPUs. Nothing in an archived run log said so -- the log records the image and the agent but
+      # never the core count -- so the step below records it, and a runner-spec change becomes a
+      # visible line rather than a silent mismatch with this number.
+      #
+      # `--dist loadfile` and not `loadscope`/`load`: the expensive fixtures here are module-scoped
+      # and each takes hundreds of seconds, so distributing anything finer than a file would run
+      # them once per worker and make the suite slower. Measured serially with `--durations=0`,
+      # 98.8% of a 2,179 s local run is attributable to tests and the longest single *file* is
+      # `tests/test_benchmark_negotiated_multipin_branch_repair.py` at 610.2 s. That file is the
+      # ceiling: no worker count divides it, so the best achievable speed-up at any `-n` is 3.53x
+      # and `-n 8` buys nothing over `-n 4`. Raising the ceiling means making that file's
+      # `fresh_report` fixture cheaper, which is a separate change to the benchmark, not to this
+      # workflow.
+      - name: Record runner CPU count
+        run: nproc
       - name: Unit tests
         env:
           COPPER_MCP_DEFAULT_BRANCH_REF: ${{ github.event.pull_request.base.sha || format('refs/remotes/origin/{0}', github.event.repository.default_branch) }}
-        run: python -m pytest
+        run: python -m pytest -n 4 --dist loadfile
       - name: Validate metadata and ledgers
         run: python scripts/check_version.py && python scripts/check_ledgers.py
       - name: Validate ADR number allocation
         run: python scripts/check_adr_numbers.py
       - name: Check documentation links
         run: python scripts/check_doc_links.py
+      - name: Check the sdist ships only tracked files
+        run: python scripts/check_sdist_tracked.py
       # Reads every release tag with `git show`, so it depends on the full checkout above.
       - name: Check published schema accepted sets
         run: python scripts/check_schema_sets.py
