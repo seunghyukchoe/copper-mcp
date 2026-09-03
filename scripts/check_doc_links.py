@@ -41,11 +41,24 @@ real link is itself a failure, so an entry cannot be silenced and then quietly
 forgotten, and a newly broken or newly misnamed link still fails until someone
 edits this file and says why.
 
-Untracked Markdown files are refused rather than skipped. The document set comes
-from `git ls-files`, so a brand-new note that has not been staged yet would
-otherwise be excluded from both the judgement and the count it prints -- a green
-run that means nothing about the file it was meant to judge. Such files fail the
-run by name until they are staged (or removed).
+**Which files it looks at.** Every Markdown file the repository has, tracked or
+merely present -- not only the tracked ones. This checker used to enumerate
+`git ls-files "*.md"` alone, which made it capable of passing over a document it
+had never opened: the author's natural order is write the note, run the checker,
+then stage, and until the staging step the note was not in the population at
+all. It happened during v0.12.0's preparation, where this checker reported a
+green 260 files minutes before the full suite failed on two unresolved ADR links
+in a freshly written migration note (#244). An absence is evidence only if the
+observation was capable of reporting a presence, so the population is now the
+working tree.
+
+The widening is scoped and announced rather than silent. Scoped: the untracked
+half is `--others --exclude-standard` under a `*.md` pathspec, exactly as
+`check_secrets.py` scopes its own sweep, so `.gitignore` and
+`.git/info/exclude` still decide what counts as repository content and a scratch
+file of another kind is never read. Announced: `main` names every untracked file
+it read, and every tracked path it could not read, so the count it prints
+reconciles with what exists on disk rather than with what Git happens to track.
 """
 
 from __future__ import annotations
@@ -53,6 +66,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -118,40 +132,84 @@ EXEMPT_LABEL_RECORDS: dict[tuple[str, str, str], str] = {
 }
 
 
-def _tracked_markdown(root: Path = ROOT) -> list[Path]:
-    git = shutil.which("git")
-    if git is None:
-        raise SystemExit("git is required to enumerate tracked Markdown files")
-    result = subprocess.run(  # noqa: S603
-        [git, "ls-files", "-z", "*.md"],
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return [root / name for name in result.stdout.split("\0") if name]
+@dataclass(frozen=True)
+class Population:
+    """The Markdown this run read, and how that reconciles with the working tree.
 
-
-def _untracked_markdown(root: Path = ROOT) -> list[str]:
-    """Markdown files present in the working tree but unknown to Git.
-
-    A checker that reports over tracked files alone passes vacuously on a
-    document the author just wrote but has not staged yet: the count it prints
-    silently excludes the one file the run was meant to judge (#244). The loud
-    answer is to refuse success while such files exist, naming each one,
-    rather than to report "no broken links" over a set that omits them.
+    `checked` is what was actually opened. `tracked_present` and `untracked` are
+    its two halves by Git status, and `absent` names the tracked paths Git lists
+    that no longer exist on disk -- a mid-rename state, reported rather than
+    quietly subtracted from a count that would otherwise overstate the sweep.
     """
+
+    checked: tuple[Path, ...]
+    tracked_present: tuple[str, ...]
+    untracked: tuple[str, ...]
+    absent: tuple[str, ...]
+
+
+def _list_markdown(*arguments: str) -> list[str]:
+    """Run one `git ls-files` sweep under the `*.md` pathspec, in listed order."""
     git = shutil.which("git")
     if git is None:
-        raise SystemExit("git is required to enumerate untracked Markdown files")
+        raise SystemExit("git is required to enumerate this repository's Markdown files")
     result = subprocess.run(  # noqa: S603
-        [git, "ls-files", "--others", "--exclude-standard", "-z", "--", "*.md"],
-        cwd=root,
+        [git, "ls-files", "-z", *arguments, "--", "*.md"],
+        cwd=ROOT,
         check=True,
         capture_output=True,
         text=True,
     )
-    return sorted(name for name in result.stdout.split("\0") if name)
+    seen: dict[str, None] = {}
+    for name in result.stdout.split("\0"):
+        # An unmerged path is listed once per stage; it is still one file.
+        if name:
+            seen.setdefault(name, None)
+    return list(seen)
+
+
+def _repository_markdown() -> Population:
+    """Every Markdown file present in the working tree, tracked or not.
+
+    The untracked half is scoped by `--exclude-standard` and the `*.md`
+    pathspec, so an ignored directory and a scratch file of another kind are
+    both still outside the population. Widening it further would trade one
+    unsound answer for a noisy one.
+    """
+    tracked = _list_markdown()
+    untracked = _list_markdown("--others", "--exclude-standard")
+    tracked_present: list[str] = []
+    absent: list[str] = []
+    for name in tracked:
+        (tracked_present if (ROOT / name).is_file() else absent).append(name)
+    present_untracked = [name for name in untracked if (ROOT / name).is_file()]
+    checked = tuple(ROOT / name for name in [*tracked_present, *present_untracked])
+    return Population(
+        checked=checked,
+        tracked_present=tuple(tracked_present),
+        untracked=tuple(present_untracked),
+        absent=tuple(absent),
+    )
+
+
+def _population_notes(population: Population) -> list[str]:
+    """Say out loud which files were read beyond the tracked set, and which were not.
+
+    Printed on every run, before the verdict, so neither the widening nor the
+    gap is something a reader has to infer from a count.
+    """
+    notes: list[str] = []
+    if population.untracked:
+        notes.append(
+            f"note: {len(population.untracked)} untracked Markdown file(s) present in the "
+            f"working tree were checked: {', '.join(sorted(population.untracked))}"
+        )
+    if population.absent:
+        notes.append(
+            f"note: {len(population.absent)} tracked Markdown path(s) are absent from the "
+            f"working tree and could not be read: {', '.join(sorted(population.absent))}"
+        )
+    return notes
 
 
 def _strip_code_fences(text: str) -> str:
@@ -251,7 +309,14 @@ def _check_document(
     used_label_exemptions: set[tuple[str, str, str]],
 ) -> None:
     relative = path.relative_to(ROOT).as_posix()
-    text = _strip_code_fences(path.read_text(encoding="utf-8"))
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        # A document that cannot be read is a document whose links were not
+        # checked. Skipping it would put this checker back where #244 found it.
+        failures.append(f"{relative}: cannot be read as UTF-8 Markdown ({error})")
+        return
+    text = _strip_code_fences(source)
     for label, raw in _links(text):
         target = raw.strip()
         if target.startswith("<") and target.endswith(">"):
@@ -286,15 +351,11 @@ def main() -> int:
     failures: list[str] = []
     used_exemptions: set[tuple[str, str]] = set()
     used_label_exemptions: set[tuple[str, str, str]] = set()
-    documents = _tracked_markdown()
-    for path in documents:
-        if path.is_file():
-            _check_document(path, failures, used_exemptions, used_label_exemptions)
-    for name in _untracked_markdown():
-        failures.append(
-            f"{name}: untracked Markdown file was not checked; stage it and re-run "
-            "so the link check judges what exists rather than what is tracked"
-        )
+    population = _repository_markdown()
+    for note in _population_notes(population):
+        print(note)
+    for path in population.checked:
+        _check_document(path, failures, used_exemptions, used_label_exemptions)
     for key in sorted(set(EXEMPT_TARGETS) - used_exemptions):
         document, target = key
         failures.append(
@@ -310,7 +371,8 @@ def main() -> int:
     if failures:
         raise SystemExit("Documentation link check failed:\n- " + "\n- ".join(failures))
     print(
-        f"Documentation link check passed ({len(documents)} Markdown files; "
+        f"Documentation link check passed ({len(population.checked)} Markdown files read: "
+        f"{len(population.tracked_present)} tracked, {len(population.untracked)} untracked; "
         f"recorded ledger-history exemptions: {len(EXEMPT_TARGETS)} target, "
         f"{len(EXEMPT_LABEL_RECORDS)} label)."
     )

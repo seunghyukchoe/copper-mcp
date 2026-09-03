@@ -110,25 +110,41 @@ All notable changes are documented here. The format follows
   would stop the squash commit from carrying the bound bytes. The exact prior report and
   commitment bytes remain under `benchmarks/results/routing/archive/`; they validate their own
   digests offline but are deliberately not accepted as the current canonical pair. The corrected
-  record   passes **190/190** focused tests and **78/78** evidence-contract mutants (`D-241`,
+  record passes **190/190** focused tests and **78/78** evidence-contract mutants (`D-241`,
   `B-141`, `ADR-0127`).
+- `scripts/check_doc_links.py` no longer passes over Markdown it never opened. Its population was
+  `git ls-files "*.md"`, so a document written but not yet staged was not checked at all: the
+  checker reported **261** files, and the same **261**, with and without an untracked note carrying
+  an unresolvable link planted beside them. That is an absence that was never capable of reporting
+  a presence, and it went green during v0.12.0's preparation minutes before the full suite failed
+  on two unresolved ADR links in a freshly written migration note. The population is now the
+  working tree: tracked Markdown plus `git ls-files --others --exclude-standard` under a `*.md`
+  pathspec, the same scoping `scripts/check_secrets.py` already uses, so `.gitignore` and
+  `.git/info/exclude` still decide what counts as repository content and a scratch file of another
+  kind is never read. The widening is announced rather than silent — every untracked file that was
+  read is named on stdout — and the printed count now reconciles with what is on disk: it counts
+  files actually read, names any tracked path that is absent from the working tree, and treats a
+  Markdown file that cannot be decoded as a failure rather than a skip. Every other repository-wide
+  checker was audited for the same shape and none was found: `check_adr_numbers`, `check_ledgers`,
+  `check_schema_sets`, `check_drc_comparability`, `check_ci_budgets` and the mutation-anchor sweep
+  all walk the filesystem already, `check_secrets` already includes untracked files, and
+  `check_audio_benchmarks`, `check_circuit_intents` and `check_version` are manifest- or
+  artifact-driven rather than population walks. (D-239, R-190, issue #244)
 
-- `scripts/check_doc_links.py` refuses while untracked Markdown exists, naming each
-  file, instead of reporting over the tracked set alone (issue #244, `D-245`, `R-189`).
 - A new `scripts/check_sdist_tracked.py` gate, wired into `make lint`, refuses when
   untracked non-ignored files exist under the sdist allowlist directories, so a
   scratch note can no longer sail into the release tarball unnoticed (issue #256,
-  `D-245`, `R-189`).
+  `D-246`, `R-192`).
 - Hypothesis generation is deterministic under a `derandomize`d `deterministic-ci`
   profile loaded from `tests/conftest.py`, and the two `sexpr.py` syntax-error
   refusal paths coverage reached only by chance now carry deterministic examples
-  (issue #255, `D-245`).
+  (issue #255, `D-246`).
 - The oversized-child process test asserts the kill guarantee over either kill
   reason instead of pinning which guard wins a scheduler-latency race (issue #253,
-  `D-245`).
+  `D-246`).
 - `docs/releasing.md` records the rule for commit-bound benchmark artifacts: bind a
   revision already on the default branch, since squash-merge discards branch commits
-  and linear history forbids merge commits (issue #250, `D-245`, `R-189`, `D-241`).
+  and linear history forbids merge commits (issue #250, `D-246`, `R-192`, `D-241`).
 
 ## [0.12.0] - 2026-09-01
 
