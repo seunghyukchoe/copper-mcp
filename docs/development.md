@@ -65,6 +65,28 @@ adversarial review lost 27 false failures to exactly this before spotting it. Al
 a brand-new test fails with a `ModuleNotFoundError`, `AttributeError`, or an assertion about a
 field that plainly exists in your diff, check this first.
 
+### CI runs the suite on four workers; `make test` does not
+
+The hosted `Unit tests` step runs `python -m pytest -n 4 --dist loadfile`. Four because a standard
+GitHub-hosted `ubuntu-latest` runner has four vCPUs, and `loadfile` because the two most expensive
+modules in this suite hang their whole cost on **module-scoped** fixtures that rebuild a benchmark
+report from scratch: anything finer than a file would rebuild them once per worker and make the
+suite slower, not faster.
+
+`make test` is deliberately left serial. `-n 4` is a claim about the hosted runner, not about your
+laptop, and the number that is right for CI is not automatically right anywhere else — pass `-n`
+yourself if you want it. What this does mean is that **CI is now the first place a test's hidden
+ordering or shared-state dependency will show up**, because workers run four files at once in an
+order no serial run produces. If a test passes locally and fails only hosted, suspect that before
+suspecting the runner.
+
+The ceiling is worth knowing before you try to raise it. Measured serially with `--durations=0`,
+98.8% of the run is attributable to tests, and the longest single *file* —
+`tests/test_benchmark_negotiated_multipin_branch_repair.py`, at 610.2 s of a 2,179 s local run —
+is 28.3% of the total on its own. No scheduler splits a file, so **3.53x is the best any worker
+count can do** and `-n 8` buys nothing over `-n 4`. Going faster than that means making that
+module's `fresh_report` fixture cheaper, not adding workers.
+
 Tests should not require network access or proprietary boards. GPU and KiCad integration tests must
 be separately marked and have deterministic CPU or fixture-based coverage where practical.
 
@@ -175,6 +197,13 @@ and in CI. To change a budget:
    `conclusion` alongside its duration. Every recorded observation binds, not only the newest, so a
    slow run cannot be retired by appending a fast one.
 3. Set the budget and run `python scripts/check_ci_budgets.py`.
+
+"Every recorded observation binds" is a rule about *runs*, not about history. When the job itself
+changes shape — the `Unit tests` step going from one process to four xdist workers is the worked
+example — the old durations stop being observations of the job that now exists, and step 2 replaces
+them rather than keeping the slowest. Say so in the entry's `note`, keep the retired figure in prose
+so the comparison survives, and do not let the ceiling follow the gate down: a budget that shrinks
+with every speed-up loses the only thing it was for, which is reporting the next growth.
 
 Only a run whose `conclusion` is `success` calibrates a budget. A failed or cancelled run stopped
 early, so its duration bounds the work from below rather than measuring it — recording a two-minute
