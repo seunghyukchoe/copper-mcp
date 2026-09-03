@@ -33,6 +33,14 @@ EXPECTED_ARTIFACT = (
     benchmark.ROOT
     / "benchmarks/results/routing/2026-08-30-negotiated-multipin-branch-repair-v1.json"
 )
+ARCHIVED_ARTIFACT = (
+    benchmark.ROOT / "benchmarks/results/routing/archive/"
+    "2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.json"
+)
+ARCHIVED_COMMITMENT = (
+    benchmark.ROOT / "benchmarks/results/routing/archive/"
+    "2026-08-30-negotiated-multipin-branch-repair-v1-b7c71d4d.commitment.json"
+)
 EXPECTED_POPULATION = {
     "boards_offered": 20,
     "boards_imported": 20,
@@ -2994,3 +3002,143 @@ def test_load_artifact_never_downgrades_for_an_absent_commit(
         benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
     ):
         benchmark.load_artifact()
+
+
+# --- The squash-merge orphan class -----------------------------------------------------------
+
+
+def test_published_artifact_records_a_default_branch_ancestor() -> None:
+    """The durable rule, mechanized: a recorded revision that no clone carries is not provenance.
+
+    A pull request may publish its artifact from a feature-branch commit that squash-merging will
+    discard.  The synthetic merge ``HEAD`` still contains that commit, so it cannot prove durable
+    provenance.  Hosted CI therefore injects the exact pull-request base.  Outside that configured
+    environment this repository-only assertion skips instead of guessing a stale local branch or
+    requiring a particular remote name.
+    """
+
+    document = _artifact()
+    recorded = document["source_commit"]
+    configured_ref = os.environ.get("COPPER_MCP_DEFAULT_BRANCH_REF")
+    if configured_ref is None:
+        pytest.skip("configure COPPER_MCP_DEFAULT_BRANCH_REF to check default-branch ancestry")
+    git = shutil.which("git")
+    if git is None:
+        pytest.fail("git is required to check the configured default-branch ancestry")
+    default_branch_probe = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+        [git, "rev-parse", "--verify", f"{configured_ref}^{{commit}}"],
+        cwd=benchmark.ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if default_branch_probe.returncode != 0:
+        pytest.fail("the configured default-branch ref is unavailable")
+    ancestry = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+        [git, "merge-base", "--is-ancestor", recorded, configured_ref],
+        cwd=benchmark.ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert ancestry.returncode == 0, (
+        "the recorded B-141 source commit exists only outside the configured default-branch "
+        "ancestry. "
+        "Republish the artifact against a commit carried by the default branch; see the B-141 "
+        "amendment in docs/ledgers/benchmark-ledger.md."
+    )
+
+
+def test_orphaned_publication_is_archived_without_becoming_canonical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Preserve the retired bytes for audit without weakening the authoritative loader."""
+
+    report_bytes = ARCHIVED_ARTIFACT.read_bytes()
+    commitment_bytes = ARCHIVED_COMMITMENT.read_bytes()
+    assert hashlib.sha256(report_bytes).hexdigest() == (
+        "ff2bcd77814e3818a896eb2813b66def45997487301ec8954cd7614d7affc81c"
+    )
+    assert hashlib.sha256(commitment_bytes).hexdigest() == (
+        "129be265f95519db1bb7a5856ad1323d0b57ed0fc180a9bbe6161957b83696d9"
+    )
+
+    report = json.loads(report_bytes)
+    commitment = json.loads(commitment_bytes)
+    assert benchmark.validate_report(report) == benchmark.GUARANTEE_OFFLINE
+    benchmark.validate_commitment(commitment)
+    assert report["source_commit"] == "b7c71d4d643df155c7bdcee5bac25e7d943b7031"
+    assert report["run_id"] == (
+        "sha256:bb73a925b00506e4c5305bd2fe0136f4d501f7351d1b78d8b8552b010cf06fe3"
+    )
+    assert report["timing"]["mean_wall_seconds"] == {
+        "control": 40.574,
+        "treatment": 41.039,
+    }
+    assert commitment["artifact_sha256"] == "sha256:" + hashlib.sha256(report_bytes).hexdigest()
+    assert commitment["artifact_run_id"] == report["run_id"]
+    assert commitment["run_id"] == (
+        "sha256:3633c0b6a1fa362d30572311968e56539cec455e39f1ddf687547592da79e397"
+    )
+    assert not _nested_keys(report).intersection(benchmark.FORBIDDEN_PUBLIC_KEYS)
+
+    current = _artifact()
+    assert current["source_commit"] == "86634180e5a3f0956cf2ede4168710f1fce8fbcb"
+    assert current["run_id"] != report["run_id"]
+    monkeypatch.setattr(
+        benchmark,
+        "_validate_source_commit_runner_binding",
+        lambda _document, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        benchmark,
+        "_validate_evidence_date_binding",
+        lambda _document, **_kwargs: True,
+    )
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError,
+        match=re.escape("the B-141 commitment artifact path is malformed"),
+    ):
+        benchmark.load_artifact(ARCHIVED_ARTIFACT)
+
+
+def test_a_squash_orphaned_source_commit_stays_fail_closed_even_though_the_runner_survives() -> (
+    None
+):
+    """A squash keeps the runner blob and discards the commit; content is not revision provenance.
+
+    This is the situation a squash actually produces, reconstructed: the recorded revision is
+    unreachable while the exact runner bytes it bound are still present in this repository.  The
+    design deliberately does not treat that as `repository_bound` -- the artifact claims it was
+    produced at a named revision, and no clone can check that claim, so certifying it green is the
+    failure this benchmark exists to refuse.  It refuses, and downgrades only when asked.
+    """
+
+    document = _artifact()
+    live_runner = document["configuration"]["runner_sha256"]
+    document["source_commit"] = "0" * 40
+    _retag_document(document)
+
+    # The runner bytes the orphaned revision bound are still here: a squash preserves file
+    # content.  Content survival is what makes this case tempting to wave through.
+    assert benchmark._file_digest(benchmark.ROOT / benchmark.SCRIPT_PATH) == live_runner
+    assert benchmark._resolve_recorded_commit(document["source_commit"]) is None
+
+    # Offline, the document is entirely self-consistent and says so.
+    assert benchmark.validate_report(document) == benchmark.GUARANTEE_OFFLINE
+
+    # Consulting the repository refuses, naming absence rather than alleging a disagreement.
+    with pytest.raises(
+        benchmark.NegotiatedDifferentialError, match=re.escape(benchmark._COMMIT_ABSENT_ERROR)
+    ):
+        benchmark.validate_report(document, verify_live_bindings=True)
+
+    # And a caller that knowingly accepts the weaker claim is told exactly what it got.
+    assert (
+        benchmark.validate_report(
+            document, verify_live_bindings=True, allow_absent_source_commit=True
+        )
+        == benchmark.GUARANTEE_OFFLINE
+    )

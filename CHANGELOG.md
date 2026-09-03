@@ -6,25 +6,129 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The live KiCad IPC surfaces now bind to a **declared major-version compatibility window**
+  instead of consuming `kicad-python`'s `check_version()` boolean, and an acceptance is
+  structurally distinguishable from a proof. `B-138` measured three of four live surfaces
+  refusing a real KiCad 10.0.5 editor; reading the binding's source found the other half, which
+  is that `check_version()` is **asymmetric** — it raises only for a strictly newer editor and
+  returns `True` for every older one, so the shipped surface refused a KiCad one patch ahead of
+  its binding while silently reporting `compatible` for one two majors behind it. The window is
+  the major version because that is where KiCad's own guarantees lapse: within a major, new
+  releases "will not modify the meaning of existing messages and fields" and deprecated fields
+  survive at least one major. `compatible` now means an **exact** `major.minor.patch` match and
+  nothing weaker, because KiCad annotates added API fields `// Since: 9.0.1` and ships new IPC
+  commands in patch releases. Inside the window every pair is observed and typed
+  `future_api_unverified` or `legacy_api_unverified`; across a major boundary the surface refuses
+  and names both versions. Read surfaces accept all three verdicts; **live apply requires a
+  verified binding** and refuses both acceptances. `allow_future_api` is **retired** rather than
+  re-defaulted — it was the direct cause of `inspect_live_editor_context` refusing an editor
+  `inspect_live_board` could observe, and removing it makes that bug class impossible. A
+  capability probe was refused on measurement: KiCad's command protos carry no feature-discovery
+  message, and `kipy` collapses the status codes that would substitute for one
+  (`ADR-0129`, `D-242`, `R-188`, `B-138`, issue #68).
+- `object_counts["nets"]` on the live observation is renamed **`net_declarations`**. It counts
+  top-level `(net …)` declarations, which a KiCad 10 document does not carry — `B-138` measured
+  it reporting `0` against an editor holding 15 nets. The count was always correct and its name
+  was not. **No derived cardinality replaces it**: counting distinct net names off item
+  references would be an unverified parity claim against `Board.get_nets()`. Board IR's own
+  `object_counts["nets"]` is a genuine net collection and is unchanged (`ADR-0129`, `D-242`).
+- CI's `Unit tests` step now runs `python -m pytest -n 4 --dist loadfile` instead of a single
+  process, and `pytest-xdist>=3.8,<4` joins the `dev` extra. Four workers because a hosted
+  `ubuntu-latest` runner reports four vCPUs -- recorded by a new `Record runner CPU count` step
+  rather than cited from documentation, because no archived hosted log in this repository carried
+  the core count. `--dist loadfile` because this suite's cost sits in module-scoped fixtures that
+  anything finer would rebuild once per worker. **The hosted speed-up is 1.23x, not the 3.22x-3.31x
+  measured locally**: the prediction was `serial x 0.2833` and the measurement was `serial x 0.814`,
+  a 2.87x undershoot, because the local host has twelve cores and the runner has four, so four
+  workers that each owned a core locally saturate every vCPU hosted. The worst `ci.yml:test` job leg
+  moves from 3,302 s to 2,745 s, widening the half-rule margin from 9.93 to 28.50 minutes;
+  `timeout-minutes: 120` is deliberately unchanged so the ceiling can still report the next growth.
+  Coverage stays on all three matrix legs and `make test` stays serial. `-n 4` is accepted as better
+  than serial rather than as optimal -- the predeclared hosted `-n 2` comparison was not run. The
+  ceiling on any worker count is one 610 s file, and raising it is a separate change. See B-143 and
+  D-244.
+
+### Added
+
+- Added the private, direct-import-only surrogate-ranking slice for issue #91. It accepts only
+  immutable, revision-bound route candidates, applies fixed integer scoring under 32-candidate and
+  16,384-vertex ceilings, and returns redacted deterministic advisory rankings. Candidates must
+  share the full comparison context and are refused as `incomparable_candidates` otherwise; the
+  accepted output includes a separate `comparison_digest` because legacy candidate IDs omit some
+  settings. The final focused suite is 62 passed and the official mutation result is 23/23 killed.
+  It has no MCP, CLI,
+  apply, persistence, backend, or sign-off surface; DFM authority remains the coordinator-owned
+  repeated KiCad DRC path, while SI, PI, and thermal remain unregistered. See ADR-0128, D-237,
+  R-187, and SEC-174. Issue #91 remains open.
+
+- Live observations and the live editor context now publish
+  **`document_binding: in_memory_unsaved_state_unobservable`**, stating that `board_digest` binds
+  KiCad's in-memory document and never a file on disk. It is deliberately **not** a dirty flag —
+  `kipy` 0.7.1's `Board` exposes no modified state, so a save-state field would be fabricated —
+  and it makes `ADR-0074`'s existing refusal to bind a live read to the on-disk file legible to a
+  caller. `B-138` measured the gap it names: 165,571 live bytes against 166,070 on disk
+  (`ADR-0129`, `D-242`).
+- The live editor context now publishes `kicad_version`, `api_version` and `compatibility`,
+  which it previously computed and discarded. **Three** live schema versions move to `0.2.0`
+  under `ADR-0105`'s accepted-set rule: the live observation, the live editor context, and
+  the capability oracle. The oracle is included because it *republishes* the observation's
+  verdict — under `0.1.0` that field could only be `null` or `compatible`, since the oracle
+  passed no future-API override and a drifted editor was caught into a `refused` result, so
+  a consumer pinned to `0.1.0` would otherwise receive values that version never promised.
+  Neither contract has a published JSON schema, so the freeze is a recorded accepted set
+  (`LIVE_IPC_ORACLE_COMPATIBILITY_0_1_0`) rather than frozen bytes, and no
+  `check_schema_sets` exemption is declared because that gate governs `schemas/**/*.json`
+  only (`ADR-0129`, `ADR-0105`, `D-242`).
+
 ### Fixed
 
+- B-141's committed artifact is rebound to the squash-merge commit
+  `86634180e5a3f0956cf2ede4168710f1fce8fbcb` that the default branch carries, replacing the
+  branch commit `b7c71d4d643df155c7bdcee5bac25e7d943b7031` that squash-merging discarded. In
+  any fresh clone of main the artifact refused to load, naming its recorded source commit as
+  absent -- the correct verdict about an incorrect recorded value, and the v0.5.0 orphaned-SHA
+  class recurring. Binding the tree instead was considered and refuted by measurement: the
+  branch and squash trees differ because main advanced between publication and merge, so a
+  squash preserves file content but not the tree. Accepting content-only provenance as
+  `repository_bound` was rejected as certifying a claim no clone can check; `load_artifact`
+  stays fail-closed. A clean replay reproduced the pinned whole-metrics digest
+  `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly, while
+  freshly observing descriptive mean timings of **39.224s** control and **40.042s** treatment;
+  the semantic result is unchanged, but this is a new measurement record rather than a
+  byte-only re-signing. The runner file is byte-identical to the one the squash commit carries.
+  Hosted CI injects the exact pull-request base into a new ancestry test, so a pull request that
+  binds a feature-branch-only commit is refused before squash-merging without requiring every
+  local checkout to have a remote named `origin` or to trust a possibly stale local branch.
+  Unconfigured source snapshots skip this repository-only assertion. `main`
+  sets `required_linear_history=true`, so no merge strategy this repository allows preserves
+  a branch commit's SHA -- an artifact cannot bind its own revision and survive its own
+  merge, and this fix binds a commit already on the default branch rather than any of its
+  own. The structural successor, binding the runner blob that every strategy preserves, is a
+  separate change: implementing it edits the runner and moves `runner_sha256`, which is what
+  would stop the squash commit from carrying the bound bytes. The exact prior report and
+  commitment bytes remain under `benchmarks/results/routing/archive/`; they validate their own
+  digests offline but are deliberately not accepted as the current canonical pair. The corrected
+  record   passes **190/190** focused tests and **78/78** evidence-contract mutants (`D-241`,
+  `B-141`, `ADR-0127`).
+
 - `scripts/check_doc_links.py` refuses while untracked Markdown exists, naming each
-  file, instead of reporting over the tracked set alone (issue #244, `D-237`, `R-187`).
+  file, instead of reporting over the tracked set alone (issue #244, `D-245`, `R-189`).
 - A new `scripts/check_sdist_tracked.py` gate, wired into `make lint`, refuses when
   untracked non-ignored files exist under the sdist allowlist directories, so a
   scratch note can no longer sail into the release tarball unnoticed (issue #256,
-  `D-237`, `R-187`).
+  `D-245`, `R-189`).
 - Hypothesis generation is deterministic under a `derandomize`d `deterministic-ci`
   profile loaded from `tests/conftest.py`, and the two `sexpr.py` syntax-error
   refusal paths coverage reached only by chance now carry deterministic examples
-  (issue #255, `D-237`).
+  (issue #255, `D-245`).
 - The oversized-child process test asserts the kill guarantee over either kill
   reason instead of pinning which guard wins a scheduler-latency race (issue #253,
-  `D-237`).
-- `docs/releasing.md` records the standing rule for commit-bound benchmark
-  artifacts: merge-commit, not squash, or plan the post-merge republish before
-  merging (issue #250, `D-237`, `R-187`). The B-141 republish itself stays bound
-  to a fresh benchmark rerun.
+  `D-245`).
+- `docs/releasing.md` records the rule for commit-bound benchmark artifacts: bind a
+  revision already on the default branch, since squash-merge discards branch commits
+  and linear history forbids merge commits (issue #250, `D-245`, `R-189`, `D-241`).
 
 ## [0.12.0] - 2026-09-01
 
