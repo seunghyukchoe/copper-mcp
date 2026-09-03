@@ -131,20 +131,30 @@ All notable changes are documented here. The format follows
   `check_audio_benchmarks`, `check_circuit_intents` and `check_version` are manifest- or
   artifact-driven rather than population walks. (D-239, R-190, issue #244)
 
-- A new `scripts/check_sdist_tracked.py` gate, wired into `make lint`, refuses when
-  untracked non-ignored files exist under the sdist allowlist directories, so a
-  scratch note can no longer sail into the release tarball unnoticed (issue #256,
-  `D-246`, `R-192`).
-- Hypothesis generation is deterministic under a `derandomize`d `deterministic-ci`
-  profile loaded from `tests/conftest.py`, and the two `sexpr.py` syntax-error
-  refusal paths coverage reached only by chance now carry deterministic examples
-  (issue #255, `D-246`).
+- A new `scripts/check_sdist_tracked.py` gate, wired into `make lint`, builds the source
+  distribution and refuses when any member is absent from `git ls-files` -- the one
+  exception being the backend-generated `PKG-INFO` -- so a scratch note can no longer
+  sail into the release tarball unnoticed. It observes the artifact rather than modelling
+  it: an earlier draft asked Git for untracked files under the sdist allowlist, which
+  honours `core.excludesFile` and `.git/info/exclude` as well as `.gitignore` while
+  hatchling honours only `.gitignore`, and review packed a file hidden in
+  `$GIT_DIR/info/exclude` into the tarball while that draft printed "passed". The
+  one-time audit of the 0.12.0 sdist found **938** file members, exactly **one** of them
+  untracked and backend-generated (issue #256, `D-246`, `R-192`).
+- Hypothesis generation is deterministic in hosted CI, where a coverage gate needs a
+  comparable number: `tests/conftest.py` registers a `derandomize`d `deterministic-ci`
+  profile and loads whatever `HYPOTHESIS_PROFILE` names, and the workflow sets it on the
+  test job. Local runs keep the default exploratory stream. The two `sexpr.py`
+  syntax-error refusal paths coverage reached only by chance now carry deterministic
+  examples under either profile (issue #255, `D-246`).
 - The oversized-child process test asserts the kill guarantee over either kill
   reason instead of pinning which guard wins a scheduler-latency race (issue #253,
   `D-246`).
-- `docs/releasing.md` records the rule for commit-bound benchmark artifacts: bind a
-  revision already on the default branch, since squash-merge discards branch commits
-  and linear history forbids merge commits (issue #250, `D-246`, `R-192`, `D-241`).
+- `docs/releasing.md` records the rule for commit-bound benchmark artifacts in its own
+  subsection: a branch commit's SHA never survives its own merge, since squash-merge
+  discards branch commits and linear history forbids merge commits, so an artifact must
+  bind something that outlives it -- today a revision already on the default branch
+  (issue #250, `D-246`, `R-192`, `D-241`).
 
 ## [0.12.0] - 2026-09-01
 

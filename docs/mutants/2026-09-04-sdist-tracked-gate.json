@@ -1,0 +1,54 @@
+{
+  "harness": "mutation-harness/1",
+  "pytest_args": [
+    "-q",
+    "--no-cov"
+  ],
+  "mutants": [
+    {
+      "id": "ST1-the-refusal-never-fires",
+      "file": "scripts/check_sdist_tracked.py",
+      "anchor": "    extras = untracked_members(members, _tracked_files(root))\n",
+      "replacement": "    extras: list[str] = []\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_sdist_allowlist.py::test_main_refuses_and_names_the_untracked_member"
+      ]
+    },
+    {
+      "id": "ST2-the-generated-exception-widens-to-every-member",
+      "file": "scripts/check_sdist_tracked.py",
+      "anchor": "    return sorted(name for name in members if name not in generated and name not in tracked)\n",
+      "replacement": "    return sorted(name for name in members if False and name not in tracked)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_sdist_allowlist.py::test_a_member_the_repository_never_recorded_is_named",
+        "tests/test_sdist_allowlist.py::test_the_generated_exception_may_not_widen_into_a_blanket_pass",
+        "tests/test_sdist_allowlist.py::test_main_refuses_and_names_the_untracked_member",
+        "tests/test_sdist_allowlist.py::test_the_built_sdist_names_every_untracked_file_including_one_hidden_by_info_exclude"
+      ]
+    },
+    {
+      "id": "ST3-the-top-level-prefix-is-left-on-every-member",
+      "file": "scripts/check_sdist_tracked.py",
+      "anchor": "    prefix = f\"{roots.pop()}/\"\n    return sorted(name[len(prefix) :] for name in names)\n",
+      "replacement": "    return sorted(names)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_sdist_allowlist.py::test_a_fully_tracked_project_produces_no_findings"
+      ]
+    },
+    {
+      "id": "ST4-the-tracked-comparison-is-dropped",
+      "file": "scripts/check_sdist_tracked.py",
+      "anchor": "    return sorted(name for name in members if name not in generated and name not in tracked)\n",
+      "replacement": "    return sorted(name for name in members if name not in generated)\n",
+      "expectation": "killed",
+      "killing_tests": [
+        "tests/test_sdist_allowlist.py::test_a_tracked_member_is_not_named",
+        "tests/test_sdist_allowlist.py::test_main_returns_zero_when_every_member_is_tracked",
+        "tests/test_sdist_allowlist.py::test_a_fully_tracked_project_produces_no_findings"
+      ]
+    }
+  ]
+}

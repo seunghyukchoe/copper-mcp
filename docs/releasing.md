@@ -40,15 +40,23 @@ then retains the artifacts for 14 days. It cannot attest or publish a GitHub rel
 job is restricted to a pushed `v*.*.*` tag, so reviewing dry-run artifacts does not create a public
 release or a release attestation.
 
+## Commit-bound artifacts and squash merges
+
+A branch commit's SHA never survives its own merge: squash-merge discards branch
+commits and linear history forbids merge commits, so no strategy this repository
+allows preserves one, and an artifact that binds its own revision refuses to load
+from a fresh clone of `main`. Anything a benchmark artifact binds must therefore
+outlive the merge — either a revision already on the default branch, which is the
+mechanism today and which hosted CI's ancestry test enforces by refusing a
+branch-only binding before merge (`D-241`), or the content itself by blob hash,
+which no merge strategy can move (#259). This governs every pull request that
+publishes or republishes such an artifact; that is usually not the release pull
+request, and when it is, plan the republish step before merging rather than after
+discovering the binding is gone (#250, #252).
+
 ## Publish
 
-1. Merge the release pull request to `main`. A pull request that publishes or
-   republishes a commit-bound benchmark artifact must bind a revision already on
-   the default branch: squash-merge discards the branch commit, and linear
-   history forbids merge commits, so no merge strategy preserves a branch
-   commit's SHA. In practice that means a post-merge republish step bound to the
-   landed commit, planned before merging; hosted CI's ancestry test refuses a
-   branch-only binding before merge (#250, #252, `D-241`).
+1. Merge the release pull request to `main`.
 2. Create and push an annotated tag: `git tag -a vX.Y.Z -m "CopperMCP X.Y.Z"`.
 3. The tag-triggered release workflow rebuilds, tests, audits, attests, and creates the GitHub
    release. It builds three artifacts, not two: the wheel, the source distribution, and the KiCad

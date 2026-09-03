@@ -33,6 +33,14 @@ jobs:
     # unbounded job cannot be cancelled by a ceiling, but it also cannot tell anyone the suite has
     # grown.
     timeout-minutes: 120
+    # Hypothesis generation is pinned to one fixed example stream on the hosted runner only
+    # (#255). A coverage gate cannot tell "a test was lost" from "the dice rolled differently"
+    # while generation is random, so CI derandomizes; local runs keep the default profile and
+    # stay able to stumble onto a counterexample this fixed stream will never reach. Job-level
+    # rather than step-level so it covers every step that runs Python, and so a step's own
+    # `env:` block can be edited without silently dropping it.
+    env:
+      HYPOTHESIS_PROFILE: deterministic-ci
     strategy:
       fail-fast: false
       matrix:
