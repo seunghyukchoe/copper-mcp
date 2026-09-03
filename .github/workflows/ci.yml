@@ -96,6 +96,8 @@ jobs:
         run: python scripts/check_adr_numbers.py
       - name: Check documentation links
         run: python scripts/check_doc_links.py
+      - name: Check the sdist ships only tracked files
+        run: python scripts/check_sdist_tracked.py
       # Reads every release tag with `git show`, so it depends on the full checkout above.
       - name: Check published schema accepted sets
         run: python scripts/check_schema_sets.py

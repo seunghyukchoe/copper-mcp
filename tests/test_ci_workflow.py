@@ -75,6 +75,7 @@ LINT_SCRIPTS = frozenset(
         "check_ledgers.py",
         "check_adr_numbers.py",
         "check_doc_links.py",
+        "check_sdist_tracked.py",
         "check_schema_sets.py",
         "check_drc_comparability.py",
         "check_ci_budgets.py",
