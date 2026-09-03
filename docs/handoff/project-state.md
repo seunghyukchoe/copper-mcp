@@ -483,7 +483,7 @@ DRC results, and limitations stated rather than omitted.
 
 Repository discoverability: topics cover `mcp`, `model-context-protocol`, `kicad`, `pcb`,
 `pcb-automation`, `eda`, `autorouter`, `autorouting-research`, `ai-agents`, `llm-tools`,
-`pcb-design`, `open-hardware`, `audio-electronics`, `python`. Releases carry attested artifacts and
+`pcb-design`, `open-hardware`, `audio-electronics`, `python`. Releases carry attested artifacts (every release except `0.7.0`, per the release ledger) and
 a board render. Traction is early — the honest-evidence posture is the differentiator worth
 keeping, since the crowded comparison set (cloud AI autorouters) publishes no peer-reviewed
 evidence at all, and no other KiCad MCP server offers a validated intent contract or retained DRC
