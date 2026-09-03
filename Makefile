@@ -19,6 +19,7 @@ lint:
 	$(PYTHON) scripts/check_ledgers.py
 	$(PYTHON) scripts/check_adr_numbers.py
 	$(PYTHON) scripts/check_doc_links.py
+	$(PYTHON) scripts/check_sdist_tracked.py
 	$(PYTHON) scripts/check_schema_sets.py
 	PYTHONPATH=src $(PYTHON) scripts/check_drc_comparability.py
 	$(PYTHON) scripts/check_ci_budgets.py
