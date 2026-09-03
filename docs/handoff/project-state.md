@@ -16,8 +16,13 @@ here.
 
 ## 1. Where the project stands
 
-**Released:** `v0.1.0` → `v0.12.0`, with attested wheel, sdist, and KiCad PCM
-artifacts. `v0.12.0` was tagged and published on 2026-09-01 from the `Ready`
+**Released:** `v0.1.0` → `v0.12.0`, with provenance that is not uniform across that span.
+Every release except **`0.7.0`** carries a verified build-provenance attestation; `0.7.0` has
+**none** for either asset. A KiCad PCM package and its metadata are release assets only from
+`0.8.0` onward — the ledger records attestation verified for all four assets from `0.9.0`, and
+for the wheel and sdist at `0.8.0`. Which assets an attestation covers varies by release, so
+[the release ledger](../ledgers/release-ledger.md)'s Security column, not this sentence, is the
+authority. `v0.12.0` was tagged and published on 2026-09-01 from the `Ready`
 authorization at `56248fb`, and
 [the `0.12.0` migration notes](../migrations/copper-mcp-0.12.0.md) shipped with it.
 `pyproject.toml` reads `0.12.0`; the next version bump belongs to the next release
@@ -52,6 +57,7 @@ detail; what follows is the shape, not the contract.
 
 | Verb | Tools | What it is bound to |
 |---|---|---|
+| Identify | `server_info` | server name, version, `maturity`, and the implemented/planned capability lists; also published as the `pcb://server/manifest` resource |
 | See (structure) | `inspect_board`, `inspect_board_ir` | counts and digests only, no geometry disclosure |
 | See (semantics) | `observe_board_scene`, `observe_live_board_scene`, `observe_post_placement` | Circuit Scene `0.4.0`, region-scoped, stable ref ids, board text quarantined |
 | See (live editor) | `inspect_live_board`, `inspect_live_editor_context` | read-only local KiCad IPC, operator-gated, redacted |
@@ -95,7 +101,8 @@ describes each milestone as outcomes; **GitHub is the source of truth over both*
 
 **Record ranges.** ADR-0001 … ADR-0129, next unused **0130**; five numbers (0027, 0082, 0083, 0085,
 0086) are spent and never recycled. Ledgers: `D-244`, `R-188`, `SEC-174`, `B-143` are the highest
-allocated. Allocate in the pull request that lands the entry, never before, per
+allocated (`B-109` was declined under rule 4 and is spent). Allocate in the pull request that
+lands the entry, never before, per
 [the ID convention](../ledgers/README.md) — and read the two checkers' own output
 (`scripts/check_adr_numbers.py`, `scripts/check_ledgers.py`) rather than this paragraph, which is
 one release away from being wrong by construction.
@@ -191,13 +198,12 @@ worse than none, because it will be ignored.
 
 ## 4. Standing systems left running
 
-- **Codex review remediation routine** — a cloud agent (`trig_01WkyDsdY8wmEfu1Pm2WwtfP`, every two
-  hours, Opus 5, no connectors) polls open PRs for unaddressed `chatgpt-codex-connector[bot]`
-  comments, triages against current branch code, fixes real findings with regression tests, runs
-  the non-KiCad gate, pushes, and replies with Fixed/Refuted/Superseded. Manage or disable it at
-  <https://claude.ai/code/routines/trig_01WkyDsdY8wmEfu1Pm2WwtfP>. It cannot claim KiCad-verified
-  results — the cloud sandbox has no KiCad, and its prompt says so. **Known gap:** it only sees
-  open PRs, so comments landing after a merge need a manual sweep.
+- **Codex review per pull request** — reviews arrive on each pull request from the GitHub
+  `chatgpt-codex-connector`, and remediation is done per PR by the lane agent that owns it:
+  triage each finding against the current branch code, fix the real ones with regression tests,
+  run the gate, push, and reply with Fixed/Refuted/Superseded. There is **no standing cloud
+  remediation routine**; the one this section used to describe has been retired. **Known gap:**
+  a review comment landing after a merge belongs to no open lane, so it needs a manual sweep.
 - **Research-backed iteration** — every slice starts from a current-literature pass recorded in
   [`docs/research/`](../research/README.md) with licences and per-item implications, cited from
   that slice's ADR. The tree now holds dozens of such notes;
@@ -276,26 +282,29 @@ worse than none, because it will be ignored.
   report, not an increase in capacity.
 - **Renders are whole-board even for a windowed scene**, and are advisory, never geometric
   authority.
-- **One real-editor IPC observation now exists, and three of the four live surfaces refused it.**
-  `B-138` records a read-only observation of a running KiCad 10.0.5 (`kipy` 0.7.1) with the
-  CopperTone board open, taken through CopperMCP's own transport after the operator enabled the
-  workstation IPC server. It is one session, one board, one build, one host — not an apply and not
-  `#68`. The transport's behaviour against a real editor was
-  measured rather than assumed, and **`ADR-0129` has since changed three of the four results**.
-  As measured at B-138: `inspect_live_board` refused by default with `KicadIpcVersionError`
+- **Two real-editor IPC observations now exist, and the second discharges the accept path the
+  first left open.** `B-138` records a read-only observation of a running KiCad 10.0.5 (`kipy`
+  0.7.1) with the CopperTone board open, taken through CopperMCP's own transport after the
+  operator enabled the workstation IPC server. It is one session, one board, one build, one host
+  — not an apply and not `#68`. As measured at B-138, three of the four live surfaces refused:
+  `inspect_live_board` refused by default with `KicadIpcVersionError`
   because the connected KiCad (10.0.5) is newer than the installed binding's API (10.0.1);
   `inspect_live_editor_context` refused identically and passed no `allow_future_api` override at
   all; and the `probe_live_kicad_ipc` oracle returned
   `skipped`/`kicad_plugin_environment_absent` because it requires the KiCad-launched plugin
-  environment. **At HEAD the two version refusals are gone**: the binding now applies a declared
-  major-version window, so a 10.0.5 editor is observed on every read surface carrying
-  `future_api_unverified`, `allow_future_api` is retired, and the same audit found the reverse
-  defect — an editor a whole major *behind* the binding was being published as `compatible`, and
-  is now refused. The oracle's plugin-environment skip is unchanged and is not a version result.
-  **This is a code change, not a re-measurement: no live session has been run at HEAD**, so the
-  accept path against a real editor remains unverified and `R-188` holds it open. The unit tests
-  exercise these surfaces through a fake official-client seam that reproduces `check_version()`'s
-  measured asymmetry. See also `SEC-168` for
+  environment. **`ADR-0129` then replaced that binding with a declared major-version window, and
+  `B-142` asked the same question of the same editor, board and host**: both surfaces that refused
+  B-138 answer `observed`, carrying `future_api_unverified` across a genuine `FutureVersionError`,
+  and neither passes any override, because `allow_future_api` no longer exists. The same audit
+  found the reverse defect — an editor a whole major *behind* the binding was being published as
+  `compatible`, and is now refused. The oracle is `skipped` again at B-142, as
+  `kicad_api_token_missing` rather than `kicad_plugin_environment_absent`; both report the same
+  underlying fact and neither is a version result. **`R-188` is narrowed, not closed:** the accept
+  path is discharged against a real KiCad 10.0.5, but the `legacy_api_unverified` direction and the
+  major-boundary refusal have never met a real editor — that needs KiCad builds this host does not
+  have — so both stay fake-only, exercised through a fake official-client seam that reproduces
+  `check_version()`'s measured asymmetry. Neither observation is an apply, and the operator's park
+  decision on `#68` stands. See also `SEC-168` for
   what enabling the server exposes, and disable it when a live session is not needed.
 - **`R-033`**: the committed CopperTone board still carries mounting-hole keepout octagons
   inscribed at 2.85 mm, so edges sit 0.2169 mm inside the requirement. The generator is fixed;
@@ -339,8 +348,11 @@ worse than none, because it will be ignored.
    into a running KiCad. The hard part is binding an in-memory document to a file digest;
    [the research note](../research/safe-apply-references.md) lays out the constraints. Since this
    section was last written the park case has grown stronger, not weaker: B-138 observed a real
-   editor and found the default MCP path refusing it on API version, and ADR-0129 now binds live
-   IPC to a declared major-version window with acceptances structurally distinct from proofs.
+   editor and found the default MCP path refusing it on API version; ADR-0129 now binds live
+   IPC to a declared major-version window with acceptances structurally distinct from proofs; and
+   B-142 measured that window against the same editor, where both refusing surfaces answer
+   `observed` as `future_api_unverified`, leaving `R-188` narrowed to the `legacy_api_unverified`
+   direction and the major-boundary refusal. None of it is an apply.
    The mutation itself still waits on adversarial review, and the operator's park decision stands.
    The adjacent file-backed halves of M3 have both shipped.
 6. **Advance #91 through its surrogate half, not its sign-off half.**
@@ -350,11 +362,12 @@ worse than none, because it will be ignored.
    approval. DFM sign-off remains the coordinator-owned repeated-DRC path and means "KiCad DRC
    found nothing", which is narrower than manufacturable (R-174); SI, PI and thermal have no
    adapter and no authority, so they stay unregistered non-claims.
-7. **Open-baseline comparison ([#65](https://github.com/seunghyukchoe/copper-mcp/issues/65))**
-   remains unmeasured: FreeRouting is GPL-3.0 and absent from the recording environment, and every
-   baseline is recorded `not_run` rather than estimated. Note the tracker now carries this as
-   [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53), the contained causal comparison
-   provider, which is operator-blocked rather than agent-executable.
+7. **Open-baseline comparison is unmeasured, and its tracking has moved.**
+   [#65](https://github.com/seunghyukchoe/copper-mcp/issues/65) is **closed**; the work is now
+   carried by [#53](https://github.com/seunghyukchoe/copper-mcp/issues/53), the contained causal
+   comparison provider, which is operator-blocked rather than agent-executable. The measurement
+   facts are unchanged: FreeRouting is GPL-3.0 and absent from the recording environment, and every
+   baseline is recorded `not_run` rather than estimated.
 8. **Deferred quality items**: durable single-layer and live routing jobs, the `PlacementBackend`
    solver seam, and higher-degree RSMT-guided topology behind the existing `ordering_policy` seam.
 
@@ -452,9 +465,12 @@ Read in this order to get oriented: `README.md`, `AGENTS.md`,
 [`architecture/board-ir.md`](../architecture/board-ir.md),
 [`architecture/routing-baseline.md`](../architecture/routing-baseline.md), then
 [the ADR index](../adr/README.md) — the recent arcs are
-[ADR-0124](../adr/0124-an-outline-arc-is-inscribed-and-a-cut-is-refused.md) onward (outline arcs,
-stray copper, multi-pin negotiation and repair, authoritative signoff, refusal classification,
-setup/footprint acceptance), which is where the whole `0.11.0`–`0.12.0` line lives.
+[ADR-0121](../adr/0121-a-refusal-is-an-answer-and-a-crash-is-not.md) onward, which is where the
+whole `0.11.0`–`0.12.0` line lives: refusal classification and setup/footprint acceptance
+(ADR-0121 … ADR-0123) shipped in `0.11.0`, and outline arcs, stray copper, and multi-pin
+negotiation and repair (ADR-0124 … ADR-0127) in `0.12.0`. Authoritative signoff is earlier —
+ADR-0118 and ADR-0119, shipped in `0.10.0` — and ADR-0128 and ADR-0129 are on `main` but sit under
+`[Unreleased]` in the changelog, so they belong to no published version yet.
 
 ---
 
