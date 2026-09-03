@@ -15,6 +15,10 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+import pytest
+
+from scripts import check_sdist_tracked
+
 ROOT = Path(__file__).resolve().parents[1]
 _SDIST = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["hatch"][
     "build"
@@ -65,3 +69,48 @@ def test_no_tracked_top_level_entry_falls_out_of_the_sdist_unnoticed() -> None:
         "new tracked top-level entries are neither shipped nor recorded as deliberately "
         f"unshipped: {sorted(unaccounted)}"
     )
+
+
+def _miniature_repo(root: Path, git: str) -> None:
+    """A tracked `src/`, an untracked scratch note, and an ignored cache file."""
+    (root / "pyproject.toml").write_text(
+        "[tool.hatch.build.targets.sdist]\ninclude = ['/src', '/docs']\n",
+        encoding="utf-8",
+    )
+    (root / "src").mkdir()
+    (root / "docs").mkdir()
+    (root / "src" / "kept.py").write_text("# kept\n", encoding="utf-8")
+    (root / "src" / "SCRATCH-NOTE.md").write_text("# scratch\n", encoding="utf-8")
+    (root / "src" / "__pycache__").mkdir()
+    (root / "src" / "__pycache__" / "kept.pyc").write_bytes(b"\x00")
+    (root / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+    subprocess.run([git, "init", "-q"], cwd=root, check=True)  # noqa: S603
+    subprocess.run([git, "add", "src/kept.py", ".gitignore"], cwd=root, check=True)  # noqa: S603
+
+
+def test_an_untracked_scratch_note_under_an_allowlisted_dir_is_named(
+    tmp_path: Path,
+) -> None:
+    """The planted-probe case from #256: an untracked docs/src file must refuse."""
+
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("git is required to enumerate untracked sdist inputs")
+    _miniature_repo(tmp_path, git)
+    directories = check_sdist_tracked._allowlist_directories(tmp_path)
+    assert [path.name for path in directories] == ["src", "docs"]
+    assert check_sdist_tracked._untracked_files(directories, tmp_path) == ["src/SCRATCH-NOTE.md"]
+
+
+def test_staging_the_scratch_note_greens_the_gate(tmp_path: Path) -> None:
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("git is required to enumerate untracked sdist inputs")
+    _miniature_repo(tmp_path, git)
+    subprocess.run([git, "add", "src/SCRATCH-NOTE.md"], cwd=tmp_path, check=True)  # noqa: S603
+    directories = check_sdist_tracked._allowlist_directories(tmp_path)
+    assert check_sdist_tracked._untracked_files(directories, tmp_path) == []
+
+
+def test_the_working_tree_currently_ships_no_untracked_files() -> None:
+    assert check_sdist_tracked.main() == 0

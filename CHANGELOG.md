@@ -6,6 +6,26 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/check_doc_links.py` refuses while untracked Markdown exists, naming each
+  file, instead of reporting over the tracked set alone (issue #244, `D-237`, `R-187`).
+- A new `scripts/check_sdist_tracked.py` gate, wired into `make lint`, refuses when
+  untracked non-ignored files exist under the sdist allowlist directories, so a
+  scratch note can no longer sail into the release tarball unnoticed (issue #256,
+  `D-237`, `R-187`).
+- Hypothesis generation is deterministic under a `derandomize`d `deterministic-ci`
+  profile loaded from `tests/conftest.py`, and the two `sexpr.py` syntax-error
+  refusal paths coverage reached only by chance now carry deterministic examples
+  (issue #255, `D-237`).
+- The oversized-child process test asserts the kill guarantee over either kill
+  reason instead of pinning which guard wins a scheduler-latency race (issue #253,
+  `D-237`).
+- `docs/releasing.md` records the standing rule for commit-bound benchmark
+  artifacts: merge-commit, not squash, or plan the post-merge republish before
+  merging (issue #250, `D-237`, `R-187`). The B-141 republish itself stays bound
+  to a fresh benchmark rerun.
+
 ## [0.12.0] - 2026-09-01
 
 Upgrading from 0.11.0: see the

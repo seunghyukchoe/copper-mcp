@@ -8,6 +8,8 @@ the class, and the reason target-only checking let three of them through.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -217,3 +219,44 @@ def test_a_recorded_label_exemption_suppresses_exactly_its_own_link(
 
 def test_the_repository_link_check_passes_with_its_real_exemption_lists() -> None:
     assert check_doc_links.main() == 0
+
+
+def test_an_untracked_markdown_file_fails_the_run_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A document Git does not know yet must not be silently excluded (#244)."""
+
+    monkeypatch.setattr(check_doc_links, "_tracked_markdown", lambda: [])
+    monkeypatch.setattr(check_doc_links, "_untracked_markdown", lambda: ["docs/new-note.md"])
+    monkeypatch.setattr(check_doc_links, "EXEMPT_TARGETS", {})
+    monkeypatch.setattr(check_doc_links, "EXEMPT_LABEL_RECORDS", {})
+    with pytest.raises(SystemExit) as error:
+        check_doc_links.main()
+    assert "docs/new-note.md" in str(error.value)
+    assert "untracked" in str(error.value)
+
+
+def test_no_untracked_markdown_keeps_a_clean_run_green(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(check_doc_links, "_tracked_markdown", lambda: [])
+    monkeypatch.setattr(check_doc_links, "_untracked_markdown", lambda: [])
+    monkeypatch.setattr(check_doc_links, "EXEMPT_TARGETS", {})
+    monkeypatch.setattr(check_doc_links, "EXEMPT_LABEL_RECORDS", {})
+    assert check_doc_links.main() == 0
+
+
+def test_untracked_enumeration_lists_only_files_git_does_not_track(
+    tmp_path: Path,
+) -> None:
+    """The guard reads the working tree, not the track list, or it is vacuous."""
+
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("git is required to enumerate untracked Markdown files")
+    subprocess.run([git, "init", "-q"], cwd=tmp_path, check=True)  # noqa: S603
+    (tmp_path / "tracked.md").write_text("# Tracked\n", encoding="utf-8")
+    (tmp_path / "fresh-note.md").write_text("# Fresh\n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("not markdown\n", encoding="utf-8")
+    subprocess.run([git, "add", "tracked.md"], cwd=tmp_path, check=True)  # noqa: S603
+    assert check_doc_links._untracked_markdown(tmp_path) == ["fresh-note.md"]

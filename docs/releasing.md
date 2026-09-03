@@ -42,7 +42,13 @@ release or a release attestation.
 
 ## Publish
 
-1. Merge the release pull request to `main`.
+1. Merge the release pull request to `main`. A pull request that publishes or
+   republishes a commit-bound benchmark artifact must be **merge-committed, not
+   squashed**, or must plan its post-merge republish before merging: a squash
+   carries the tree but not the commit, so in any fresh clone the recorded
+   `source_commit` does not exist and the artifact's provenance cannot be
+   consulted. The validator correctly refuses that case rather than going
+   green on it, which reads as a red `main` (#250).
 2. Create and push an annotated tag: `git tag -a vX.Y.Z -m "CopperMCP X.Y.Z"`.
 3. The tag-triggered release workflow rebuilds, tests, audits, attests, and creates the GitHub
    release. It builds three artifacts, not two: the wheel, the source distribution, and the KiCad

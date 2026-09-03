@@ -40,6 +40,12 @@ Neither list is a suppression mechanism: an exemption that no longer matches a
 real link is itself a failure, so an entry cannot be silenced and then quietly
 forgotten, and a newly broken or newly misnamed link still fails until someone
 edits this file and says why.
+
+Untracked Markdown files are refused rather than skipped. The document set comes
+from `git ls-files`, so a brand-new note that has not been staged yet would
+otherwise be excluded from both the judgement and the count it prints -- a green
+run that means nothing about the file it was meant to judge. Such files fail the
+run by name until they are staged (or removed).
 """
 
 from __future__ import annotations
@@ -112,18 +118,40 @@ EXEMPT_LABEL_RECORDS: dict[tuple[str, str, str], str] = {
 }
 
 
-def _tracked_markdown() -> list[Path]:
+def _tracked_markdown(root: Path = ROOT) -> list[Path]:
     git = shutil.which("git")
     if git is None:
         raise SystemExit("git is required to enumerate tracked Markdown files")
     result = subprocess.run(  # noqa: S603
         [git, "ls-files", "-z", "*.md"],
-        cwd=ROOT,
+        cwd=root,
         check=True,
         capture_output=True,
         text=True,
     )
-    return [ROOT / name for name in result.stdout.split("\0") if name]
+    return [root / name for name in result.stdout.split("\0") if name]
+
+
+def _untracked_markdown(root: Path = ROOT) -> list[str]:
+    """Markdown files present in the working tree but unknown to Git.
+
+    A checker that reports over tracked files alone passes vacuously on a
+    document the author just wrote but has not staged yet: the count it prints
+    silently excludes the one file the run was meant to judge (#244). The loud
+    answer is to refuse success while such files exist, naming each one,
+    rather than to report "no broken links" over a set that omits them.
+    """
+    git = shutil.which("git")
+    if git is None:
+        raise SystemExit("git is required to enumerate untracked Markdown files")
+    result = subprocess.run(  # noqa: S603
+        [git, "ls-files", "--others", "--exclude-standard", "-z", "--", "*.md"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return sorted(name for name in result.stdout.split("\0") if name)
 
 
 def _strip_code_fences(text: str) -> str:
@@ -262,6 +290,11 @@ def main() -> int:
     for path in documents:
         if path.is_file():
             _check_document(path, failures, used_exemptions, used_label_exemptions)
+    for name in _untracked_markdown():
+        failures.append(
+            f"{name}: untracked Markdown file was not checked; stage it and re-run "
+            "so the link check judges what exists rather than what is tracked"
+        )
     for key in sorted(set(EXEMPT_TARGETS) - used_exemptions):
         document, target = key
         failures.append(
