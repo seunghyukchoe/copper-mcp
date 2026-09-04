@@ -21,6 +21,12 @@ the CLI and tests. The KiCad plugin and live-scene adapter snapshot only through
 the scene is read-only and any future action must keep a validated candidate tied to an unchanged
 live revision before it can release the synchronous connection.
 
+An optional OrcaRouter policy adapter is an outbound, direct-import-only advisory layer. It sends
+only per-request aliases and bounded scalar features, maps the response back to coordinator-owned
+policy options, and never joins the MCP surface, closed negotiated-policy registry, deterministic
+geometry, DRC, or apply path. See [the OrcaRouter integration guide](../integrations/orcarouter.md)
+and [ADR-0130](../adr/0130-orcarouter-advisory-policy-provider.md).
+
 ## Components
 
 | Component | Responsibility |
@@ -44,6 +50,8 @@ live revision before it can release the synchronous connection.
 | `routing/contracts.py` | Exact candidate, cost, settings, result, and backend-neutral contracts. |
 | `routing/astar.py` | Bounded integer two-pin A* reference; candidate-only and fail-closed. |
 | `routing/layered_astar.py` | Internal abstract two-layer A* oracle; not a Board IR or KiCad candidate surface. |
+| `routing/policy.py` | Closed advisory policy contract for net ordering and coordinator-owned window selection. |
+| `routing/orcarouter_policy.py` | Optional direct-import-only OrcaRouter policy provider; redacted, bounded, and never a geometry or apply authority. |
 | `request_boundary.py` | Shared untrusted-request validation primitives for every public service. |
 | `board_ir_service.py` | Read-only Board IR conversion check and structural description. |
 | `circuit_scene.py` | Bounded, region-scoped Board IR observation with typed references and quarantined author text. |

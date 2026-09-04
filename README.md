@@ -404,9 +404,19 @@ The most-used entry points:
 | [Usage guide](docs/usage.md) | Every CLI command and MCP tool |
 | [Architecture overview](docs/architecture/overview.md) | System boundaries |
 | [Security and threat model](docs/architecture/security-model.md) | Assets, adversaries, invariants |
+| [OrcaRouter integration](docs/integrations/orcarouter.md) | Experimental redacted advisory policy provider |
 | [ADRs](docs/adr/README.md) | Durable decisions and their tradeoffs |
 | [Roadmap](docs/roadmap.md) | What comes next |
 | [Handoff](docs/handoff/README.md) | Current state, for a continuing maintainer or agent |
+
+### Optional OrcaRouter integration
+
+CopperMCP includes an optional experimental OrcaRouter advisory integration. It is disabled unless
+explicitly configured, does not perform deterministic routing, DRC, or copper application, and
+sends only bounded advisory features. The maintainer may receive compensation from eligible
+OrcaRouter usage under a separate commercial agreement; that relationship is not a technical
+guarantee or an exclusive-provider recommendation. See the [integration guide](docs/integrations/orcarouter.md)
+and its [merge-readiness checklist](docs/integrations/orcarouter-merge-readiness.md).
 
 [`llms.txt`](llms.txt) at the repository root follows the [llms.txt convention](https://llmstxt.org/):
 a short project summary plus links to the documents an LLM should read first, starting with the

@@ -41,6 +41,10 @@ contract.
   resource URIs.
 - [Security and threat model](architecture/security-model.md) — assets, adversaries, boundaries,
   and the invariants that keep untrusted input contained.
+- [OrcaRouter advisory policy integration](integrations/orcarouter.md) — the experimental,
+  direct-import-only provider boundary and its redacted usage contract.
+- [OrcaRouter merge readiness](integrations/orcarouter-merge-readiness.md) — local and external
+  gates for merging the optional integration without presenting it as production-ready.
 
 ## Decisions and evidence
 

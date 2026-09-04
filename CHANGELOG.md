@@ -52,6 +52,13 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Added an experimental, direct-import-only `OrcaRouterPolicy` adapter. It uses OrcaRouter's
+  OpenAI-compatible tool-calling endpoint with per-request aliases and bounded scalar features,
+  then rebinds the selection to CopperMCP's immutable policy options. It adds no MCP/CLI surface,
+  negotiated-policy profile, route geometry, DRC, or apply authority. See ADR-0130, the
+  [OrcaRouter integration guide](docs/integrations/orcarouter.md), and the
+  [merge-readiness checklist](docs/integrations/orcarouter-merge-readiness.md).
+
 - Added the private, direct-import-only surrogate-ranking slice for issue #91. It accepts only
   immutable, revision-bound route candidates, applies fixed integer scoring under 32-candidate and
   16,384-vertex ceilings, and returns redacted deterministic advisory rankings. Candidates must
