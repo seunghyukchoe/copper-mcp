@@ -1,0 +1,91 @@
+{
+ "harness": "mutation-harness/1",
+ "mutants": [
+  {
+   "anchor": "            include_drc=boolean(\"include_drc\", fields.get(\"include_drc\", False)),",
+   "expectation": "killed",
+   "file": "src/copper_mcp/route_bundle.py",
+   "id": "BDR01-parser-defaults-drc-on",
+   "killing_tests": [
+    "tests/test_route_bundle_drc.py::test_include_drc_defaults_off_and_parses_when_set"
+   ],
+   "replacement": "            include_drc=boolean(\"include_drc\", fields.get(\"include_drc\", True)),"
+  },
+  {
+   "anchor": "    evidence = None\n    if request.include_drc:",
+   "expectation": "killed",
+   "file": "src/copper_mcp/route_bundle.py",
+   "id": "BDR02-drc-evidence-silently-never-attached",
+   "killing_tests": [
+    "tests/test_route_bundle_drc.py::test_routed_bundle_with_drc_binds_one_composed_evidence"
+   ],
+   "replacement": "    evidence = None\n    if False:"
+  },
+  {
+   "anchor": "            \"schema_version\": \"1.1\",",
+   "expectation": "killed",
+   "file": "src/copper_mcp/route_bundle.py",
+   "id": "BDR03-response-version-frozen-at-1-0",
+   "killing_tests": [
+    "tests/test_route_bundle_drc.py::test_routed_response_without_drc_carries_schema_1_1_and_no_evidence"
+   ],
+   "replacement": "            \"schema_version\": \"1.0\","
+  },
+  {
+   "anchor": "    if plan.base_revision != snapshot.snapshot_digest:\n        raise KiCadCliError(\"route bundle plan is stale for the captured Board IR snapshot\")",
+   "expectation": "killed",
+   "file": "src/copper_mcp/kicad_cli.py",
+   "id": "BDR04-stale-plan-accepted-for-drc",
+   "killing_tests": [
+    "tests/test_route_bundle_drc.py::test_structural_refusal_fires_before_any_kicad_execution"
+   ],
+   "replacement": "    if plan.base_revision == snapshot.snapshot_digest:\n        raise KiCadCliError(\"route bundle plan is stale for the captured Board IR snapshot\")"
+  },
+  {
+   "anchor": "                or tuple(self.drc_evidence.candidate_ids)\n                != tuple(item.candidate_id for item in self.plan.candidates)",
+   "expectation": "killed",
+   "file": "src/copper_mcp/route_bundle.py",
+   "id": "BDR05-evidence-plan-binding-dropped",
+   "killing_tests": [
+    "tests/test_route_bundle_drc.py::test_response_rejects_evidence_bound_to_another_plan"
+   ],
+   "replacement": "                or tuple(self.drc_evidence.candidate_ids)\n                == tuple(item.candidate_id for item in self.plan.candidates)"
+  },
+  {
+   "anchor": "    drc_evidence: RouteBundleDrcEvidenceContract | None = None",
+   "expectation": "killed",
+   "file": "src/copper_mcp/mcp_contracts.py",
+   "id": "BDR07-contract-drops-the-evidence-field",
+   "killing_tests": [
+    "tests/test_route_bundle_drc.py::test_routed_bundle_with_drc_binds_one_composed_evidence"
+   ],
+   "replacement": "    drc_evidence: None = None"
+  },
+  {
+   "anchor": "    settings: RouteSettingsContract = Field(default_factory=RouteSettingsContract)\n    #: Explicit opt-in for authoritative KiCad DRC evidence over the composed plan. Off by\n    #: default; aggregate, bundle-bound, and single-invocation, granting no apply authority.\n    include_drc: bool = False",
+   "expectation": "killed",
+   "file": "src/copper_mcp/mcp_contracts.py",
+   "id": "BDR08-contract-defaults-drc-on",
+   "killing_tests": [
+    "tests/test_route_bundle_drc.py::test_machine_contract_defaults_include_drc_off"
+   ],
+   "replacement": "    settings: RouteSettingsContract = Field(default_factory=RouteSettingsContract)\n    #: Explicit opt-in for authoritative KiCad DRC evidence over the composed plan. Off by\n    #: default; aggregate, bundle-bound, and single-invocation, granting no apply authority.\n    include_drc: bool = True"
+  },
+  {
+   "anchor": "\"subject\": [_resource_descriptor(\"route-bundle\", bundle_id)],",
+   "expectation": "killed",
+   "file": "src/copper_mcp/attestation.py",
+   "id": "BDR06-bundle-statement-subject-confused-with-candidate",
+   "killing_tests": [
+    "tests/test_route_bundle_drc.py::test_evidence_binding_rejects_forged_subjects"
+   ],
+   "replacement": "\"subject\": [_resource_descriptor(\"route-candidate\", bundle_id)],"
+  }
+ ],
+ "pytest_args": [
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "--no-cov"
+ ]
+}

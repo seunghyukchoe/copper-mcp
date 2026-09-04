@@ -634,8 +634,11 @@ def preview_route_bundle(request: RouteBundleToolRequest) -> RouteBundleToolResp
     Every reference must come from the same Circuit Scene and carry its board and snapshot
     compare-and-swap values.  The tool publishes a plan only when deterministic negotiated
     routing, a complete composition replay, and the bounded cross-net physical-clearance gate
-    all succeed. It never returns partial plans, a board derivative, DRC evidence, or apply
-    authority.
+    all succeed. It never returns partial plans, a board derivative, or apply
+    authority. Opt-in ``include_drc`` continues a routed plan through one authoritative KiCad
+    DRC run over the composed board on a private disposable copy, bound as bundle evidence;
+    it is single-invocation execution evidence, never a reproducible differential, and never
+    authorization to write copper.
     """
 
     return RouteBundleToolResponse.model_validate(preview_route_bundle_service(request, _SETTINGS))

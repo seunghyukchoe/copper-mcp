@@ -33,7 +33,11 @@ from copper_mcp.adapters.kicad_route_patch import (
 )
 from copper_mcp.adapters.kicad_schematic import MAX_RENDERED_SCHEMATIC_BYTES
 from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, parse_sexpr
-from copper_mcp.attestation import build_candidate_drc_statement, canonical_statement_bytes
+from copper_mcp.attestation import (
+    build_bundle_drc_statement,
+    build_candidate_drc_statement,
+    canonical_statement_bytes,
+)
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.models import DrcSummary, ErcSummary
@@ -2078,6 +2082,190 @@ def run_route_candidate_drc(
         verified_fill=verified_fill,
         render_candidate=render_kicad_candidate_board,
         serialization_failure="route candidate failed replay-verified KiCad serialization",
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class RouteBundleDrcEvidence:
+    """Immutable bindings between one composed route-bundle plan and KiCad DRC evidence.
+
+    One DRC run covers the whole composition: the subject is the bundle, and the composed
+    candidate set rides as a bound byproduct list rather than as N separate statements that
+    could be cherry-picked into a differential.
+    """
+
+    bundle_id: str
+    bundle_base_revision: str
+    candidate_ids: tuple[str, ...]
+    source_revision: str
+    patched_board_revision: str
+    patched_drc_context_revision: str
+    summary: DrcSummary
+
+    def __post_init__(self) -> None:
+        for name in (
+            "bundle_id",
+            "bundle_base_revision",
+            "source_revision",
+            "patched_board_revision",
+            "patched_drc_context_revision",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not _SHA256_ID.fullmatch(value):
+                raise ValueError(f"{name} must be content-addressed with sha256")
+        if (
+            not isinstance(self.candidate_ids, tuple)
+            or not 2 <= len(self.candidate_ids) <= 8
+            or any(
+                not isinstance(item, str) or not _SHA256_ID.fullmatch(item)
+                for item in self.candidate_ids
+            )
+            or len(set(self.candidate_ids)) != len(self.candidate_ids)
+        ):
+            raise ValueError("bundle candidate ids must be two to eight distinct digests")
+        if not isinstance(self.summary, DrcSummary):
+            raise ValueError("summary must be strict KiCad DRC evidence")
+        if self.summary.base_revision != self.patched_board_revision:
+            raise ValueError("DRC summary is not bound to the patched board revision")
+        if self.summary.drc_context_revision != self.patched_drc_context_revision:
+            raise ValueError("DRC summary is not bound to the patched context revision")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "bundle_id": self.bundle_id,
+            "bundle_base_revision": self.bundle_base_revision,
+            "candidate_ids": list(self.candidate_ids),
+            "source_revision": self.source_revision,
+            "patched_board_revision": self.patched_board_revision,
+            "patched_drc_context_revision": self.patched_drc_context_revision,
+            "summary": self.summary.to_dict(),
+            "statement": self.to_statement(),
+        }
+
+    def to_statement(self) -> dict[str, Any]:
+        """Return the redacted unsigned in-toto Statement payload."""
+
+        return build_bundle_drc_statement(
+            bundle_id=self.bundle_id,
+            bundle_base_revision=self.bundle_base_revision,
+            candidate_ids=self.candidate_ids,
+            source_revision=self.source_revision,
+            patched_board_revision=self.patched_board_revision,
+            patched_drc_context_revision=self.patched_drc_context_revision,
+            summary=self.summary,
+        )
+
+    def canonical_statement_bytes(self) -> bytes:
+        """Return deterministic Statement JSON bytes; no signature is included."""
+
+        return canonical_statement_bytes(self.to_statement())
+
+
+def run_route_bundle_drc(
+    requested_path: str,
+    plan: object,
+    profile: KiCadConstraintProfile,
+    settings: Settings,
+    *,
+    deadline: float | None = None,
+) -> RouteBundleDrcEvidence:
+    """Bind one exact composed route-bundle plan to authoritative KiCad DRC.
+
+    The plan is replayed against the original snapshot and all patches are spliced onto
+    one private disposable board with a combined round-trip proof before KiCad starts, so
+    structural problems refuse without executing a subprocess. Imports are deferred
+    because the bundle adapter reaches this module through the preview path.
+    """
+
+    from copper_mcp.adapters.kicad_route_bundle_patch import render_kicad_route_bundle_board
+    from copper_mcp.route_bundle import RouteBundlePlan
+
+    if type(plan) is not RouteBundlePlan:
+        raise KiCadCliError("route bundle plan is malformed")
+    if not isinstance(profile, KiCadConstraintProfile):
+        raise KiCadCliError("KiCad constraint profile is malformed")
+    candidates = plan.candidates
+    if (
+        not isinstance(candidates, tuple)
+        or not all(isinstance(item, RouteCandidate) for item in candidates)
+        or any(item.base_revision != plan.base_revision for item in candidates)
+    ):
+        raise KiCadCliError("route bundle candidates are inconsistent with the plan")
+
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    board = read_workspace_file(
+        phase_settings.workspace,
+        requested_path,
+        allowed_suffixes={".kicad_pcb"},
+        max_bytes=phase_settings.max_board_bytes,
+    )
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    board_path = board.path
+    captured_context = _drc_context(board_path, phase_settings, board)
+    board_relative = board_path.relative_to(
+        phase_settings.workspace.resolve(strict=True)
+    ).as_posix()
+    original_context_revision = _context_revision(captured_context)
+    source = captured_context[board_relative]
+    source_revision = _revision(source)
+
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    parse_limits = parse_limits_for(phase_settings)
+    conversion = parse_kicad_bytes(source, profile, parse_limits)
+    if conversion.snapshot is None or conversion.diagnostics:
+        raise KiCadCliError("captured KiCad board cannot be represented by the supported Board IR")
+    snapshot = conversion.snapshot
+    if snapshot.content.source.revision != source_revision:
+        raise KiCadCliError("captured KiCad source revision is inconsistent")
+    if plan.base_revision != snapshot.snapshot_digest:
+        raise KiCadCliError("route bundle plan is stale for the captured Board IR snapshot")
+    try:
+        patched_board = render_kicad_route_bundle_board(
+            source,
+            snapshot,
+            plan,
+            profile,
+            limits=parse_limits,
+        )
+    except KiCadRoutePatchError as error:
+        raise KiCadCliError("route bundle failed composed KiCad serialization") from error
+
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    patched_context = _candidate_drc_context(
+        captured_context,
+        board_relative=board_relative,
+        patched_board=patched_board,
+        settings=phase_settings,
+    )
+    patched_board_revision = _revision(patched_board)
+    patched_drc_context_revision = _context_revision(patched_context)
+    del captured_context, conversion, patched_board, snapshot, source
+
+    summary = _run_captured_drc(
+        patched_context,
+        board_relative=board_relative,
+        settings=_candidate_drc_deadline_settings(settings, deadline),
+        deadline=deadline,
+    )
+    if (
+        summary.base_revision != patched_board_revision
+        or summary.drc_context_revision != patched_drc_context_revision
+    ):
+        raise KiCadCliError("KiCad DRC summary revision binding is inconsistent")
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    if _context_revision(_drc_context(board_path, phase_settings)) != original_context_revision:
+        raise KiCadCliError(
+            "board or DRC rules changed while bundle DRC was running; result discarded"
+        )
+    _candidate_drc_deadline_settings(settings, deadline)
+    return RouteBundleDrcEvidence(
+        bundle_id=plan.bundle_id,
+        bundle_base_revision=plan.base_revision,
+        candidate_ids=tuple(item.candidate_id for item in candidates),
+        source_revision=source_revision,
+        patched_board_revision=patched_board_revision,
+        patched_drc_context_revision=patched_drc_context_revision,
+        summary=summary,
     )
 
 

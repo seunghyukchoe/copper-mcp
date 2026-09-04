@@ -1303,6 +1303,10 @@ class InTotoDrcByproductsContract(_ClosedContract):
 
     drc_summary: RouteDrcSummaryContract
     evidence_scope: Literal["disposable-candidate"]
+    #: Composed bundle members, present only on bundle statements: the candidate set one DRC
+    #: run covered, bound as digests rather than as separate subjects that could be
+    #: cherry-picked into a differential.
+    candidate_ids: Annotated[list[Digest], Field(max_length=8)] = Field(default_factory=list)
 
 
 class InTotoDrcEnvironmentContract(_ClosedContract):
@@ -1347,6 +1351,24 @@ class InTotoDrcStatementContract(_ClosedContract):
 class RouteCandidateDrcEvidenceContract(_ClosedContract):
     candidate_id: Digest
     candidate_base_revision: Digest
+    source_revision: Digest
+    patched_board_revision: Digest
+    patched_drc_context_revision: Digest
+    summary: RouteDrcSummaryContract
+    statement: InTotoDrcStatementContract | None = None
+
+
+class RouteBundleDrcEvidenceContract(_ClosedContract):
+    """Aggregate KiCad DRC evidence over one composed bundle plan.
+
+    One DRC run covers the whole composition: the subject is the bundle, and the composed
+    candidate set rides as a bound digest list rather than as separate statements that could
+    be cherry-picked into a differential.
+    """
+
+    bundle_id: Digest
+    bundle_base_revision: Digest
+    candidate_ids: Annotated[list[Digest], Field(min_length=2, max_length=8)]
     source_revision: Digest
     patched_board_revision: Digest
     patched_drc_context_revision: Digest
@@ -1593,6 +1615,9 @@ class RouteBundleRequestContract(_ClosedContract):
     expect_snapshot_digest: Digest
     seed: RouteBundleSeed = 0
     settings: RouteSettingsContract = Field(default_factory=RouteSettingsContract)
+    #: Explicit opt-in for authoritative KiCad DRC evidence over the composed plan. Off by
+    #: default; aggregate, bundle-bound, and single-invocation, granting no apply authority.
+    include_drc: bool = False
 
 
 RouteBundleToolRequest = Annotated[
@@ -1619,7 +1644,9 @@ class RouteBundlePlanContract(_ClosedContract):
 
 
 class _RouteBundlePreviewCommonContract(_ClosedContract):
-    schema_version: Literal["1.0"]
+    # 1.1: the routed variant may carry opt-in bundle DRC evidence (ADR-0131). The version
+    # moves with the accepted set, so every variant carries the new literal together.
+    schema_version: Literal["1.1"]
     board_path: Annotated[
         str,
         Field(min_length=1, max_length=4096, pattern=r"^[^\u0000-\u001f\u007f]+$"),
@@ -1633,6 +1660,10 @@ class RoutedRouteBundlePreviewContract(_RouteBundlePreviewCommonContract):
     snapshot_digest: Digest
     plan: RouteBundlePlanContract
     diagnostic: None
+    #: Aggregate KiCad DRC evidence over the composed plan. Null unless the request opted
+    #: in: the key is required and explicit, following the response's other nullable fields,
+    #: so absence can never be mistaken for a dropped field.
+    drc_evidence: RouteBundleDrcEvidenceContract | None
     conversion_diagnostic_counts: EmptyRouteDiagnosticCounts
 
 

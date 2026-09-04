@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0130**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0132**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -13,6 +13,10 @@ Numbers are never reused, including for an ADR that is withdrawn before merge. A
 in the pull request that lands the ADR, not before, so two concurrent branches cannot claim the same
 one. See the [ledger ID convention](../ledgers/README.md#allocating-ids) for the same rule applied to
 ledger entries.
+
+`0130` is a live claim held by the open placement-solve PR; this record steps over it rather
+than racing it. If that branch is abandoned, `0130` becomes a permanent gap like any other
+spent number.
 
 `scripts/check_adr_numbers.py` enforces this mechanically, in `make lint` and in CI. It fails the
 build when two files claim one number, when an ADR's own `# ADR-NNNN:` heading disagrees with its
@@ -206,8 +210,9 @@ never silently widens it.
 | [0127](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md) | Multi-pin local repair replaces one proven responsible branch | Accepted |
 | [0128](0128-private-surrogate-ranking-is-bounded-and-never-signs-off.md) | A private surrogate ranking is bounded and never signs off | Accepted |
 | [0129](0129-the-live-version-window-is-kicads-own-and-an-acceptance-is-not-a-proof.md) | The live version window is KiCad's own, and an acceptance is never published as a proof | Accepted |
+| [0131](0131-bundle-drc-evidence-is-composed-not-cherry-picked.md) | A routed bundle carries opt-in authoritative DRC evidence, and nothing else changes | Accepted |
 
-One hundred and twenty-nine numbers allocated, one hundred and twenty-four records, no duplicates — and
+One hundred and thirty-one numbers allocated, one hundred and twenty-five records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -358,3 +363,4 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0126: Negotiated routing admits bounded multi-pin nets on request-local lattices](0126-negotiated-routing-admits-bounded-multi-pin-nets-on-request-local-lattices.md)
 - [ADR-0127: Multi-pin local repair replaces one proven responsible branch](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md)
 - [ADR-0129: The live version window is KiCad's own, and an acceptance is never published as a proof](0129-the-live-version-window-is-kicads-own-and-an-acceptance-is-not-a-proof.md)
+- [ADR-0131: A routed bundle carries opt-in authoritative DRC evidence, and nothing else changes](0131-bundle-drc-evidence-is-composed-not-cherry-picked.md)
