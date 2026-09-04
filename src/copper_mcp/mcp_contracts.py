@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, WithJsonSchema, model_validator
 
-from copper_mcp.apply_token_reasons import ApplyTokenWithheldReason
+from copper_mcp.apply_token_reasons import ApplyTokenWithheldReason, apply_token_withheld_reason
 from copper_mcp.placement.contracts import (
     SOLVER_MAX_BEAM_WIDTH,
     SOLVER_MAX_EVALUATIONS,
@@ -2501,7 +2501,13 @@ class PlacementSolveToolResponse(_ClosedContract):
     @model_validator(mode="after")
     def _never_mints(self) -> PlacementSolveToolResponse:
         withheld = self.apply_token_withheld_reason
-        if self.apply_token is not None or withheld != "unsupported_surface":
+        never_mints = apply_token_withheld_reason(
+            surface_mints_tokens=False,
+            requested=False,
+            apply_enabled=False,
+            has_candidate=False,
+        )
+        if self.apply_token is not None or withheld != never_mints:
             raise ValueError("a placement solve never mints apply authority")
         if (not self.candidates) == (self.diagnostic is None):
             raise ValueError("a placement solve carries exactly one of candidates or refusal")

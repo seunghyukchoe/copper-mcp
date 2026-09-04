@@ -47,7 +47,7 @@ _SOLVE_WITHHELD_REASON = apply_token_withheld_reason(
     apply_enabled=False,
     has_candidate=False,
 )
-assert _SOLVE_WITHHELD_REASON == "unsupported_surface"
+assert _SOLVE_WITHHELD_REASON is not None
 
 
 def solve_placement_preview(payload: Any, settings: Settings) -> PlacementSolveResponse:

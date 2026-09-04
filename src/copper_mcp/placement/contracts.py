@@ -26,6 +26,7 @@ from copper_mcp.adapters import KiCadConstraintProfile
 from copper_mcp.apply_token_reasons import (
     APPLY_TOKEN_WITHHELD_REASONS,
     ApplyTokenWithheldReason,
+    apply_token_withheld_reason,
 )
 from copper_mcp.board_ir import NetClass
 from copper_mcp.models import DrcSummary
@@ -1076,12 +1077,16 @@ class PlacementSolveResponse:
             raise PlacementError("a solved placement solve carries candidates and no refusal")
         if self.status != "solved" and (self.candidates or self.diagnostic is None):
             raise PlacementError("an unsolved placement solve carries a refusal and no candidates")
-        # Closed-vocabulary literal, not a credential: the S105 finding is the attribute
-        # name containing "token", and the precedent is the same noqa beside the apply
-        # failure-code literals.
-        if (
-            self.apply_token is not None
-            or self.apply_token_withheld_reason != "unsupported_surface"  # noqa: S105
+        # Read out of the shared order rather than restated, so the vocabulary stays
+        # written down once: a never-minting surface always reads its reason from the same
+        # function every minting surface shares.
+        if self.apply_token is not None or self.apply_token_withheld_reason != (
+            apply_token_withheld_reason(
+                surface_mints_tokens=False,
+                requested=False,
+                apply_enabled=False,
+                has_candidate=False,
+            )
         ):
             raise PlacementError("a placement solve never mints apply authority")
         if self.evaluations < 0:

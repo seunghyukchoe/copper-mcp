@@ -42,14 +42,14 @@
    "replacement": "    \"expect_snapshot_digest\",\n    \"solver\",\n    \"include_apply_token\",\n)"
   },
   {
-   "anchor": "            or self.apply_token_withheld_reason != \"unsupported_surface\"  # noqa: S105",
+   "anchor": "if self.apply_token is not None or self.apply_token_withheld_reason != (",
    "expectation": "killed",
    "file": "src/copper_mcp/placement/contracts.py",
    "id": "PSV05-never-mints-invariant-inverted",
    "killing_tests": [
     "tests/test_placement_solve.py::SolveSurfaceTests::test_solved_response_carries_ranked_candidates_and_no_authority"
    ],
-   "replacement": "            or self.apply_token_withheld_reason == \"unsupported_surface\"  # noqa: S105"
+   "replacement": "if self.apply_token is not None or self.apply_token_withheld_reason == ("
   },
   {
    "anchor": "            candidates=tuple(item.candidate for item in result.ranked),",
@@ -93,14 +93,14 @@
    "replacement": "    if intent.expect_board_revision is not None and intent.expect_board_revision == board_revision:"
   },
   {
-   "anchor": "        if self.apply_token is not None or withheld != \"unsupported_surface\":",
+   "anchor": "if self.apply_token is not None or withheld != never_mints:",
    "expectation": "killed",
    "file": "src/copper_mcp/mcp_contracts.py",
    "id": "PSV10-contract-never-mints-inverted",
    "killing_tests": [
     "tests/test_placement_solve.py::SolveSurfaceTests::test_solved_response_carries_ranked_candidates_and_no_authority"
    ],
-   "replacement": "        if self.apply_token is not None or withheld == \"unsupported_surface\":"
+   "replacement": "if self.apply_token is not None or withheld == never_mints:"
   }
  ],
  "pytest_args": [
