@@ -55,6 +55,7 @@ from copper_mcp.models import ManifestContractError, candidate_from_dict, rank_c
 from copper_mcp.placement.contracts import PlacementResult
 from copper_mcp.placement_preview import preview_live_placement as preview_live_placement_service
 from copper_mcp.placement_preview import preview_placement as preview_placement_service
+from copper_mcp.placement_solve import solve_placement_preview as solve_placement_service
 from copper_mcp.post_placement_observation import (
     observe_post_placement as observe_post_placement_service,
 )
@@ -350,6 +351,21 @@ def preview_placement(
 
     active_settings = settings or Settings.from_env()
     return preview_placement_service(payload, active_settings, token_authority).to_dict()
+
+
+def solve_placement(
+    payload: dict[str, Any],
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    """Search bounded placement moves and rank only legalizer-issued candidates.
+
+    Read-only and capability-free: the response mints no apply token under any setting,
+    runs no DRC, and reaches no live editor. A solved pose is preview-grade until it is
+    re-previewed through ``preview_placement`` and explicitly applied.
+    """
+
+    active_settings = settings or Settings.from_env()
+    return solve_placement_service(payload, active_settings).to_dict()
 
 
 def preview_live_placement_raw(

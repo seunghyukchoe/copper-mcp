@@ -108,6 +108,7 @@ class McpServerTests(unittest.TestCase):
                 "render_circuit_schematic",
                 "run_board_drc",
                 "server_info",
+                "solve_placement",
                 "start_routing",
                 "get_routing_job",
                 "cancel_routing_job",

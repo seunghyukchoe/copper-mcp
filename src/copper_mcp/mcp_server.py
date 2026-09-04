@@ -68,6 +68,8 @@ from copper_mcp.mcp_contracts import (
     PlacementApplyToolResponse,
     PlacementPreviewToolRequest,
     PlacementPreviewToolResponse,
+    PlacementSolveToolRequest,
+    PlacementSolveToolResponse,
     PostPlacementObservationToolRequest,
     PostPlacementObservationToolResponse,
     RouteBundleToolRequest,
@@ -137,6 +139,7 @@ from copper_mcp.tools import preview_route_bundle as preview_route_bundle_servic
 from copper_mcp.tools import render_circuit_schematic as render_circuit_schematic_service
 from copper_mcp.tools import run_board_drc as run_board_drc_service
 from copper_mcp.tools import server_info as server_info_service
+from copper_mcp.tools import solve_placement as solve_placement_service
 from copper_mcp.tools import validate_candidate as validate_candidate_service
 from copper_mcp.tools import verify_circuit_schematic_erc as verify_circuit_schematic_erc_service
 from copper_mcp.tools import (
@@ -313,6 +316,7 @@ class CopperMCPServer(MCPServer[None]):
                 "observe_post_placement",
                 "preview_live_placement",
                 "preview_placement",
+                "solve_placement",
                 "inspect_live_editor_context",
                 "start_routing",
                 "verify_external_route_candidate",
@@ -366,6 +370,8 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("live placement tool arguments are malformed")
         if name == "preview_placement" and set(arguments) != {"request"}:
             raise ToolError("placement tool arguments are malformed")
+        if name == "solve_placement" and set(arguments) != {"request"}:
+            raise ToolError("placement solve tool arguments are malformed")
         if name == "inspect_live_editor_context" and set(arguments) != {"request"}:
             raise ToolError("live editor context tool arguments are malformed")
         if name == "start_routing" and set(arguments) != {"request", "authorization_digest"}:
@@ -1055,6 +1061,40 @@ def preview_placement(request: PlacementPreviewToolRequest) -> PlacementPreviewT
     return PlacementPreviewToolResponse.model_validate(
         preview_placement_service(request, _SETTINGS, _APPLY_TOKENS)
     )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+    structured_output=True,
+)
+def solve_placement(request: PlacementSolveToolRequest) -> PlacementSolveToolResponse:
+    """Search bounded placement moves and rank only legalizer-issued candidates.
+
+    ``request`` takes ``board``, ``constraints``, and ``subjects`` (the footprint references
+    the search may move), plus optional ``rules``, ``proposals``, ``placement_grid_nm``, and
+    a ``solver`` object of caller work budgets. The rule language is the preview surface's
+    own seven kinds, naming objects only by scene references; there is no coordinate field,
+    and positions in the response are derived here and snapped to ``placement_grid_nm``.
+
+    A ``solved`` result carries up to ``solver.max_ranked`` immutable candidates, each one
+    the same preview-shaped identity a preview mints for the same pose, with the same four
+    three-valued legality verdicts and per-rule evidence, plus solver accounting
+    (``evaluations``, route-probe use against its limit). The surface mints no apply
+    authority under any setting: every response carries ``apply_token`` null with the
+    closed ``unsupported_surface`` reason. A solved pose is preview-grade until it is
+    re-previewed through ``preview_placement`` and explicitly applied. The response never
+    runs DRC and never touches a live editor. ``budget_exhausted`` means the search work
+    ran out and is never a claim that no placement satisfies the rules.
+    """
+
+    # Both transports: one self-contained response, no server-side state, no capability
+    # handle to resolve. Workspace confinement is what bounds the disclosure.
+    return PlacementSolveToolResponse.model_validate(solve_placement_service(request, _SETTINGS))
 
 
 @mcp.tool(

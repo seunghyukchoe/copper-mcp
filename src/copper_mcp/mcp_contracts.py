@@ -14,7 +14,14 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, WithJsonSchema, model_validator
 
-from copper_mcp.apply_token_reasons import ApplyTokenWithheldReason
+from copper_mcp.apply_token_reasons import ApplyTokenWithheldReason, apply_token_withheld_reason
+from copper_mcp.placement.contracts import (
+    SOLVER_MAX_BEAM_WIDTH,
+    SOLVER_MAX_EVALUATIONS,
+    SOLVER_MAX_RANKED,
+    SOLVER_MAX_ROUNDS,
+    SOLVER_MAX_STEP_NM,
+)
 
 
 class _ClosedContract(BaseModel):
@@ -2404,6 +2411,109 @@ class PlacementPreviewToolResponse(_ClosedContract):
         return self
 
 
+class PlacementSolverSettingsContract(_ClosedContract):
+    """Caller work budgets for the solve surface. No time budgets.
+
+    Ceilings are imported from the runtime contract so the two cannot drift: the machine
+    schema rejects what the parser would refuse, before any file is read. Wall-clock
+    deadlines stay server-side, derived from the operation budget.
+    """
+
+    max_evaluations: Annotated[int, Field(ge=1, le=SOLVER_MAX_EVALUATIONS)] = 64
+    max_rounds: Annotated[int, Field(ge=0, le=SOLVER_MAX_ROUNDS)] = 4
+    beam_width: Annotated[int, Field(ge=1, le=SOLVER_MAX_BEAM_WIDTH)] = 4
+    max_ranked: Annotated[int, Field(ge=1, le=SOLVER_MAX_RANKED)] = 4
+    step_nm: Annotated[int, Field(ge=1, le=SOLVER_MAX_STEP_NM)] = 1_000_000
+    scoring_policy: Literal["same-net-manhattan-v1", "route-aware-astar-v1"] = (
+        "same-net-manhattan-v1"
+    )
+
+
+class PlacementSolveRequestContract(_ClosedContract):
+    """Closed, file-backed request shape for the read-only placement solve surface.
+
+    The same intent language as the preview surface, minus capability flags: there is no
+    ``include_apply_token`` and no ``include_drc`` because the surface mints no capability
+    and runs no KiCad under any setting.
+    """
+
+    board: Annotated[
+        str,
+        Field(min_length=1, max_length=4096, pattern=r"^[^\u0000-\u001f\u007f]+$"),
+    ]
+    constraints: RouteConstraintsContract
+    subjects: Annotated[list[RefId], Field(min_length=1, max_length=64)]
+    rules: Annotated[list[PlacementRuleInputContract], Field(max_length=256)] = Field(
+        default_factory=list
+    )
+    proposals: Annotated[list[PlacementProposalInputContract], Field(max_length=64)] = Field(
+        default_factory=list
+    )
+    placement_grid_nm: PositiveNanometres = 1_000
+    expect_board_revision: Digest | None = None
+    expect_snapshot_digest: Digest | None = None
+    solver: PlacementSolverSettingsContract = Field(default_factory=PlacementSolverSettingsContract)
+
+
+PlacementSolveToolRequest = Annotated[
+    Any,
+    WithJsonSchema(_inline_json_schema(PlacementSolveRequestContract)),
+]
+
+
+class PlacementSolveRequestEchoContract(_ClosedContract):
+    board: str
+    subjects: Annotated[list[str], Field(max_length=4096)]
+    rule_count: Annotated[int, Field(ge=0)]
+    proposal_count: Annotated[int, Field(ge=0)]
+    placement_grid_nm: Annotated[int, Field(ge=1)]
+    constraints: dict[str, int]
+    expect_board_revision: Digest | None = None
+    expect_snapshot_digest: Digest | None = None
+    solver: PlacementSolverSettingsContract
+
+
+class PlacementSolveToolResponse(_ClosedContract):
+    """Strict structured output contract for ``solve_placement``.
+
+    Candidates are the same preview-shaped identity a preview mints for the same pose.
+    The response mints no apply authority: ``apply_token`` is always null and the reason
+    is always the closed ``unsupported_surface`` literal.
+    """
+
+    status: Literal["solved", "refused", "unsupported_board"]
+    placement_solve_version: Literal["0.1.0"]
+    board_path: str
+    board_revision: Digest
+    snapshot_digest: Digest | None
+    request: PlacementSolveRequestEchoContract | None
+    candidates: Annotated[list[PlacementCandidateContract], Field(max_length=16)]
+    diagnostic: PlacementDiagnosticContract | None
+    evaluations: NonNegativeInteger
+    route_probes_used: NonNegativeInteger
+    route_probe_limit: NonNegativeInteger
+    scoring_policy: str
+    apply_token: Annotated[str, Field(min_length=1, max_length=512)] | None
+    #: Always null with the reason below: this surface mints no capability.
+    apply_token_withheld_reason: ApplyTokenWithheldReason | None
+    conversion_diagnostic_counts: dict[str, int]
+
+    @model_validator(mode="after")
+    def _never_mints(self) -> PlacementSolveToolResponse:
+        withheld = self.apply_token_withheld_reason
+        never_mints = apply_token_withheld_reason(
+            surface_mints_tokens=False,
+            requested=False,
+            apply_enabled=False,
+            has_candidate=False,
+        )
+        if self.apply_token is not None or withheld != never_mints:
+            raise ValueError("a placement solve never mints apply authority")
+        if (not self.candidates) == (self.diagnostic is None):
+            raise ValueError("a placement solve carries exactly one of candidates or refusal")
+        return self
+
+
 class ApplyVerificationContract(_ClosedContract):
     """What was checked, in the vocabulary of what was actually performed.
 
@@ -2619,6 +2729,8 @@ __all__ = [
     "PlacementApplyToolRequestContract",
     "PlacementApplyToolResponse",
     "PlacementPreviewToolRequest",
+    "PlacementSolveToolRequest",
+    "PlacementSolveToolResponse",
     "PostPlacementObservationToolRequest",
     "PostPlacementObservationToolResponse",
     "RoutePreviewToolRequest",

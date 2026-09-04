@@ -26,6 +26,7 @@ from copper_mcp.adapters import KiCadConstraintProfile
 from copper_mcp.apply_token_reasons import (
     APPLY_TOKEN_WITHHELD_REASONS,
     ApplyTokenWithheldReason,
+    apply_token_withheld_reason,
 )
 from copper_mcp.board_ir import NetClass
 from copper_mcp.models import DrcSummary
@@ -48,6 +49,36 @@ PLACEMENT_PREVIEW_VERSION = "0.2.0"
 #: How proposals are resolved and ordered. Recorded on every candidate so a later solver
 #: cannot be mistaken for this one.
 ORDERING_POLICY = "validate-snap-v1"
+#: Version of the solve response envelope. Candidates inside carry
+#: ``PLACEMENT_PREVIEW_VERSION`` because they are the same preview-shaped identity.
+PLACEMENT_SOLVE_VERSION = "0.1.0"
+
+#: Caller-settable solver ceilings on the public surface. Every one sits below the core
+#: maxima in ``placement/solver.py``: the public gate is the narrow one, and raising any
+#: ceiling is a new decision with its own measurement rather than a tuning constant.
+SOLVER_MAX_EVALUATIONS = 1_024
+SOLVER_MAX_ROUNDS = 16
+SOLVER_MAX_BEAM_WIDTH = 32
+SOLVER_MAX_RANKED = 16
+SOLVER_MAX_STEP_NM = 100_000_000
+
+_SOLVE_REQUIRED_FIELDS = ("board", "constraints", "subjects")
+_SOLVE_OPTIONAL_FIELDS = (
+    "rules",
+    "proposals",
+    "placement_grid_nm",
+    "expect_board_revision",
+    "expect_snapshot_digest",
+    "solver",
+)
+_SOLVER_FIELDS = (
+    "max_evaluations",
+    "max_rounds",
+    "beam_width",
+    "max_ranked",
+    "step_nm",
+    "scoring_policy",
+)
 EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _SHA256_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
@@ -885,6 +916,220 @@ class PlacementResult:
         }
 
 
+# --- bounded solve ------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class PlacementSolveRequest:
+    """A validated solve request: one placement intent plus caller work budgets.
+
+    ``include_apply_token`` and ``include_drc`` are not fields of this surface: the closed
+    contract drops them, so smuggling either in refuses as an unknown field before anything
+    is read. Wall-clock deadlines are not caller-settable; the service derives them from the
+    operation budget, because a caller-set CPU deadline is not a reproducible bound.
+    """
+
+    intent: PlacementIntent
+    max_evaluations: int = 64
+    max_rounds: int = 4
+    beam_width: int = 4
+    max_ranked: int = 4
+    step_nm: int = 1_000_000
+    scoring_policy: str = "same-net-manhattan-v1"
+
+    def solver_settings_dict(self) -> dict[str, Any]:
+        """Caller-visible budgets for the response echo (deadlines stay server-side)."""
+
+        return {
+            "max_evaluations": self.max_evaluations,
+            "max_rounds": self.max_rounds,
+            "beam_width": self.beam_width,
+            "max_ranked": self.max_ranked,
+            "step_nm": self.step_nm,
+            "scoring_policy": self.scoring_policy,
+        }
+
+
+def parse_placement_solve_request(
+    payload: Any,
+    *,
+    max_subjects: int = 64,
+    max_rules: int = 256,
+) -> PlacementSolveRequest:
+    """Validate one untrusted solve request without echoing unvalidated input."""
+
+    try:
+        fields = mapping("request", payload)
+        known_fields("request", fields, frozenset(_SOLVE_REQUIRED_FIELDS + _SOLVE_OPTIONAL_FIELDS))
+        required_fields("request", fields, _SOLVE_REQUIRED_FIELDS)
+        subjects = _sequence("subjects", fields["subjects"], maximum=max_subjects)
+        rules = _sequence("rules", fields.get("rules", []), maximum=max_rules)
+        proposals = _sequence("proposals", fields.get("proposals", []), maximum=max_subjects)
+        board = board_path(fields["board"])
+        solver_fields = mapping("solver", fields.get("solver", {}))
+        known_fields("solver", solver_fields, frozenset(_SOLVER_FIELDS))
+        return PlacementSolveRequest(
+            intent=PlacementIntent(
+                board=board,
+                constraints=net_class_constraints(fields["constraints"]),
+                subject_refs=tuple(_ref(f"subjects[{i}]", item) for i, item in enumerate(subjects)),
+                rules=tuple(_parse_rule(i, item) for i, item in enumerate(rules)),
+                proposals=tuple(_parse_proposal(i, item) for i, item in enumerate(proposals)),
+                placement_grid_nm=integer(
+                    "placement_grid_nm",
+                    fields.get("placement_grid_nm", 1_000),
+                    minimum=1,
+                    maximum=MAX_DIMENSION_NM,
+                ),
+                expect_board_revision=_optional_revision(fields, "expect_board_revision"),
+                expect_snapshot_digest=_optional_revision(fields, "expect_snapshot_digest"),
+            ),
+            max_evaluations=integer(
+                "max_evaluations",
+                solver_fields.get("max_evaluations", 64),
+                minimum=1,
+                maximum=SOLVER_MAX_EVALUATIONS,
+            ),
+            max_rounds=integer(
+                "max_rounds",
+                solver_fields.get("max_rounds", 4),
+                minimum=0,
+                maximum=SOLVER_MAX_ROUNDS,
+            ),
+            beam_width=integer(
+                "beam_width",
+                solver_fields.get("beam_width", 4),
+                minimum=1,
+                maximum=SOLVER_MAX_BEAM_WIDTH,
+            ),
+            max_ranked=integer(
+                "max_ranked",
+                solver_fields.get("max_ranked", 4),
+                minimum=1,
+                maximum=SOLVER_MAX_RANKED,
+            ),
+            step_nm=integer(
+                "step_nm",
+                solver_fields.get("step_nm", 1_000_000),
+                minimum=1,
+                maximum=SOLVER_MAX_STEP_NM,
+            ),
+            scoring_policy=text(
+                "scoring_policy",
+                solver_fields.get("scoring_policy", "same-net-manhattan-v1"),
+                maximum=64,
+            ),
+        )
+    except PlacementError:
+        raise
+    except RequestError as error:
+        raise PlacementError(str(error)) from error
+
+
+def _optional_revision(fields: dict[str, Any], name: str) -> str | None:
+    value = fields.get(name)
+    if value is None:
+        return None
+    return text(name, value, maximum=71)
+
+
+@dataclass(frozen=True, slots=True)
+class PlacementSolveResponse:
+    """Either ranked candidates or a typed refusal - never both, never neither.
+
+    Candidates are the same preview-shaped identity a preview mints for the same pose, so a
+    solved pose can be re-previewed and applied through the ordinary placement path. The
+    surface mints no apply authority under any setting: every response reaching a caller
+    carries ``apply_token`` null with the closed ``unsupported_surface`` reason, and every
+    candidate inside it is preview-grade until re-previewed. Solver accounting (evaluations,
+    route-probe use against its limit, ranked count, policy) is reported even on refusal,
+    because spent work is a fact about the run rather than a claim about the board.
+    """
+
+    status: str
+    board_revision: str
+    board_path: str = ""
+    request: PlacementSolveRequest | None = None
+    solver: dict[str, Any] = field(default_factory=dict)
+    snapshot_digest: str | None = None
+    candidates: tuple[PlacementCandidate, ...] = ()
+    diagnostic: PlacementDiagnostic | None = None
+    evaluations: int = 0
+    route_probes_used: int = 0
+    route_probe_limit: int = 0
+    scoring_policy: str = "same-net-manhattan-v1"
+    apply_token: str | None = None
+    apply_token_withheld_reason: ApplyTokenWithheldReason | None = None
+    conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "conversion_diagnostic_counts",
+            MappingProxyType(dict(self.conversion_diagnostic_counts)),
+        )
+        object.__setattr__(self, "solver", dict(self.solver))
+        if self.status not in {"solved", "refused", "unsupported_board"}:
+            raise PlacementError("a placement solve status is malformed")
+        if (not self.candidates) == (self.diagnostic is None):
+            raise PlacementError("a placement solve carries exactly one of candidates or refusal")
+        if self.status == "solved" and (not self.candidates or self.diagnostic is not None):
+            raise PlacementError("a solved placement solve carries candidates and no refusal")
+        if self.status != "solved" and (self.candidates or self.diagnostic is None):
+            raise PlacementError("an unsolved placement solve carries a refusal and no candidates")
+        # Read out of the shared order rather than restated, so the vocabulary stays
+        # written down once: a never-minting surface always reads its reason from the same
+        # function every minting surface shares.
+        if self.apply_token is not None or self.apply_token_withheld_reason != (
+            apply_token_withheld_reason(
+                surface_mints_tokens=False,
+                requested=False,
+                apply_enabled=False,
+                has_candidate=False,
+            )
+        ):
+            raise PlacementError("a placement solve never mints apply authority")
+        if self.evaluations < 0:
+            raise PlacementError("solver evaluations must not be negative")
+        if self.route_probes_used < 0 or self.route_probe_limit < 0:
+            raise PlacementError("solver route probe accounting must not be negative")
+        if self.route_probes_used > self.route_probe_limit:
+            raise PlacementError("solver route probe use exceeds its limit")
+
+    def to_dict(self) -> dict[str, Any]:
+        request = None
+        if self.request is not None:
+            intent = self.request.intent.to_dict()
+            request = {
+                "board": intent["board"],
+                "subjects": intent["subjects"],
+                "rule_count": intent["rule_count"],
+                "proposal_count": intent["proposal_count"],
+                "placement_grid_nm": intent["placement_grid_nm"],
+                "constraints": intent["constraints"],
+                "expect_board_revision": intent["expect_board_revision"],
+                "expect_snapshot_digest": intent["expect_snapshot_digest"],
+                "solver": dict(self.solver),
+            }
+        return {
+            "status": self.status,
+            "placement_solve_version": PLACEMENT_SOLVE_VERSION,
+            "board_path": self.board_path,
+            "request": request,
+            "board_revision": self.board_revision,
+            "snapshot_digest": self.snapshot_digest,
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
+            "diagnostic": None if self.diagnostic is None else self.diagnostic.to_dict(),
+            "evaluations": self.evaluations,
+            "route_probes_used": self.route_probes_used,
+            "route_probe_limit": self.route_probe_limit,
+            "scoring_policy": self.scoring_policy,
+            "apply_token": self.apply_token,
+            "apply_token_withheld_reason": self.apply_token_withheld_reason,
+            "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
+        }
+
+
 __all__ = [
     "ANCHOR_POINTS",
     "AXES",
@@ -894,6 +1139,7 @@ __all__ = [
     "ORDERING_POLICY",
     "ORIENTATIONS",
     "PLACEMENT_PREVIEW_VERSION",
+    "PLACEMENT_SOLVE_VERSION",
     "PLACEMENT_VERSION",
     "SIDES",
     "AlignmentRule",
@@ -912,6 +1158,8 @@ __all__ = [
     "PlacementProposal",
     "PlacementResult",
     "PlacementRule",
+    "PlacementSolveRequest",
+    "PlacementSolveResponse",
     "ProximityRule",
     "RegionRule",
     "RuleResult",
@@ -920,5 +1168,6 @@ __all__ = [
     "canonical_candidate_bytes",
     "finalise_candidate",
     "parse_placement_intent",
+    "parse_placement_solve_request",
     "verify_placement_id",
 ]

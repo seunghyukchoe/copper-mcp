@@ -142,7 +142,7 @@ def test_the_response_contracts_reuse_the_shared_literal_rather_than_restating_i
     contracts = (SRC / "mcp_contracts.py").read_text(encoding="utf-8")
 
     assert "from copper_mcp.apply_token_reasons import ApplyTokenWithheldReason" in contracts
-    assert contracts.count("apply_token_withheld_reason: ApplyTokenWithheldReason") == 10
+    assert contracts.count("apply_token_withheld_reason: ApplyTokenWithheldReason") == 11
 
 
 def test_public_schemas_require_the_closed_reason_and_move_their_versions() -> None:
