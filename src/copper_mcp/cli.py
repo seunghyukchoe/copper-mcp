@@ -37,6 +37,7 @@ from copper_mcp.tools import (
     preview_route,
     run_board_drc,
     server_info,
+    solve_placement,
 )
 
 _ROUTER_SETTING_OPTIONS = tuple(AStarSettings.__dataclass_fields__)
@@ -175,6 +176,33 @@ def _placement_request(args: argparse.Namespace, settings: Settings) -> dict[str
     return request
 
 
+def _solve_request(args: argparse.Namespace, settings: Settings) -> dict[str, Any]:
+    """Build a solve request from flags; the service still validates every field.
+
+    Solver budgets ride flags beside the placement flags because they are small integers,
+    unlike rules and proposals, which stay in the optional intent document for the same
+    reason they do on ``preview-placement``: flags would be a worse interface.
+    """
+
+    request = _placement_request(args, settings)
+    solver: dict[str, Any] = {}
+    if args.solver_max_evaluations is not None:
+        solver["max_evaluations"] = args.solver_max_evaluations
+    if args.solver_max_rounds is not None:
+        solver["max_rounds"] = args.solver_max_rounds
+    if args.solver_beam_width is not None:
+        solver["beam_width"] = args.solver_beam_width
+    if args.solver_max_ranked is not None:
+        solver["max_ranked"] = args.solver_max_ranked
+    if args.solver_step_nm is not None:
+        solver["step_nm"] = args.solver_step_nm
+    if args.solver_scoring_policy is not None:
+        solver["scoring_policy"] = args.solver_scoring_policy
+    if solver:
+        request["solver"] = solver
+    return request
+
+
 def _load_candidate(path: str, settings: Settings) -> dict[str, Any]:
     raw = load_json_file(path, settings)
     try:
@@ -305,6 +333,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Snap proposed origins to this grid",
     )
 
+    solve_parser = subparsers.add_parser(
+        "solve-placement",
+        help="Search bounded placement moves and rank legalizer-issued candidates",
+    )
+    solve_parser.add_argument("path", help="Board path relative to the workspace")
+    for option in _CONSTRAINT_OPTIONS:
+        solve_parser.add_argument(f"--{option.replace('_', '-')}", type=int, required=True)
+    solve_parser.add_argument(
+        "--subject",
+        action="append",
+        required=True,
+        dest="placement_subjects",
+        help="Footprint reference the search may move; repeatable",
+    )
+    solve_parser.add_argument(
+        "--intent",
+        default=None,
+        help=(
+            "Optional JSON document inside the workspace supplying rules and proposals; "
+            "its board, constraints and subjects come from the flags above"
+        ),
+    )
+    solve_parser.add_argument(
+        "--placement-grid-nm",
+        type=int,
+        default=None,
+        help="Snap proposed origins to this grid",
+    )
+    solve_parser.add_argument("--solver-max-evaluations", type=int, default=None)
+    solve_parser.add_argument("--solver-max-rounds", type=int, default=None)
+    solve_parser.add_argument("--solver-beam-width", type=int, default=None)
+    solve_parser.add_argument("--solver-max-ranked", type=int, default=None)
+    solve_parser.add_argument("--solver-step-nm", type=int, default=None)
+    solve_parser.add_argument(
+        "--solver-scoring-policy",
+        default=None,
+        choices=("same-net-manhattan-v1", "route-aware-astar-v1"),
+    )
+
     apply_parser = subparsers.add_parser(
         "apply-candidate",
         help="Apply a previewed route candidate to a board (requires COPPER_MCP_ALLOW_APPLY=1)",
@@ -418,6 +485,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "preview-placement":
             _json_dump(preview_placement(_placement_request(args, settings), settings))
+            return 0
+        if args.command == "solve-placement":
+            _json_dump(solve_placement(_solve_request(args, settings), settings))
             return 0
         if args.command == "apply-candidate":
             document = _load_candidate(args.candidate, settings)

@@ -187,6 +187,29 @@ to write an absolute coordinate — so every position in the response was derive
 snapped to an explicit grid. The seven rule kinds carry exact integer parameters, and the language
 has no way to state an absolute coordinate or to permit an overlap.
 
+## Solve a placement
+
+Search bounded placement moves and rank only legalizer-issued candidates, without modifying
+the board:
+
+```bash
+copper-mcp --workspace /absolute/path/to/boards solve-placement example.kicad_pcb \
+  --clearance-nm 250000 --track-width-nm 250000 \
+  --via-diameter-nm 800000 --via-drill-nm 400000 \
+  --subject footprint:kicad:<uuid> --subject footprint:kicad:<uuid> \
+  --solver-max-ranked 4
+```
+
+The request takes the same intent language as a placement preview plus a `solver` object of
+caller work budgets (`max_evaluations`, `max_rounds`, `beam_width`, `max_ranked`, `step_nm`,
+`scoring_policy`); there are no time budgets and no capability flags. A `solved` response
+carries up to `max_ranked` preview-shaped candidates with the same four three-valued legality
+verdicts, plus solver accounting. Every candidate withholds its apply token with
+`unsupported_surface`: the surface mints no authority, so a solved pose is applied by
+re-previewing it through `preview-placement` and following the ordinary apply path.
+`budget_exhausted` means the search work ran out, never that no placement satisfies the rules
+([ADR-0130](adr/0130-bounded-placement-solve-surface.md)).
+
 The response proves four things and claims nothing else: pad overlap, board-outline containment,
 keepout respect, and courtyard overlap. `pad_overlap` is three-valued, so `inconclusive` means
 neither clearance nor collision could be proven rather than that something is wrong.

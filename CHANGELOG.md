@@ -6,6 +6,17 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A read-only `solve_placement` MCP tool and `solve-placement` CLI command that run the
+  deterministic placement solver over one workspace board and return up to `max_ranked`
+  ranked legalizer-issued candidates plus solver accounting. The surface reuses the
+  placement intent language (no coordinate fields, no capability flags), bindings, and
+  refusal codes; every response carries `apply_token: null` with `unsupported_surface`,
+  runs no DRC, and reaches no live editor. A solved pose is preview-grade until
+  re-previewed through `preview_placement` (`ADR-0130`, `D-247`, `R-193`, `SEC-175`,
+  issue #262).
+
 ### Changed
 
 - The live KiCad IPC surfaces now bind to a **declared major-version compatibility window**

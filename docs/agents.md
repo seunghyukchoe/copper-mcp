@@ -31,7 +31,7 @@ explicit one-value literal rather than as an absent or optimistic value. `not_ru
 
 ## Tool reference
 
-29 tools are registered over MCP on the `stdio` transport, 28 on `streamable-http`:
+30 tools are registered over MCP on the `stdio` transport, 29 on `streamable-http`:
 `render_circuit_schematic` is registered only when the transport is `stdio`. Every other tool is
 available on both transports, and `observe_board_scene` refuses only its `include_render` flag off
 stdio. `tests/test_agents_doc.py` asserts in both directions that the table below names exactly the
@@ -53,6 +53,7 @@ that are **off by default** — if a flag is not listed, the tool takes no opt-i
 | `preview_route_bundle` | One atomic plan over two to eight known net references, or nothing. Publishes only when negotiated routing, a complete composition replay, and the cross-net clearance gate all succeed. No partial plans, no DRC, no token. | `expect_board_revision`, `expect_snapshot_digest` → `bundle_id`, `base_revision`, `snapshot_digest` | none |
 | `preview_layered_route` | One two-signal-layer candidate with per-layer integer paths and full-stack through-vias. The net is inferred from `start_pad_id` and `end_pad_id`; there is no net-name selector. | `expect_board_revision`, `expect_snapshot_digest` → `candidate_id`, `base_revision`, `snapshot_digest` | `include_drc` |
 | `preview_placement` | A placement candidate reporting four direction-typed legality checks — pad overlap, outline containment, keepout respect, and per-courtyard-layer courtyard overlap — plus per-rule evidence. A check is `inconclusive` rather than guessed when its bounds/core bracket cannot prove either endpoint. Positions are derived by the server and snapped to `placement_grid_nm`; the rule language cannot state an absolute coordinate. | `expect_board_revision`, `expect_snapshot_digest` (both optional) → `candidate_id`, `base_revision`, `view_revision`, `snapshot_digest`, optional `apply_token` | `include_drc`, `include_apply_token` |
+| `solve_placement` | Up to `solver.max_ranked` ranked legalizer-issued candidates from a bounded grid-adjacent search over the same seven-rule intent language — the solver proposes, the legalizer disposes, and the agent chooses. Every candidate is the same preview-shaped identity a preview mints for the same pose. The surface mints no apply authority under any setting (`unsupported_surface`), runs no DRC, and reaches no live editor; a solved pose is preview-grade until re-previewed and explicitly applied. `budget_exhausted` means the search work ran out, never that no placement satisfies the rules. | `expect_board_revision`, `expect_snapshot_digest` (both optional) → ranked `candidate_id` list, `base_revision`, `view_revision`, `snapshot_digest`, solver accounting, never an `apply_token` | caller work budgets in `solver` (`max_evaluations`, `max_rounds`, `beam_width`, `max_ranked`, `step_nm`, `scoring_policy`); no time budgets, no capability flags |
 | `observe_post_placement` | One scene **and** one aggregate KiCad DRC summary built from a single capture of the same board and context, for an exactly expected revision. Rejects the whole result if the context moves mid-capture. Issues and consumes no token. | `expect_board_revision` → `board_revision`, `snapshot_digest` | `include_annotations` |
 | `apply_candidate` | **Replaces the board file.** Writes an additive route patch, returns `backup_path` (the pre-apply copy is the undo), `bytes_added`, `segments_added`, and a `verification` matrix. | `expect_board_revision` + `apply_token` → `board_revision_before`, `board_revision_after`, `snapshot_digest_before` | `COPPER_MCP_ALLOW_APPLY=1`, route-domain `apply_token` |
 | `apply_placement_candidate` | **Replaces the board file.** Writes a footprint pose for the front-side, orthogonal, single-native-identity, unfilled-rectangular-courtyard subset only. Returns `backup_path`, `bytes_changed`, `footprints_moved`, and the same `verification` matrix. | `expect_board_revision` + `apply_token` → `board_revision_before`, `board_revision_after`, `snapshot_digest_before` | `COPPER_MCP_ALLOW_APPLY=1`, placement-domain `apply_token` |
@@ -347,6 +348,13 @@ preview_placement({ "request": {
 //    courtyard_overlap is THREE-valued too: a nested courtyard ring is a hole, and
 //    inconclusive marks penetration below KiCad's 10,000 nm cache-inset threshold.
 // -> status "refused": diagnostic.code, plus diagnostic.legality when illegal_placement.
+
+// 2b. Or search instead of proposing. solve_placement takes the same intent shape and
+//     returns up to solver.max_ranked ranked candidates plus accounting. Every candidate
+//     is preview-grade with unsupported_surface withholding its token; applying one means
+//     re-previewing it through preview_placement first. A "solved" status with N candidates
+//     is a ranking, not a recommendation — and "refused" with budget_exhausted means the
+//     work ran out, never that the placement is impossible.
 
 // 3. After an apply (below), observe the exact new revision in one capture.
 observe_post_placement({ "request": {
