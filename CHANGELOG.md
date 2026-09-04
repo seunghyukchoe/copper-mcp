@@ -6,6 +6,17 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `preview_route_bundle` accepts opt-in `include_drc` (MCP-only, default off): a routed
+  plan continues through one authoritative KiCad DRC run over the composed board on a
+  private disposable copy, bound as bundle evidence (`bundle_id`, shared base revision,
+  every candidate id, source/patched/context revisions, `single_invocation` count, and a
+  bundle-subject in-toto statement). Structural problems refuse before KiCad starts; a
+  KiCad execution failure refuses the whole response. Response schema moves 1.0 to 1.1
+  for the additive routed-variant evidence field. No apply token, persistence, CLI, or
+  live peer (`ADR-0131`, `D-248`, `R-194`, `SEC-176`, issue #264).
+
 ### Changed
 
 - The live KiCad IPC surfaces now bind to a **declared major-version compatibility window**

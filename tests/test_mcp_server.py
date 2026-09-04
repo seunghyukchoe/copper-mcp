@@ -136,6 +136,7 @@ class McpServerTests(unittest.TestCase):
                 "expect_snapshot_digest",
                 "seed",
                 "settings",
+                "include_drc",
             },
         )
         self.assertEqual(
@@ -165,23 +166,25 @@ class McpServerTests(unittest.TestCase):
             "NotRoutedRouteBundlePreviewContract": "not_routed",
             "UnsupportedRouteBundlePreviewContract": "unsupported_board",
         }
+        closed_fields = {
+            "schema_version",
+            "board_path",
+            "board_revision",
+            "request",
+            "status",
+            "snapshot_digest",
+            "plan",
+            "diagnostic",
+            "conversion_diagnostic_counts",
+        }
         for name, status in statuses.items():
             schema = definitions[name]
             assert isinstance(schema, dict)
-            _assert_closed_object(
-                schema,
-                {
-                    "schema_version",
-                    "board_path",
-                    "board_revision",
-                    "request",
-                    "status",
-                    "snapshot_digest",
-                    "plan",
-                    "diagnostic",
-                    "conversion_diagnostic_counts",
-                },
-            )
+            expected = set(closed_fields)
+            if name == "RoutedRouteBundlePreviewContract":
+                # ADR-0131: the routed variant may carry opt-in bundle DRC evidence.
+                expected.add("drc_evidence")
+            _assert_closed_object(schema, expected)
             self.assertEqual(schema["properties"]["status"]["const"], status)
         for name in (
             "RouteBundleRequestContract",
@@ -203,9 +206,11 @@ class McpServerTests(unittest.TestCase):
                 pending.extend(current.values())
             elif isinstance(current, list):
                 pending.extend(current)
+        # ADR-0131 narrowed this tripwire deliberately: the bundle tool may now return
+        # bundle-bound DRC evidence, and only that. Tokens, derivatives, and artifacts stay
+        # forbidden here.
         self.assertFalse(
-            {"apply_token", "apply_authority", "drc_evidence", "derivative", "artifact"}
-            & property_names
+            {"apply_token", "apply_authority", "derivative", "artifact"} & property_names
         )
         assert bundle.annotations is not None
         self.assertIs(bundle.annotations.read_only_hint, True)

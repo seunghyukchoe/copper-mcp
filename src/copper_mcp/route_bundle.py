@@ -15,7 +15,7 @@ import re
 import time
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
@@ -23,12 +23,14 @@ from typing import Any
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import NetClass
 from copper_mcp.config import Settings
+from copper_mcp.kicad_cli import RouteBundleDrcEvidence, run_route_bundle_drc
 from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.request_boundary import (
     CONSTRAINT_FIELDS,
     MAX_JSON_SAFE_INTEGER,
     RequestError,
     board_path,
+    boolean,
     copper_layer,
     integer,
     known_fields,
@@ -56,7 +58,7 @@ _REQUIRED_FIELDS = (
     "expect_board_revision",
     "expect_snapshot_digest",
 )
-_OPTIONAL_FIELDS = ("seed", "settings")
+_OPTIONAL_FIELDS = ("seed", "settings", "include_drc")
 _MAX_NETS = 8
 # Every per-net request derives ``seed + index``, so the accepted request seed must leave room for
 # the largest reachable index.  Bounding it here keeps a schema-valid request from producing an
@@ -88,6 +90,10 @@ class RouteBundleRequest:
     expect_snapshot_digest: str
     seed: int
     settings: Any
+    #: Explicit opt-in for authoritative KiCad DRC evidence over the composed plan. Off by
+    #: default; the evidence is aggregate, candidate-bound, and single-invocation, and it
+    #: grants no apply authority.
+    include_drc: bool = False
 
     def __post_init__(self) -> None:
         board_path(self.board)
@@ -103,6 +109,8 @@ class RouteBundleRequest:
         _digest("expect_board_revision", self.expect_board_revision)
         _digest("expect_snapshot_digest", self.expect_snapshot_digest)
         integer("seed", self.seed, minimum=0, maximum=_MAX_SEED)
+        if type(self.include_drc) is not bool:
+            raise RouteBundleError("include_drc must be boolean")
 
     @property
     def layer_id(self) -> str:
@@ -125,6 +133,7 @@ class RouteBundleRequest:
             "settings": {
                 field: getattr(self.settings, field) for field in self.settings.__dataclass_fields__
             },
+            "include_drc": self.include_drc,
         }
 
 
@@ -152,6 +161,7 @@ def parse_route_bundle_request(payload: Any) -> RouteBundleRequest:
             ),
             seed=integer("seed", fields.get("seed", 0), minimum=0, maximum=_MAX_SEED),
             settings=_settings(fields.get("settings", {})),
+            include_drc=boolean("include_drc", fields.get("include_drc", False)),
         )
     except RouteBundleError:
         raise
@@ -324,6 +334,10 @@ class RouteBundlePreview:
     snapshot_digest: str | None = None
     plan: RouteBundlePlan | None = None
     diagnostic: str | None = None
+    #: Aggregate KiCad DRC evidence over the composed plan. Present only on a routed plan
+    #: whose request opted in; it grants no apply authority and is single-invocation evidence,
+    #: not a reproducible differential.
+    drc_evidence: RouteBundleDrcEvidence | None = None
     conversion_diagnostic_counts: Mapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -352,22 +366,32 @@ class RouteBundlePreview:
                 or self.snapshot_digest != self.plan.base_revision
             ):
                 raise RouteBundleError("a routed bundle preview must carry one bound plan")
+            if self.drc_evidence is not None and (
+                not isinstance(self.drc_evidence, RouteBundleDrcEvidence)
+                or self.drc_evidence.bundle_id != self.plan.bundle_id
+                or self.drc_evidence.bundle_base_revision != self.plan.base_revision
+                or self.drc_evidence.source_revision != self.board_revision
+                or tuple(self.drc_evidence.candidate_ids)
+                != tuple(item.candidate_id for item in self.plan.candidates)
+            ):
+                raise RouteBundleError("bundle DRC evidence is not bound to this plan")
         elif self.status is RouteBundleStatus.UNSUPPORTED_BOARD:
             if (
                 self.snapshot_digest is not None
                 or self.plan is not None
                 or self.diagnostic is not None
+                or self.drc_evidence is not None
                 or not counts
             ):
                 raise RouteBundleError(
                     "an unsupported bundle board must carry conversion diagnostics"
                 )
-        elif self.plan is not None or self.diagnostic is None:
+        elif self.plan is not None or self.diagnostic is None or self.drc_evidence is not None:
             raise RouteBundleError("an unsuccessful bundle preview must carry no plan")
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "schema_version": "1.0",
+        document: dict[str, Any] = {
+            "schema_version": "1.1",
             "status": str(self.status),
             "board_path": self.board_path,
             "board_revision": self.board_revision,
@@ -377,6 +401,14 @@ class RouteBundlePreview:
             "diagnostic": self.diagnostic,
             "conversion_diagnostic_counts": dict(self.conversion_diagnostic_counts),
         }
+        if self.status is RouteBundleStatus.ROUTED:
+            # The closed machine contract declares this key on the routed variant only, as a
+            # required nullable: null unless opted in, never absent. Other variants carry no
+            # evidence and must not grow the key.
+            document["drc_evidence"] = (
+                None if self.drc_evidence is None else self.drc_evidence.to_dict()
+            )
+        return document
 
 
 def _routes(snapshot_digest: str, request: RouteBundleRequest) -> tuple[RouteRequest, ...]:
@@ -500,6 +532,18 @@ def preview_route_bundle(payload: Any, settings: Settings) -> RouteBundlePreview
             snapshot.snapshot_digest,
             diagnostic=plan,
         )
+    evidence = None
+    if request.include_drc:
+        # One composed board, one DRC run, bundle-bound evidence. A KiCad execution failure
+        # propagates as a refusal answer, exactly as a single-candidate include_drc failure
+        # does: the caller re-requests without the flag for the plan alone.
+        evidence = run_route_bundle_drc(
+            relative_path,
+            plan,
+            request.profile(),
+            _bundle_drc_settings(settings, deadline),
+            deadline=deadline,
+        )
     return RouteBundlePreview(
         RouteBundleStatus.ROUTED,
         relative_path,
@@ -507,6 +551,19 @@ def preview_route_bundle(payload: Any, settings: Settings) -> RouteBundlePreview
         request,
         snapshot.snapshot_digest,
         plan=plan,
+        drc_evidence=evidence,
+    )
+
+
+def _bundle_drc_settings(settings: Settings, deadline: float) -> Settings:
+    """Clamp the KiCad timeout so bundle DRC cannot outlive the preview deadline."""
+
+    remaining = int(deadline - time.monotonic())
+    if remaining < 1:
+        raise RouteBundleError("the bundle deadline expired before authoritative DRC could run")
+    return replace(
+        settings,
+        kicad_timeout_seconds=min(settings.kicad_timeout_seconds, remaining),
     )
 
 
