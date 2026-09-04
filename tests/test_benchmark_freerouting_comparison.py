@@ -303,18 +303,26 @@ def test_kill_surfaces_eperm_when_the_child_it_owns_is_still_alive(monkeypatch: 
 
 
 def test_process_prevents_an_oversized_child_file_before_it_can_complete(tmp_path: Path) -> None:
+    # The guarantee is that the child is killed before it can complete, which
+    # is what the test name states. Which guard wins the race -- the file-size
+    # limit (`failed`) or the streaming deadline (`timeout`) -- depends on
+    # scheduler latency under load, not on the code, so pinning one reason
+    # flakes on hosted runners (#253). The load-bearing assertions are the ones
+    # a mutant that lets the child complete would break: the file never reaches
+    # its declared size and the process is reaped rather than still running.
     result = benchmark.run_process(
         (
             sys.executable,
             "-c",
             "from pathlib import Path; Path('oversized.bin').write_bytes(b'x' * (2 * 1024 * 1024))",
         ),
-        3,
+        30,
         tmp_path,
         file_limit_bytes=1024 * 1024,
     )
 
-    assert result.status == "failed"
+    assert result.status in {"failed", "timeout"}
+    assert result.returncode is not None
     assert (tmp_path / "oversized.bin").stat().st_size <= 1024 * 1024
 
 

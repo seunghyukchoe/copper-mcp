@@ -34,6 +34,21 @@ All notable changes are documented here. The format follows
   was not. **No derived cardinality replaces it**: counting distinct net names off item
   references would be an unverified parity claim against `Board.get_nets()`. Board IR's own
   `object_counts["nets"]` is a genuine net collection and is unchanged (`ADR-0129`, `D-242`).
+- CI's `Unit tests` step now runs `python -m pytest -n 4 --dist loadfile` instead of a single
+  process, and `pytest-xdist>=3.8,<4` joins the `dev` extra. Four workers because a hosted
+  `ubuntu-latest` runner reports four vCPUs -- recorded by a new `Record runner CPU count` step
+  rather than cited from documentation, because no archived hosted log in this repository carried
+  the core count. `--dist loadfile` because this suite's cost sits in module-scoped fixtures that
+  anything finer would rebuild once per worker. **The hosted speed-up is 1.23x, not the 3.22x-3.31x
+  measured locally**: the prediction was `serial x 0.2833` and the measurement was `serial x 0.814`,
+  a 2.87x undershoot, because the local host has twelve cores and the runner has four, so four
+  workers that each owned a core locally saturate every vCPU hosted. The worst `ci.yml:test` job leg
+  moves from 3,302 s to 2,745 s, widening the half-rule margin from 9.93 to 28.50 minutes;
+  `timeout-minutes: 120` is deliberately unchanged so the ceiling can still report the next growth.
+  Coverage stays on all three matrix legs and `make test` stays serial. `-n 4` is accepted as better
+  than serial rather than as optimal -- the predeclared hosted `-n 2` comparison was not run. The
+  ceiling on any worker count is one 610 s file, and raising it is a separate change. See B-143 and
+  D-244.
 
 ### Added
 
@@ -97,6 +112,49 @@ All notable changes are documented here. The format follows
   digests offline but are deliberately not accepted as the current canonical pair. The corrected
   record passes **190/190** focused tests and **78/78** evidence-contract mutants (`D-241`,
   `B-141`, `ADR-0127`).
+- `scripts/check_doc_links.py` no longer passes over Markdown it never opened. Its population was
+  `git ls-files "*.md"`, so a document written but not yet staged was not checked at all: the
+  checker reported **261** files, and the same **261**, with and without an untracked note carrying
+  an unresolvable link planted beside them. That is an absence that was never capable of reporting
+  a presence, and it went green during v0.12.0's preparation minutes before the full suite failed
+  on two unresolved ADR links in a freshly written migration note. The population is now the
+  working tree: tracked Markdown plus `git ls-files --others --exclude-standard` under a `*.md`
+  pathspec, the same scoping `scripts/check_secrets.py` already uses, so `.gitignore` and
+  `.git/info/exclude` still decide what counts as repository content and a scratch file of another
+  kind is never read. The widening is announced rather than silent — every untracked file that was
+  read is named on stdout — and the printed count now reconciles with what is on disk: it counts
+  files actually read, names any tracked path that is absent from the working tree, and treats a
+  Markdown file that cannot be decoded as a failure rather than a skip. Every other repository-wide
+  checker was audited for the same shape and none was found: `check_adr_numbers`, `check_ledgers`,
+  `check_schema_sets`, `check_drc_comparability`, `check_ci_budgets` and the mutation-anchor sweep
+  all walk the filesystem already, `check_secrets` already includes untracked files, and
+  `check_audio_benchmarks`, `check_circuit_intents` and `check_version` are manifest- or
+  artifact-driven rather than population walks. (D-239, R-190, issue #244)
+
+- A new `scripts/check_sdist_tracked.py` gate, wired into `make lint`, builds the source
+  distribution and refuses when any member is absent from `git ls-files` -- the one
+  exception being the backend-generated `PKG-INFO` -- so a scratch note can no longer
+  sail into the release tarball unnoticed. It observes the artifact rather than modelling
+  it: an earlier draft asked Git for untracked files under the sdist allowlist, which
+  honours `core.excludesFile` and `.git/info/exclude` as well as `.gitignore` while
+  hatchling honours only `.gitignore`, and review packed a file hidden in
+  `$GIT_DIR/info/exclude` into the tarball while that draft printed "passed". The
+  one-time audit of the 0.12.0 sdist found **938** file members, exactly **one** of them
+  untracked and backend-generated (issue #256, `D-246`, `R-192`).
+- Hypothesis generation is deterministic in hosted CI, where a coverage gate needs a
+  comparable number: `tests/conftest.py` registers a `derandomize`d `deterministic-ci`
+  profile and loads whatever `HYPOTHESIS_PROFILE` names, and the workflow sets it on the
+  test job. Local runs keep the default exploratory stream. The two `sexpr.py`
+  syntax-error refusal paths coverage reached only by chance now carry deterministic
+  examples under either profile (issue #255, `D-246`).
+- The oversized-child process test asserts the kill guarantee over either kill
+  reason instead of pinning which guard wins a scheduler-latency race (issue #253,
+  `D-246`).
+- `docs/releasing.md` records the rule for commit-bound benchmark artifacts in its own
+  subsection: a branch commit's SHA never survives its own merge, since squash-merge
+  discards branch commits and linear history forbids merge commits, so an artifact must
+  bind something that outlives it -- today a revision already on the default branch
+  (issue #250, `D-246`, `R-192`, `D-241`).
 
 ## [0.12.0] - 2026-09-01
 

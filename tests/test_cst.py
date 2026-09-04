@@ -287,5 +287,25 @@ class SplicePropertyTests(unittest.TestCase):
         self.assertEqual(result, source[:-1] + b"Z" + source[-1:])
 
 
+class SexprRefusalDeterminismTests(unittest.TestCase):
+    """The two syntax-error paths coverage used to reach only by chance (#255).
+
+    A Hypothesis strategy that never draws an unterminated string or a stray
+    closing parenthesis leaves both lines uncovered, so a coverage gate sees a
+    phantom delta. These deterministic examples pin both paths regardless of
+    what generation draws.
+    """
+
+    def test_an_unterminated_quoted_string_refuses_deterministically(self) -> None:
+        with self.assertRaises(SExprError) as error:
+            parse_sexpr(b'"unterminated', ParseLimits())
+        self.assertEqual(error.exception.code, "syntax.invalid")
+
+    def test_a_stray_closing_parenthesis_refuses_deterministically(self) -> None:
+        with self.assertRaises(SExprError) as error:
+            parse_sexpr(b")", ParseLimits())
+        self.assertEqual(error.exception.code, "syntax.invalid")
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

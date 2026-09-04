@@ -53,6 +53,10 @@ WHY = {
     ),
     "check_adr_numbers.py": "ADR number allocation",
     "check_doc_links.py": "documentation links",
+    "check_sdist_tracked.py": (
+        "the sdist member sweep (#256); it builds the tarball and reads it, so it needs the "
+        "`build` package the install step already provides"
+    ),
     "check_schema_sets.py": "published schema accepted sets",
     "check_drc_comparability.py": "published benchmark DRC comparability literals (P4.1)",
     "check_ci_budgets.py": "the CI timeout budgets declared in this very directory (P0.3)",
@@ -75,6 +79,7 @@ LINT_SCRIPTS = frozenset(
         "check_ledgers.py",
         "check_adr_numbers.py",
         "check_doc_links.py",
+        "check_sdist_tracked.py",
         "check_schema_sets.py",
         "check_drc_comparability.py",
         "check_ci_budgets.py",
@@ -151,6 +156,23 @@ def test_the_lint_target_and_the_workflow_check_the_same_scripts() -> None:
     )
     for script in sorted(in_lint):
         assert f"scripts/{script}" in RUN_COMMANDS, f"{script} is in `make lint` but not in CI"
+
+
+def test_the_test_job_pins_hypothesis_to_the_deterministic_profile() -> None:
+    """#255: the fixed example stream is CI's, and it is set once for the whole job.
+
+    `tests/conftest.py` loads whatever `HYPOTHESIS_PROFILE` names and defaults to
+    `default`, so this line is the only thing making the hosted run deterministic --
+    delete it and CI silently goes back to a coverage number that moves on its own.
+    Four-space indentation is load-bearing: it puts the block at the job's level, not
+    inside a step, so editing any step's own `env:` cannot drop it.
+    """
+
+    assert "    env:\n      HYPOTHESIS_PROFILE: deterministic-ci\n" in WORKFLOW
+    assert WORKFLOW.count("HYPOTHESIS_PROFILE") == 1, (
+        "one job-level setting only; a second one would make the effective profile "
+        "depend on where a step looks"
+    )
 
 
 def test_no_step_hides_its_command_in_a_block_scalar() -> None:
