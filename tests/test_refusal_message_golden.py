@@ -190,6 +190,50 @@ def test_the_tabled_refusal_messages_match_their_committed_golden_set() -> None:
         assert not changed, f"{table} reworded: {changed}"
 
 
+def test_the_recorded_counts_describe_the_tables_they_summarise() -> None:
+    """The summary is the one part of this file that could lie about the rest.
+
+    `counts` exists so a reviewer can see at a glance that a diff moved what it
+    claims to have moved. Nothing above reads it, so until this test it was the
+    one block that could drift from its own subject and still ship -- and it
+    had: at `bdd6589` it recorded 35 entries and 33 distinct messages over
+    tables holding 31 entries, which is a summary of a document that no longer
+    existed.
+
+    Recomputed from the document's own `tables` rather than from the module,
+    because the property under test is internal consistency. A summary that
+    disagrees with the thing it summarises is wrong whatever the module says,
+    and the table comparison above is already what binds the document to the
+    source.
+    """
+
+    document = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    tables: dict[str, dict[str, str]] = document["tables"]
+    recorded: dict[str, int] = document["counts"]
+
+    recomputed = {
+        "tables": len(tables),
+        "entries": sum(len(entries) for entries in tables.values()),
+        "distinct_messages": len(
+            {message for entries in tables.values() for message in entries.values()}
+        ),
+    }
+
+    assert set(recorded) == set(recomputed), (
+        f"the counts block records {sorted(recorded)} where this document summarises to "
+        f"{sorted(recomputed)}; add the missing count or drop the one that names nothing"
+    )
+    drifted = {
+        name: {"recorded": recorded[name], "recomputed": value}
+        for name, value in recomputed.items()
+        if recorded[name] != value
+    }
+    assert not drifted, (
+        f"the counts block disagrees with the tables it summarises: {drifted}; regenerate the "
+        "block from the tables rather than editing the tables to match it"
+    )
+
+
 def test_deleting_a_tabled_message_is_named_by_the_failure() -> None:
     """P3.7's proving check, run against a constructed deletion rather than asserted.
 
