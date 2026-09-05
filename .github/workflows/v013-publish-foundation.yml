@@ -15,6 +15,7 @@ jobs:
     defaults:
       run:
         working-directory: candidate
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -57,6 +58,7 @@ jobs:
         env:
           PYTHONPATH: src:.
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/v013-validation"
           python -m ruff check .
           python -m ruff format --check .
