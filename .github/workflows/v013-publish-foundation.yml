@@ -1,0 +1,89 @@
+name: V013 foundation validation
+
+on:
+  push:
+    branches: [automation/v013-contract-workspace-20260905]
+    paths: [.github/v013-transfer/ready.json]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: candidate
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: transfer
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: codex/v0.13-optimization-foundation
+          path: candidate
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - name: Apply only the locally verified exact tree
+        run: |
+          test "$(git rev-parse HEAD)" = 40db464939a89f45feefbf067a750ffc3e06a97b
+          python - <<'PY'
+          import base64
+          import hashlib
+          import lzma
+          import pathlib
+          import subprocess
+          root = pathlib.Path('../transfer/.github/v013-transfer')
+          encoded = ''.join((root / f'{i:02d}.b64').read_text().strip() for i in range(4))
+          assert len(encoded) == 38048
+          decoder = lzma.LZMADecompressor(memlimit=134217728)
+          patch = decoder.decompress(base64.b64decode(encoded, validate=True), max_length=200000)
+          assert decoder.eof and not decoder.unused_data
+          assert len(patch) == 135219
+          assert hashlib.sha256(patch).hexdigest() == '31e9308a868cf20dcd8d1474c8ae945138089febcaa26abc6752a1c66fc3a504'
+          subprocess.run(['git', 'apply', '--unidiff-zero', '--index', '-'], input=patch, check=True)
+          tree = subprocess.check_output(['git', 'write-tree'], text=True).strip()
+          assert tree == '85965334cec25aff5e6fa3e895f5a073114c44f8', tree
+          print('Verified candidate tree:', tree)
+          PY
+      - name: Install development dependencies
+        run: python -m pip install -e '.[dev,security]'
+      - name: Run focused checks without claiming the full release gate
+        env:
+          PYTHONPATH: src:.
+        run: |
+          mkdir -p "$RUNNER_TEMP/v013-validation"
+          python -m ruff check .
+          python -m ruff format --check .
+          python -m mypy src
+          python -m pytest tests/test_optimization_foundation.py tests/test_schema_conformance.py tests/test_mcp_server.py tests/test_models.py --no-cov -q | tee "$RUNNER_TEMP/v013-validation/focused-tests.log"
+          python scripts/check_version.py
+          python scripts/check_ledgers.py
+          python scripts/check_adr_numbers.py
+          python scripts/check_doc_links.py
+          python scripts/check_schema_sets.py
+          python scripts/check_secrets.py
+          python scripts/check_sdist_tracked.py
+          python -m build
+      - name: Publish only the validated new implementation branch
+        run: |
+          test "$(git write-tree)" = 85965334cec25aff5e6fa3e895f5a073114c44f8
+          test "$(git ls-remote --heads origin refs/heads/codex/v0.13-optimization-foundation | cut -f1)" = 40db464939a89f45feefbf067a750ffc3e06a97b
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(optimization): add supervised loop contract foundation'
+          git push origin HEAD:codex/v0.13-optimization-foundation
+          git rev-parse HEAD | tee "$RUNNER_TEMP/v013-validation/HEAD_SHA"
+          git rev-parse HEAD^{tree} | tee "$RUNNER_TEMP/v013-validation/TREE_SHA"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: v013-foundation-validation
+          path: ${{ runner.temp }}/v013-validation/
+          retention-days: 7
+          if-no-files-found: warn
