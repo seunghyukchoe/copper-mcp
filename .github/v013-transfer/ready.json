@@ -1,0 +1,7 @@
+{
+  "base": "40db464939a89f45feefbf067a750ffc3e06a97b",
+  "bytes": 135219,
+  "expected_tree": "85965334cec25aff5e6fa3e895f5a073114c44f8",
+  "parts": 4,
+  "patch_sha256": "31e9308a868cf20dcd8d1474c8ae945138089febcaa26abc6752a1c66fc3a504"
+}
