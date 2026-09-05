@@ -1,0 +1,522 @@
+{
+  "$defs": {
+    "ApproveOptimizationJob": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_judge_digest": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Expected Judge Digest",
+          "type": "string"
+        },
+        "expected_package_digest": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Expected Package Digest",
+          "type": "string"
+        },
+        "expected_record_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Expected Record Revision",
+          "type": "integer"
+        },
+        "human_confirmation_capability": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Human Confirmation Capability",
+          "type": "string"
+        },
+        "job_id": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "method": {
+          "const": "approve_optimization_job",
+          "title": "Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "job_id",
+        "expected_record_revision",
+        "expected_package_digest",
+        "expected_judge_digest",
+        "human_confirmation_capability"
+      ],
+      "title": "ApproveOptimizationJob",
+      "type": "object"
+    },
+    "CancelOptimizationJob": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_record_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Expected Record Revision",
+          "type": "integer"
+        },
+        "job_id": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "method": {
+          "const": "cancel_optimization_job",
+          "title": "Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "job_id",
+        "expected_record_revision"
+      ],
+      "title": "CancelOptimizationJob",
+      "type": "object"
+    },
+    "ExportOptimizationPackage": {
+      "additionalProperties": false,
+      "properties": {
+        "disclosure_capability": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Disclosure Capability",
+          "type": "string"
+        },
+        "expected_package_digest": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Expected Package Digest",
+          "type": "string"
+        },
+        "expected_record_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Expected Record Revision",
+          "type": "integer"
+        },
+        "job_id": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "method": {
+          "const": "export_optimization_package",
+          "title": "Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "job_id",
+        "expected_record_revision",
+        "expected_package_digest",
+        "disclosure_capability"
+      ],
+      "title": "ExportOptimizationPackage",
+      "type": "object"
+    },
+    "GetOptimizationJob": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "method": {
+          "const": "get_optimization_job",
+          "title": "Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "job_id"
+      ],
+      "title": "GetOptimizationJob",
+      "type": "object"
+    },
+    "ObjectiveWeights": {
+      "additionalProperties": false,
+      "description": "Integer soft-objective weights cannot trade away legality or connectivity.\n\nThe coordinator must retain the documented lexicographic tier order; these weights operate\ninside a tier only. This slice supplies no substitute for measured route-probe evidence.",
+      "properties": {
+        "clearance_margin": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "Clearance Margin",
+          "type": "integer"
+        },
+        "congestion": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "Congestion",
+          "type": "integer"
+        },
+        "copper_length": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "Copper Length",
+          "type": "integer"
+        },
+        "displacement": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "Displacement",
+          "type": "integer"
+        },
+        "intent_residual": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "Intent Residual",
+          "type": "integer"
+        },
+        "vias": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "Vias",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "congestion",
+        "clearance_margin",
+        "vias",
+        "copper_length",
+        "displacement",
+        "intent_residual"
+      ],
+      "title": "ObjectiveWeights",
+      "type": "object"
+    },
+    "OptimizationRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_backends": {
+          "items": {
+            "enum": [
+              "internal-layered-v1",
+              "freerouting-dsn-ses-v1",
+              "simpleroutejson-v1"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Allowed Backends",
+          "type": "array"
+        },
+        "board_revision": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Board Revision",
+          "type": "string"
+        },
+        "electrical_inputs_digest": {
+          "anyOf": [
+            {
+              "maxLength": 71,
+              "minLength": 71,
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Electrical Inputs Digest"
+        },
+        "human_approval_required": {
+          "const": true,
+          "title": "Human Approval Required",
+          "type": "boolean"
+        },
+        "judge_profile_digest": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Judge Profile Digest",
+          "type": "string"
+        },
+        "limits": {
+          "$ref": "#/$defs/ResourceLimits"
+        },
+        "objective_weights": {
+          "$ref": "#/$defs/ObjectiveWeights"
+        },
+        "placement_scope": {
+          "$ref": "#/$defs/PlacementScope"
+        },
+        "policy_profile": {
+          "const": "deterministic-v1",
+          "title": "Policy Profile",
+          "type": "string"
+        },
+        "required_domains": {
+          "items": {
+            "enum": [
+              "DRC",
+              "ERC",
+              "DFM",
+              "SI",
+              "PI",
+              "thermal",
+              "EMC"
+            ],
+            "type": "string"
+          },
+          "maxItems": 7,
+          "minItems": 1,
+          "title": "Required Domains",
+          "type": "array"
+        },
+        "routing_profile_digest": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Routing Profile Digest",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "optimization/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "seed": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "snapshot_digest": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Snapshot Digest",
+          "type": "string"
+        },
+        "target_net_count": {
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Target Net Count",
+          "type": "integer"
+        },
+        "target_net_scope_digest": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Target Net Scope Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "board_revision",
+        "snapshot_digest",
+        "placement_scope",
+        "target_net_scope_digest",
+        "target_net_count",
+        "routing_profile_digest",
+        "judge_profile_digest",
+        "electrical_inputs_digest",
+        "required_domains",
+        "allowed_backends",
+        "objective_weights",
+        "seed",
+        "limits",
+        "human_approval_required",
+        "policy_profile"
+      ],
+      "title": "OptimizationRequest",
+      "type": "object"
+    },
+    "PlacementScope": {
+      "additionalProperties": false,
+      "properties": {
+        "cardinal_rotations": {
+          "items": {
+            "enum": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Cardinal Rotations",
+          "type": "array"
+        },
+        "grid_nm": {
+          "maximum": 1000000000,
+          "minimum": 1,
+          "title": "Grid Nm",
+          "type": "integer"
+        },
+        "intent_digest": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Intent Digest",
+          "type": "string"
+        },
+        "movable_footprint_refs": {
+          "items": {
+            "maxLength": 170,
+            "pattern": "^footprint:[A-Za-z0-9_.:-]{1,160}$",
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Movable Footprint Refs",
+          "type": "array"
+        },
+        "preserve_existing_side": {
+          "const": true,
+          "title": "Preserve Existing Side",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "movable_footprint_refs",
+        "intent_digest",
+        "grid_nm",
+        "cardinal_rotations",
+        "preserve_existing_side"
+      ],
+      "title": "PlacementScope",
+      "type": "object"
+    },
+    "ResourceLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_candidates": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Candidates",
+          "type": "integer"
+        },
+        "max_expansions": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "Max Expansions",
+          "type": "integer"
+        },
+        "max_external_output_bytes": {
+          "maximum": 16777216,
+          "minimum": 1,
+          "title": "Max External Output Bytes",
+          "type": "integer"
+        },
+        "max_obstacle_checks": {
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Max Obstacle Checks",
+          "type": "integer"
+        },
+        "max_placement_evaluations": {
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Max Placement Evaluations",
+          "type": "integer"
+        },
+        "max_repair_rounds": {
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Max Repair Rounds",
+          "type": "integer"
+        },
+        "max_route_attempts": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Route Attempts",
+          "type": "integer"
+        },
+        "max_runtime_ms": {
+          "maximum": 3600000,
+          "minimum": 1,
+          "title": "Max Runtime Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_runtime_ms",
+        "max_candidates",
+        "max_placement_evaluations",
+        "max_route_attempts",
+        "max_repair_rounds",
+        "max_expansions",
+        "max_obstacle_checks",
+        "max_external_output_bytes"
+      ],
+      "title": "ResourceLimits",
+      "type": "object"
+    },
+    "StartOptimization": {
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "const": "start_optimization",
+          "title": "Method",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/OptimizationRequest"
+        }
+      },
+      "required": [
+        "method",
+        "request"
+      ],
+      "title": "StartOptimization",
+      "type": "object"
+    }
+  },
+  "$id": "urn:copper-mcp:optimization:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Draft internal contract. None of these five MCP methods is registered.",
+  "discriminator": {
+    "mapping": {
+      "approve_optimization_job": "#/$defs/ApproveOptimizationJob",
+      "cancel_optimization_job": "#/$defs/CancelOptimizationJob",
+      "export_optimization_package": "#/$defs/ExportOptimizationPackage",
+      "get_optimization_job": "#/$defs/GetOptimizationJob",
+      "start_optimization": "#/$defs/StartOptimization"
+    },
+    "propertyName": "method"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/StartOptimization"
+    },
+    {
+      "$ref": "#/$defs/GetOptimizationJob"
+    },
+    {
+      "$ref": "#/$defs/CancelOptimizationJob"
+    },
+    {
+      "$ref": "#/$defs/ExportOptimizationPackage"
+    },
+    {
+      "$ref": "#/$defs/ApproveOptimizationJob"
+    }
+  ]
+}

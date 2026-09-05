@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0131**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0133**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -207,6 +207,7 @@ never silently widens it.
 | [0128](0128-private-surrogate-ranking-is-bounded-and-never-signs-off.md) | A private surrogate ranking is bounded and never signs off | Accepted |
 | [0129](0129-the-live-version-window-is-kicads-own-and-an-acceptance-is-not-a-proof.md) | The live version window is KiCad's own, and an acceptance is never published as a proof | Accepted |
 | [0130](0130-orcarouter-advisory-policy-provider.md) | Use OrcaRouter only as a redacted advisory policy provider | Proposed |
+| [0132](0132-supervised-optimization-keeps-evidence-and-consent-separate.md) | Supervised optimization keeps evidence, consent and application separate | Proposed; internal foundation only |
 
 One hundred and thirty numbers allocated, one hundred and twenty-five records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
@@ -360,3 +361,6 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0127: Multi-pin local repair replaces one proven responsible branch](0127-multi-pin-local-repair-replaces-one-proven-responsible-branch.md)
 - [ADR-0129: The live version window is KiCad's own, and an acceptance is never published as a proof](0129-the-live-version-window-is-kicads-own-and-an-acceptance-is-not-a-proof.md)
 - [ADR-0130: Use OrcaRouter only as a redacted advisory policy provider](0130-orcarouter-advisory-policy-provider.md)
+
+2026-09-05 allocation note: ADR-0131 remains a live claim in PR #265; ADR-0132
+steps over it for the internal optimization foundation and does not recycle it.

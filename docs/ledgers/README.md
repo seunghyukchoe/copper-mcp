@@ -23,9 +23,9 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-247` | `D-248` |
-| [Risk register](risk-register.md) | `R-` | `R-193` | `R-194` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-176` | `SEC-177` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-250` | `D-251` |
+| [Risk register](risk-register.md) | `R-` | `R-195` | `R-196` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-177` | `SEC-178` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-143` | `B-144` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
@@ -303,3 +303,7 @@ Naming the pattern each record follows makes it clear what it does and does not 
 
 Calling these by their standard names is deliberate. It should be obvious which properties are
 claimed, and equally obvious that cryptographic non-repudiation is not among them.
+
+2026-09-05 optimization foundation: D-250/R-195/SEC-177 step over the live
+D-248/D-249/R-194 claims in PRs #265/#266 and main's SEC-176. No benchmark
+ID is spent: all new observations are synthetic contract tests, not corpus evidence.

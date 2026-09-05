@@ -145,3 +145,8 @@ contract.
   identifies a record — do the two name the same record. A label that names no record is not
   judged. Ledger IDs and ADR numbers are checked there too, by `scripts/check_ledgers.py` and
   `scripts/check_adr_numbers.py`: one entry per number, in order, with gaps reported but allowed.
+
+## Supervised optimization release plan
+
+The [v0.13 staged plan](plans/v0.13-supervised-optimization.md) distinguishes the
+internal foundation from the unimplemented worker, backend integration and release gates.
