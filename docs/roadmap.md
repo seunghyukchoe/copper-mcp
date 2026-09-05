@@ -765,35 +765,40 @@ candidate-bound DRC, B-120 corpus replay, and ADR-0115 public intake.
   completion/quality and every refusal separately. #90 closes only if that differential is
   deterministic and positive without weakening the physical, identity or work gates; otherwise it
   re-parks on the measured result.
-  B-141 differential measured (2026-09-01; the predeclared artifact basename remains dated
+  B-141 differential measured (2026-09-02; the predeclared artifact basename remains dated
   2026-08-30). The exact B-140/B-088 population produced **20
   offered/imported, 16 admitted, 4 envelope refusals and 70 submitted nets** in both arms. The
   uninstrumented control (`repair_settings: null`) completed **0 boards / 0 nets**; treatment with
   the default bounded repair profile completed **1 board / 2 nets**, publishing one repair and one
   `completed_with_repair` result. The measured differential is **+1 board / +2 nets / +7,432
-  physical checks / +43,750,000 nm wire**; mean arm times were **39.224s** and **40.042s** across
+  physical checks / +43,750,000 nm wire**; mean arm times were **47.348s** and **51.310s** across
   two deterministic repetitions. Per-reason refusal/outcome reconciliation is independently
   checked. The semantic guards require each arm's `outcome_breakdown["envelope_construction"]` to
   equal the fixed population's `boards_unable_to_form_a_two_request_envelope` count (**4**); a
   disabled control (`repair_settings: null`) forbids `completed_with_repair`, `repair_published`,
   and every non-zero repair-work field; and all six status categories (`completed`, `no_path`,
   `partial`, `invalid_request`, `cancelled`, `not_run`) reconcile to the outcome taxonomy.
-  The closed report and companion commitment are bound to source
-  `86634180e5a3f0956cf2ede4168710f1fce8fbcb`, runner
-  `sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1`, configuration
-  `sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3`, whole-metrics
+  The closed report and companion commitment bind **content, not revision** (D-245): the verified
+  provenance set is runner
+  `sha256:33bd81c80bd6c2ad8f970c5477fd236b4c05759c99b50145a66152451672f3bb` plus the B-140 runner
+  and artifact and the B-088 runner, adapter and artifact, each re-digested against the file this
+  repository holds, with configuration
+  `sha256:60ad50ee812875411fd88413182954c56f677ebe0e3300cc5295902d92e8400d`, whole-metrics
   digest `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2`, report run
-  `sha256:237d4ddfd4ce403aa3bb2ea19e4229aa0833f667501127fd5acd223e62173021`, report raw
-  `sha256:32ec7b3f489d006940f0ab6b05987b943bf8263f7ded07ef27085b57d7368e7f`, commitment run
-  `sha256:6ce94a530ef55ecb1690a0a19eb5b148607e7c30bd80bc0ded87a038b1c74efd`, commitment raw
-  `sha256:c190e5d8ca5066fa3ff09695841dde266907ebfb32252fa91c84dceccd93df12`, and spec
-  `sha256:d7098924ad05c9a9ad6b15f508b330ba25dcd87a8829461ac51310dc282a9c14`. Focused
-  evidence validation is **190/190 tests** and **78/78 evidence-contract mutants killed** with zero
-  survivors or control failures, distinct
-  from #238's **35/35 capability mutants**. A later checkout or merge-ref movement may load this
-  record without replacing its historically bound source commit. The source guard verifies the
-  actual Git runner blob SHA at the declared source commit and accepts later historical `HEAD`
-  movement without replacing that binding. The closed `total_ripups` bound is
+  `sha256:42cd4f172b227e9a26a945f779ad548718eaed3c9f42debe016198b15e123beb`, report raw
+  `sha256:7e05d1df34b39c726e944b39e6671dc67d920f53a3732ae6898c5653a3a32e69`, commitment run
+  `sha256:d431b607b89ca81582b2da6686a739b9196097a3e752e12fdaf11cba93059757`, commitment raw
+  `sha256:bcf33431581494650c1bbc4c17cc4eb340af327ba564e6c5aa9cd5e385c8ba21`, and spec
+  `sha256:22cbf4a4787b1a67afc9add8ca1c21914a5bec2dfef2551101d1933f1573bf51`. Focused
+  evidence validation is **200/200 focused tests** and **79/79 evidence-contract mutants killed**, with zero
+  survivors, zero stale anchors, zero control failures, zero invalid runs and zero `not_run`,
+  distinct from #238's **35/35 capability mutants**. The recorded source
+  `0202329da16ecae0fbb61e7ed7a0215cfa599585` is **informational**: no validation path resolves it,
+  its absence is not an error, and the artifact says so in `not_claimed`, because
+  `required_linear_history` means no commit a pull request creates survives its own merge. The
+  evidence date is likewise informational, pinned against re-signing by the companion's
+  `artifact_run_id` and related to the default branch only by the opt-in tri-state
+  `verify_evidence_date_against_history`. The closed `total_ripups` bound is
   `70 * (8 - 1) = 490`; 490 is accepted and 491 is mutation-killed. The closed aggregate wire bound is
   `70 * 62,500,000,000 = 4,375,000,000,000 nm`; the exact bound is accepted and the `+1` boundary
   is mutation-killed. The commitment pins exact control
