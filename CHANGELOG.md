@@ -6,7 +6,20 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Internal draft `optimization/v1` foundation for the planned supervised autonomous routing
+  slice: closed command shapes, composed-candidate/judge metadata, pure CAS lifecycle, bounded
+  resource reservations and a default-off host-owned human-confirmation capability. No new
+  MCP tool, worker, backend execution, geometry export, live mutation or apply authority is
+  registered. A read-only release checklist rejects absent evidence but does not authorize a
+  release. See the [v0.13 staged plan](docs/plans/v0.13-supervised-optimization.md).
+
 ### Changed
+
+- `server_info` now lists existing placement DRC, post-placement observation and bounded
+  negotiated routing with their actual scopes, while keeping the supervised optimization
+  workflow and general whole-board hybrid routing planned rather than implemented.
 
 - The live KiCad IPC surfaces now bind to a **declared major-version compatibility window**
   instead of consuming `kicad-python`'s `check_version()` boolean, and an acceptance is

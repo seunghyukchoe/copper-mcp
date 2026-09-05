@@ -94,6 +94,9 @@ def server_info() -> dict[str, Any]:
             "operator-gated, token-authorized bounded placement apply with atomic replacement",
             "non-mutating two-pin route preview on a documented Board IR subset",
             "revision-bound atomic multi-net route-bundle preview (read-only)",
+            "opt-in authoritative DRC evidence for file-backed placement candidates",
+            "revision-bound post-placement scene and DRC observation (read-only)",
+            "bounded negotiated routing on the documented supported subset",
             "bounded Circuit Intent validation and deterministic KiCad schematic rendering",
             "explicit create-only CLI schematic export and ephemeral stdio MCP artifact delivery",
             "authoritative read-only KiCad schematic ERC bound to the generated schematic digest",
@@ -113,12 +116,11 @@ def server_info() -> dict[str, Any]:
         ],
         "planned": [
             "region-scoped and human-facing board rendering",
-            "authoritative KiCad DRC binding for placement candidates",
-            "post-placement observation and live editor action compare-and-swap",
             "live placement/routing action compare-and-swap over KiCad IPC",
             "MCP Tasks negotiated progressive enhancement",
             "multilayer generalization beyond the two-signal subset",
-            "negotiated-congestion router",
+            "supervised optimization workflow with human review (optimization/v1)",
+            "general whole-board hybrid routing with independently verified external backends",
         ],
     }
 

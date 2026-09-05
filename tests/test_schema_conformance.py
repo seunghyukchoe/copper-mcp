@@ -91,6 +91,12 @@ _THIS_MODULE = "tests/test_schema_conformance.py"
 # `test_every_published_schema_has_a_named_proof`; an entry naming a test that no longer exists
 # fails `test_every_recorded_proof_still_exists`.
 _SCHEMA_COVERAGE: dict[str, _Proof] = {
+    "optimization-v1.schema.json": _Proof(
+        module="tests/test_optimization_foundation.py",
+        test="test_optimization_messages_match_published_schema",
+        kind=_EMITTED,
+        note="Draft command model documents validated against the schema; no MCP registration",
+    ),
     "board-manifest.schema.json": _Proof(
         module=_THIS_MODULE,
         test="test_board_manifest_emitted_payload_satisfies_its_published_schema",
