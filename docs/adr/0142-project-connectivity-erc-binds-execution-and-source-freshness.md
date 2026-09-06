@@ -56,6 +56,12 @@ source/library contents. Failures converge on a fixed ProjectErcError without un
 or contexts, including malformed/cyclic workspace resolution. Privileged traceback-local inspection
 is not covered by that disclosure boundary.
 
+Validate the optional configured CLI as None or Path before discovery. Pass the same deadline into
+the shared ERC parser: check JSON preflight/tree validation, semantic traversal, sort-key and final
+serialization, hashing and return. Encoding/decoding and built-in sorting remain indivisible
+operations with checks around them, not hard preemption. Existing generated-schematic callers
+omit the new optional deadline and retain their accepted inputs, summaries and digest meanings.
+
 For admissible observations, hard findings take precedence and produce `fail`. Unequal repeated
 observations, library parity findings or a nonconforming ignored-check set produce `inconclusive`.
 Missing outputs, malformed reports, excluded findings and ignored active rules instead cause a

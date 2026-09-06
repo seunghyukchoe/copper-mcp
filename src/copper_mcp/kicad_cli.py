@@ -1275,35 +1275,40 @@ class _ErcObservation:
         )
 
 
-def _normalized_erc_report_digest(report: dict[str, Any]) -> str:
+def _check_erc_report_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise KiCadCliError("KiCad ERC report deadline expired")
+
+
+def _normalized_erc_report_digest(report: dict[str, Any], *, deadline: float | None = None) -> str:
     """Hash the validated report while ignoring only KiCad's root generation timestamp."""
 
+    def ordered_json(value: object) -> str:
+        _check_erc_report_deadline(deadline)
+        encoded = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        _check_erc_report_deadline(deadline)
+        return encoded
+
+    _check_erc_report_deadline(deadline)
     normalized = {key: value for key, value in report.items() if key != "date"}
     sheets = normalized["sheets"]
     assert isinstance(sheets, list)
     normalized_sheets: list[dict[str, Any]] = []
     for sheet in sheets:
+        _check_erc_report_deadline(deadline)
         assert isinstance(sheet, dict)
         normalized_sheet = dict(sheet)
         violations = normalized_sheet["violations"]
         assert isinstance(violations, list)
-        normalized_sheet["violations"] = sorted(
-            violations,
-            key=lambda violation: json.dumps(
-                violation, ensure_ascii=True, sort_keys=True, separators=(",", ":")
-            ),
-        )
+        normalized_sheet["violations"] = sorted(violations, key=ordered_json)
+        _check_erc_report_deadline(deadline)
         normalized_sheets.append(normalized_sheet)
-    normalized["sheets"] = sorted(
-        normalized_sheets,
-        key=lambda sheet: json.dumps(
-            sheet, ensure_ascii=True, sort_keys=True, separators=(",", ":")
-        ),
-    )
-    canonical = json.dumps(
-        normalized, ensure_ascii=True, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+    normalized["sheets"] = sorted(normalized_sheets, key=ordered_json)
+    canonical = ordered_json(normalized).encode("utf-8")
+    _check_erc_report_deadline(deadline)
+    digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    _check_erc_report_deadline(deadline)
+    return digest
 
 
 def _parse_erc_observation(
@@ -1313,6 +1318,7 @@ def _parse_erc_observation(
     expected_source: str,
     expected_uuid_paths: frozenset[str] | None = None,
     minimum_severities: Mapping[str, str] | None = None,
+    deadline: float | None = None,
 ) -> _ErcObservation:
     """Accept only the reviewed KiCad ERC report shape and reduce it to redacted counts.
 
@@ -1321,6 +1327,17 @@ def _parse_erc_observation(
     rule violation *is* — KiCad already did that, and this function only transports the verdict.
     """
 
+    if deadline is not None:
+        if type(deadline) not in (int, float):
+            raise KiCadCliError("KiCad ERC report deadline is malformed")
+        try:
+            deadline = float(deadline)
+        except OverflowError:
+            deadline = float("nan")
+        if not math.isfinite(deadline):
+            raise KiCadCliError("KiCad ERC report deadline is malformed")
+    _check_erc_report_deadline(deadline)
+    checkpoint = None if deadline is None else lambda: _check_erc_report_deadline(deadline)
     severity_floors: dict[str, str] | None = None
     if minimum_severities is not None:
         if (
@@ -1330,6 +1347,7 @@ def _parse_erc_observation(
             raise KiCadCliError("KiCad ERC severity floor constraints are malformed")
         severity_floors = {}
         for key, value in minimum_severities.items():
+            _check_erc_report_deadline(deadline)
             if (
                 type(key) is not str
                 or not 1 <= len(key) <= 128
@@ -1343,14 +1361,16 @@ def _parse_erc_observation(
 
     try:
         text = payload.decode("utf-8", errors="strict")
-        _preflight_drc_json(text)
+        _check_erc_report_deadline(deadline)
+        _preflight_drc_json(text, check_deadline=checkpoint)
         report: Any = json.loads(
             text,
             object_pairs_hook=_drc_object_pairs,
             parse_constant=_reject_json_constant,
             parse_float=_finite_json_float,
         )
-        _validate_drc_json_tree(report)
+        _check_erc_report_deadline(deadline)
+        _validate_drc_json_tree(report, check_deadline=checkpoint)
     except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as error:
         raise KiCadCliError("KiCad ERC report is not valid UTF-8 JSON") from error
     if not isinstance(report, dict):
@@ -1385,6 +1405,7 @@ def _parse_erc_observation(
     if not isinstance(ignored_checks, list) or len(ignored_checks) > 10_000:
         raise KiCadCliError("KiCad ERC ignored-check collection is malformed")
     for ignored_check in ignored_checks:
+        _check_erc_report_deadline(deadline)
         if not isinstance(ignored_check, dict):
             raise KiCadCliError("KiCad ERC ignored check is malformed")
         check_key = ignored_check.get("key")
@@ -1411,6 +1432,7 @@ def _parse_erc_observation(
     seen_sheet_paths: set[str] = set()
     seen_uuid_paths: set[str] = set()
     for sheet in sheets:
+        _check_erc_report_deadline(deadline)
         if not isinstance(sheet, dict):
             raise KiCadCliError("KiCad ERC sheet is malformed")
         sheet_path = sheet.get("path")
@@ -1439,6 +1461,7 @@ def _parse_erc_observation(
         if total_violations > _MAX_ERC_VIOLATIONS:
             raise KiCadCliError("KiCad ERC report contains too many findings")
         for violation in violations:
+            _check_erc_report_deadline(deadline)
             if not isinstance(violation, dict):
                 raise KiCadCliError("KiCad ERC violation is malformed")
             violation_type = violation.get("type")
@@ -1448,12 +1471,12 @@ def _parse_erc_observation(
             excluded = violation.get("excluded", False)
             if not isinstance(violation_type, str) or not 1 <= len(violation_type) <= 128:
                 raise KiCadCliError("KiCad ERC violation type is malformed")
-            if (
-                not isinstance(description, str)
-                or not isinstance(items, list)
-                or not all(isinstance(item, dict) for item in items)
-            ):
+            if not isinstance(description, str) or not isinstance(items, list):
                 raise KiCadCliError("KiCad ERC violation fields are malformed")
+            for item in items:
+                _check_erc_report_deadline(deadline)
+                if not isinstance(item, dict):
+                    raise KiCadCliError("KiCad ERC violation fields are malformed")
             if severity not in _SEVERITIES:
                 raise KiCadCliError("KiCad ERC violation severity is unsupported")
             if not isinstance(excluded, bool):
@@ -1477,22 +1500,21 @@ def _parse_erc_observation(
         raise KiCadCliError("KiCad ERC exit code does not match the report findings")
 
     if expected_uuid_paths is not None:
-        if (
-            type(expected_uuid_paths) is not frozenset
-            or not expected_uuid_paths
-            or not all(
-                type(path) is str and _ERC_UUID_PATH.fullmatch(path) for path in expected_uuid_paths
-            )
-        ):
+        if type(expected_uuid_paths) is not frozenset or not expected_uuid_paths:
             raise KiCadCliError("expected ERC sheet UUID paths are malformed")
-        canonical_expected_paths = {path.rstrip("/") for path in expected_uuid_paths}
+        canonical_expected_paths: set[str] = set()
+        for path in expected_uuid_paths:
+            _check_erc_report_deadline(deadline)
+            if type(path) is not str or not _ERC_UUID_PATH.fullmatch(path):
+                raise KiCadCliError("expected ERC sheet UUID paths are malformed")
+            canonical_expected_paths.add(path.rstrip("/"))
         if len(canonical_expected_paths) != len(expected_uuid_paths):
             raise KiCadCliError("expected ERC sheet UUID paths are ambiguous")
         if seen_uuid_paths != canonical_expected_paths:
             raise KiCadCliError("KiCad ERC report sheet UUID paths do not match the project")
 
     error_count = severity_counts["error"]
-    return _ErcObservation(
+    observation = _ErcObservation(
         kicad_version=kicad_version,
         erc_schema=KICAD_ERC_SCHEMA,
         coordinate_units="mm",
@@ -1503,9 +1525,11 @@ def _parse_erc_observation(
         sheet_count=len(sheets),
         violation_type_counts=dict(sorted(violation_type_counts.items())),
         passed=error_count == 0,
-        normalized_report_digest=_normalized_erc_report_digest(report),
+        normalized_report_digest=_normalized_erc_report_digest(report, deadline=deadline),
         ignored_check_keys=tuple(sorted(check["key"] for check in ignored_checks)),
     )
+    _check_erc_report_deadline(deadline)
+    return observation
 
 
 def _parse_erc_report(

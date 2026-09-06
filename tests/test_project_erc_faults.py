@@ -273,6 +273,41 @@ def test_malformed_workspace_type_refuses_before_execution(tmp_path, monkeypatch
         run_project_erc(capture, libraries, settings)
 
 
+@pytest.mark.parametrize("executable", ("not-a-path", 42, True))
+def test_malformed_cli_path_refuses_before_discovery(tmp_path, monkeypatch, executable):
+    from copper_mcp.engineering import project_erc
+
+    capture, libraries, _ = build_project(tmp_path)
+    settings = dataclasses.replace(project_erc.Settings(workspace=tmp_path), kicad_cli=executable)
+    monkeypatch.setattr(project_erc, "_invoke", lambda *_a, **_k: pytest.fail("must not invoke"))
+    with pytest.raises(ProjectErcError) as caught:
+        run_project_erc(capture, libraries, settings)
+    assert caught.value.__cause__ is None and caught.value.__context__ is None
+
+
+def test_report_decode_expiry_stops_before_normalization(tmp_path, monkeypatch):
+    from copper_mcp import kicad_cli
+    from copper_mcp.engineering import project_erc
+
+    clock = [100.0]
+    loads = kicad_cli.json.loads
+
+    def expiring_loads(*args, **kwargs):
+        report = loads(*args, **kwargs)
+        if isinstance(report, dict) and report.get("$schema") == KICAD_ERC_SCHEMA:
+            clock[0] = 10_000.0
+        return report
+
+    def forbidden_normalization(*args, **kwargs):
+        pytest.fail("expired report reached normalization")
+
+    monkeypatch.setattr(project_erc.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(kicad_cli.json, "loads", expiring_loads)
+    monkeypatch.setattr(kicad_cli, "_normalized_erc_report_digest", forbidden_normalization)
+    result, _calls, error = _run(tmp_path, monkeypatch)
+    assert result is None and isinstance(error, ProjectErcError)
+
+
 def test_final_workspace_read_respects_original_size_and_shared_deadline(tmp_path, monkeypatch):
     from copper_mcp.engineering import project_erc
 

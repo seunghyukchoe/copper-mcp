@@ -411,6 +411,7 @@ def _execute(
             payload = payload.replace(str(temporary).encode(), b"<private-erc>")
             observation = _parse_erc_observation(
                 payload,
+                deadline=deadline,
                 return_code=code,
                 expected_source=PurePosixPath(prepared.root_path).name,
                 expected_uuid_paths=prepared.expected_uuid_paths,
@@ -557,6 +558,8 @@ def run_project_erc(
         settings = replace(settings)
         if not isinstance(settings.workspace, Path):
             raise ProjectErcError("project ERC workspace is malformed")
+        if settings.kicad_cli is not None and not isinstance(settings.kicad_cli, Path):
+            raise ProjectErcError("project ERC configured executable path is malformed")
         for value, maximum in (
             (settings.kicad_timeout_seconds, 3600),
             (settings.max_drc_report_bytes, 64 * 1024 * 1024),
