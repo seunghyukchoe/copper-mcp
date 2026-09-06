@@ -54,6 +54,12 @@ unbound time/version-control substitutions. The preparer is not a native syntax 
 the subsequent executor must prove that each original source actually loads, bind its backend
 and effective settings, and recheck execution state and the source before returning evidence.
 
+Project normalization checks the shared deadline during traversal and immediately before and
+after serialization. The preparation boundary retains its own fixed refusal reasons and
+normalizes subordinate validation/deadline failures to ProjectErcInputError after leaving their
+handlers, without retaining private causes or contexts. This does not redact traceback locals
+from privileged inspection or preempt a single blocking encoding operation.
+
 ## Validation and remaining gates
 
 Focused tests cover source preservation, strict rule changes, waiver disclosure, pin floors,

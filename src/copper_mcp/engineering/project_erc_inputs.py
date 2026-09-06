@@ -114,9 +114,11 @@ def _parse_source(payload: bytes, limits: CaptureLimits, deadline: float) -> SEx
 
 def _strict_project(
     project: dict[str, object],
+    deadline: float,
 ) -> tuple[bytes, tuple[str, ...], int, tuple[tuple[str, str], ...]]:
     pending: list[object] = [project]
     while pending:
+        _checkpoint(deadline)
         value = pending.pop()
         if isinstance(value, str) and _UNBOUND_VARIABLE.search(value):
             _fail("project ERC requires captured values for time or version-control variables")
@@ -224,8 +226,11 @@ def _strict_project(
         "pin_map": strict_map,
         "erc_exclusions": [],
     }
+    _checkpoint(deadline)
+    serialized = json.dumps(execution, sort_keys=True, ensure_ascii=True, allow_nan=False).encode()
+    _checkpoint(deadline)
     return (
-        json.dumps(execution, sort_keys=True, ensure_ascii=True, allow_nan=False).encode(),
+        serialized,
         tuple(sorted(changes)),
         len(exclusions),
         tuple(sorted(strict_rules.items())),
@@ -259,6 +264,26 @@ def _symbol_body_digest(symbol: SExpr, deadline: float) -> str:
 
 
 def prepare_project_erc(
+    capture: SchematicProjectCapture,
+    libraries: tuple[SymbolLibraryInput, ...],
+    *,
+    limits: CaptureLimits,
+    deadline: float,
+) -> PreparedProjectErc:
+    """Prepare private inputs with one fixed refusal type and no subordinate error context."""
+    prepared = None
+    try:
+        prepared = _prepare_project_erc(capture, libraries, limits=limits, deadline=deadline)
+    except ProjectErcInputError:
+        raise
+    except (ValueError, OverflowError):
+        pass
+    if prepared is None:
+        _fail("project ERC preparation refused")
+    return prepared
+
+
+def _prepare_project_erc(
     capture: SchematicProjectCapture,
     libraries: tuple[SymbolLibraryInput, ...],
     *,
@@ -466,7 +491,7 @@ def prepare_project_erc(
     context[(parent / "sym-lib-table").as_posix()] = (
         "(sym_lib_table (version 7)" + "".join(table_rows) + ")"
     ).encode()
-    context[project_path], changes, exclusions, effective_rules = _strict_project(project)
+    context[project_path], changes, exclusions, effective_rules = _strict_project(project, deadline)
     if (
         any(len(content) > limits.max_file_bytes for content in context.values())
         or sum(map(len, context.values())) > limits.max_total_bytes

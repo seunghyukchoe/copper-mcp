@@ -236,3 +236,78 @@ def test_unused_inheritance_checks_the_deadline_before_each_symbol(tmp_path, mon
     monkeypatch.setattr(project_erc_inputs, "children", guarded_children)
     with pytest.raises(ProjectErcInputError, match="deadline expired"):
         _prepare(capture, libraries)
+
+
+@pytest.mark.parametrize("boundary", ("bindings", "settings", "settings-deadline", "hierarchy"))
+def test_subordinate_refusals_are_normalized_without_private_context(
+    tmp_path, monkeypatch, boundary
+):
+    from copper_mcp.engineering import project_erc_inputs, project_settings, schematic_hierarchy
+    from copper_mcp.engineering.schematic_project_capture import SchematicProjectCaptureError
+
+    capture = _capture(tmp_path)
+    function, error = {
+        "bindings": ("_validate_bindings", SchematicProjectCaptureError),
+        "settings": ("parse_project_document", project_settings.ProjectSettingsError),
+        "settings-deadline": (
+            "parse_project_document",
+            project_settings.ProjectSettingsDeadlineError,
+        ),
+        "hierarchy": ("derive_schematic_hierarchy", schematic_hierarchy.SchematicHierarchyError),
+    }[boundary]
+
+    def refused(*args, **kwargs):
+        raise error("private subordinate detail") from ValueError("private cause")
+
+    monkeypatch.setattr(project_erc_inputs, function, refused)
+    with pytest.raises(ProjectErcInputError) as caught:
+        _prepare(capture)
+    assert "private" not in str(caught.value)
+    assert caught.value.__cause__ is None and caught.value.__context__ is None
+
+
+def test_project_normalization_stops_during_tree_traversal(tmp_path, monkeypatch):
+    from copper_mcp.engineering import project_erc_inputs
+
+    capture = _capture(tmp_path, {"unused": ["must-not-visit", "expire-now"]})
+    clock = [100.0]
+    pattern = project_erc_inputs._UNBOUND_VARIABLE
+
+    class ExpiringPattern:
+        def search(self, value):
+            if value == "expire-now":
+                clock[0] = 106.0
+            if value == "must-not-visit":
+                pytest.fail("project normalization kept traversing after expiry")
+            return pattern.search(value)
+
+    monkeypatch.setattr(project_erc_inputs.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(project_erc_inputs, "_UNBOUND_VARIABLE", ExpiringPattern())
+    with pytest.raises(ProjectErcInputError, match="deadline expired"):
+        _prepare(capture)
+
+
+def test_project_normalization_checks_expiry_after_serialization(tmp_path, monkeypatch):
+    from copper_mcp.engineering import project_erc_inputs
+
+    capture = _capture(tmp_path)
+    clock = [100.0]
+    dumps = project_erc_inputs.json.dumps
+    digest = project_erc_inputs.digest_document
+
+    def expiring_dumps(value, *args, **kwargs):
+        result = dumps(value, *args, **kwargs)
+        if isinstance(value, dict) and "erc" in value:
+            clock[0] = 106.0
+        return result
+
+    def guarded_digest(schema, value):
+        if schema == "copper-mcp/project-erc-execution-context/v1":
+            pytest.fail("expired serialized settings reached execution identity construction")
+        return digest(schema, value)
+
+    monkeypatch.setattr(project_erc_inputs.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(project_erc_inputs.json, "dumps", expiring_dumps)
+    monkeypatch.setattr(project_erc_inputs, "digest_document", guarded_digest)
+    with pytest.raises(ProjectErcInputError, match="deadline expired"):
+        _prepare(capture)
