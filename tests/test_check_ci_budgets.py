@@ -235,6 +235,26 @@ def test_a_budget_with_no_calibration_entry_fails(
     assert any("with no entry in" in failure for failure in failures)
 
 
+def test_one_missing_entry_cannot_hide_among_valid_calibrated_jobs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    failures, notes = _tree(
+        tmp_path,
+        monkeypatch,
+        {"ci.yml": _workflow(minutes=120), "other.yml": _workflow(minutes=120)},
+        [
+            {
+                "workflow": ".github/workflows/other.yml",
+                "job": "test",
+                "observations": [_observation(60)],
+            }
+        ],
+    )
+
+    assert len(failures) == 1 and "with no entry in" in failures[0]
+    assert len(notes) == 1 and ".github/workflows/other.yml:test" in notes[0]
+
+
 def test_a_calibration_entry_with_no_observations_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
