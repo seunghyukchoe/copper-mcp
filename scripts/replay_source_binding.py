@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bind fresh B-140 or B-141 recomputation to the local Python source inventory.
+"""Bind fresh benchmarks or parser allocation measurements to local Python sources.
 
 Historical artifact loading authenticates the published companion and its declared inputs.
 It does not demonstrate that today's production code still reproduces the measurement. This
