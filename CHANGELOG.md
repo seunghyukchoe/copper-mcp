@@ -52,6 +52,9 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Census admission and provenance refusal tests use the existing small KiCad crossing fixture,
+  with real solo/coordinator execution and a positive parity control. Full current-corpus replay,
+  coverage, interpreter support and production routing budgets remain unchanged.
 - CI budget calibration now records two successful main runs for all four reshaped jobs and
   every supported interpreter. All 120-minute ceilings and historical release observations are
   retained. The parser milestone produced one 11m34s PR path; the three-run speed gate remains open.

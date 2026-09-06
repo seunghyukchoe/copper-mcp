@@ -697,6 +697,30 @@ def test_hostile_per_board_identifiers_and_values_remain_private(
 # --------------------------------------------------------------------------------------------
 
 
+def _crossing_census_inputs() -> tuple[Any, tuple[census.SubmittedNet, ...], AStarRouter]:
+    """Derive census inputs from the committed KiCad crossing fixture."""
+
+    snapshot, requests, source = crossing._load_fixture()
+    problem = SimpleNamespace(
+        name="negotiated-crossing-v1",
+        document_sha256=hashlib.sha256(source).hexdigest(),
+        snapshot=snapshot,
+        nets=tuple(
+            SimpleNamespace(
+                net_id=request.net_id,
+                layer_id=request.layer_id,
+                pad_count=sum(
+                    pad.net_id == request.net_id and request.layer_id in pad.layer_ids
+                    for pad in snapshot.content.pads
+                ),
+            )
+            for request in requests
+        ),
+    )
+    router = AStarRouter()
+    return problem, census.PRIMARY.select(census._solo_reference(problem, router)), router
+
+
 def test_the_recorder_observes_a_real_gate_call_and_changes_no_published_field() -> None:
     # A corpus result must not be the recorder's only positive control. The committed two-net
     # crossing fixture reaches the gate independently of whatever the successor measurement finds.
@@ -713,6 +737,27 @@ def test_the_recorder_observes_a_real_gate_call_and_changes_no_published_field()
     assert instrumented == control
     assert all(item.candidates == len(requests) for item in observations)
     assert all(item.pair_checks >= 0 for item in observations)
+
+
+def test_crossing_fixture_is_admitted_and_preserves_unperturbed_census_parity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # This only establishes the fixture's local census precondition and two-run parity; it does
+    # not make a corpus or routing-outcome claim.
+    problem, submitted, router = _crossing_census_inputs()
+    calls = {"n": 0}
+    honest = census.negotiate_routes
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        calls["n"] += 1
+        return honest(*args, **kwargs)
+
+    monkeypatch.setattr(census, "negotiate_routes", counting)
+    record = census.census_board(problem, submitted, router)
+
+    assert record["envelope_constructed"] is True
+    assert record["terminal_status"] != "invalid_request"
+    assert calls["n"] == 2
 
 
 def test_the_recorder_counts_only_two_pin_candidates_named_by_the_gate(
@@ -781,11 +826,7 @@ def test_parity_refuses_a_change_to_a_semantic_field_omitted_from_the_projection
 ) -> None:
     # policy_digest is deliberately absent from the redacted aggregate projection. Complete-object
     # parity must still catch it, or the recorder could alter provenance without changing a count.
-    _manifest, samples = reference.load_corpus()
-    name, payload = next(item for item in samples if item[0].startswith("ts18"))
-    problem = import_simple_route_json(Path(name).stem, payload)
-    router = AStarRouter()
-    submitted = census.PRIMARY.select(census._solo_reference(problem, router))
+    problem, submitted, router = _crossing_census_inputs()
     calls = {"n": 0}
     honest = census.negotiate_routes
 
@@ -1050,11 +1091,7 @@ def test_an_admission_predicate_that_disagrees_with_the_coordinator_is_refused(
 ) -> None:
     # The independent predicate is only a cross-check if a disagreement is fatal. Here it falsely
     # refuses a board that the current coordinator admits.
-    _manifest, samples = reference.load_corpus()
-    name, payload = next(item for item in samples if item[0].startswith("ts18"))
-    problem = import_simple_route_json(Path(name).stem, payload)
-    router = AStarRouter()
-    submitted = census.PRIMARY.select(census._solo_reference(problem, router))
+    problem, submitted, router = _crossing_census_inputs()
     false_refusal = {name: True for name, _s, _d in census.ADMISSION_CONJUNCTS}
     false_refusal["selected_layer_pad_count_between_2_and_32"] = False
     monkeypatch.setattr(census, "_admission", lambda *_args, **_kwargs: false_refusal)

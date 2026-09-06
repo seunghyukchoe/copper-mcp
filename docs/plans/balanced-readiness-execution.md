@@ -177,3 +177,29 @@ MCP surface, native process or authority claim. Source capture/settings and the 
 connectivity-ERC executor remain subsequent reviewed slices, followed by general project parity
 and BOM/model reconciliation. This split preserves the original M1 objective rather than calling
 metadata-only support complete. No frozen requirement is marked passed by this checkpoint.
+
+## Focused census refusal feedback
+
+PR 273's final parser-only revision `7d89436` passed full local validation (4,891 tests,
+one intentional fixture skip, 89% coverage) and all hosted checks in 20m43s. It landed through
+protected squash merge as `0086315` with an identical Git tree. Its main run 34047446714 is
+pending at this entry; it must succeed before the next integration. This does not close the
+under-twenty-minute PR target or grant project-execution, physics or application authority.
+
+The preceding PR run 34043841792 identified two refusal tests costing 197.88s and 198.66s
+under canonical coverage. They routed the large `ts18` board to check complete-object parity
+and admission disagreement. Those are control-flow guarantees, separate from corpus quality.
+Use the already-committed two-net KiCad crossing fixture instead, deriving real solo outcomes
+before calling the unmodified census and coordinator. A new positive control establishes that
+the small fixture is actually admitted and its two unperturbed runs agree. The full fresh census
+replay, every corpus assertion, source binding, markers and routing budgets remain unchanged.
+
+Local diagnostic pair on Python 3.12.13 with coverage and serial execution: the two original
+tests at `7d89436` passed in 123.10s pytest / 123.85s wall (58.84s and 58.44s call times).
+The two revised tests plus the positive control passed in 8.05s / 8.87s (0.78s, 0.81s and
+0.90s call times). Both runs used the same canonical environment while the isolated native
+build remained active. This is one contended-host observation with an added control, not a
+whole-suite speedup, a causal coverage-overhead estimate or a prediction of hosted savings.
+Both small selections emitted the existing root-module coverage warning; they do not replace
+full-suite coverage. Independent review, broad final-source validation and hosted checks remain
+required before publication of this test-only increment.
