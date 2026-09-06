@@ -19,6 +19,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Any, Literal
 
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
@@ -1245,20 +1246,100 @@ def run_board_drc(requested_path: str, settings: Settings) -> DrcSummary:
     return summary
 
 
-def _parse_erc_report(
+_ERC_UUID_PATH = re.compile(
+    r"^/(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+    r"(?:/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})*/?$"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _ErcObservation:
+    """Validated, identity-neutral observations from one KiCad ERC report."""
+
+    kicad_version: str
+    erc_schema: str
+    coordinate_units: str
+    error_count: int
+    warning_count: int
+    exclusion_count: int
+    ignored_check_count: int
+    sheet_count: int
+    violation_type_counts: Mapping[str, int]
+    passed: bool
+    normalized_report_digest: str
+    ignored_check_keys: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "violation_type_counts", MappingProxyType(dict(self.violation_type_counts))
+        )
+
+
+def _normalized_erc_report_digest(report: dict[str, Any]) -> str:
+    """Hash the validated report while ignoring only KiCad's root generation timestamp."""
+
+    normalized = {key: value for key, value in report.items() if key != "date"}
+    sheets = normalized["sheets"]
+    assert isinstance(sheets, list)
+    normalized_sheets: list[dict[str, Any]] = []
+    for sheet in sheets:
+        assert isinstance(sheet, dict)
+        normalized_sheet = dict(sheet)
+        violations = normalized_sheet["violations"]
+        assert isinstance(violations, list)
+        normalized_sheet["violations"] = sorted(
+            violations,
+            key=lambda violation: json.dumps(
+                violation, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+            ),
+        )
+        normalized_sheets.append(normalized_sheet)
+    normalized["sheets"] = sorted(
+        normalized_sheets,
+        key=lambda sheet: json.dumps(
+            sheet, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+        ),
+    )
+    canonical = json.dumps(
+        normalized, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def _parse_erc_observation(
     payload: bytes,
     *,
     return_code: int,
-    intent_digest: str,
-    schematic_digest: str,
     expected_source: str,
-) -> ErcSummary:
+    expected_uuid_paths: frozenset[str] | None = None,
+    minimum_severities: Mapping[str, str] | None = None,
+) -> _ErcObservation:
     """Accept only the reviewed KiCad ERC report shape and reduce it to redacted counts.
 
     The bounded-JSON helpers are shared with the DRC path on purpose: they are generic
     depth/value/duplicate-key guards, not DRC semantics.  Nothing here decides what an electrical
     rule violation *is* — KiCad already did that, and this function only transports the verdict.
     """
+
+    severity_floors: dict[str, str] | None = None
+    if minimum_severities is not None:
+        if (
+            not isinstance(minimum_severities, Mapping)
+            or not 1 <= len(minimum_severities) <= 10_000
+        ):
+            raise KiCadCliError("KiCad ERC severity floor constraints are malformed")
+        severity_floors = {}
+        for key, value in minimum_severities.items():
+            if (
+                type(key) is not str
+                or not 1 <= len(key) <= 128
+                or type(value) is not str
+                or value not in {"error", "warning", "ignore"}
+                or key in severity_floors
+                or len(severity_floors) >= 10_000
+            ):
+                raise KiCadCliError("KiCad ERC severity floor constraints are malformed")
+            severity_floors[key] = value
 
     try:
         text = payload.decode("utf-8", errors="strict")
@@ -1314,9 +1395,11 @@ def _parse_erc_report(
             or not isinstance(description, str)
         ):
             raise KiCadCliError("KiCad ERC ignored check fields are malformed")
+        if severity_floors is not None and severity_floors.get(check_key) in _SEVERITIES:
+            raise KiCadCliError("KiCad ERC ignored check violates its bound severity floor")
 
-    # ERC reports are nested per sheet, unlike the flat DRC report. A hierarchical schematic
-    # would carry several sheets; the bounded passive subset renders exactly one.
+    # ERC reports are nested per sheet, unlike the flat DRC report. Legacy generated
+    # schematics reject duplicate display paths; project reports identify sheets by UUID path.
     sheets = report.get("sheets")
     if not isinstance(sheets, list) or not sheets or len(sheets) > _MAX_ERC_SHEETS:
         raise KiCadCliError("KiCad ERC report sheet collection is malformed")
@@ -1326,6 +1409,7 @@ def _parse_erc_report(
     exclusion_count = 0
     total_violations = 0
     seen_sheet_paths: set[str] = set()
+    seen_uuid_paths: set[str] = set()
     for sheet in sheets:
         if not isinstance(sheet, dict):
             raise KiCadCliError("KiCad ERC sheet is malformed")
@@ -1339,9 +1423,16 @@ def _parse_erc_report(
             or not 1 <= len(uuid_path) <= 1024
         ):
             raise KiCadCliError("KiCad ERC sheet identity is malformed")
-        if sheet_path in seen_sheet_paths:
+        if expected_uuid_paths is None and sheet_path in seen_sheet_paths:
             raise KiCadCliError("KiCad ERC report contains a duplicate sheet")
         seen_sheet_paths.add(sheet_path)
+        if expected_uuid_paths is not None:
+            if not _ERC_UUID_PATH.fullmatch(uuid_path):
+                raise KiCadCliError("KiCad ERC sheet UUID path is malformed")
+            canonical_uuid_path = uuid_path.rstrip("/")
+            if canonical_uuid_path in seen_uuid_paths:
+                raise KiCadCliError("KiCad ERC report contains a duplicate sheet UUID path")
+            seen_uuid_paths.add(canonical_uuid_path)
         if not isinstance(violations, list):
             raise KiCadCliError("KiCad ERC sheet violations are malformed")
         total_violations += len(violations)
@@ -1367,6 +1458,14 @@ def _parse_erc_report(
                 raise KiCadCliError("KiCad ERC violation severity is unsupported")
             if not isinstance(excluded, bool):
                 raise KiCadCliError("KiCad ERC violation exclusion is malformed")
+            if severity_floors is not None:
+                expected = severity_floors.get(violation_type)
+                if (
+                    expected not in _SEVERITIES
+                    or (expected == "error" and severity != "error")
+                    or excluded
+                ):
+                    raise KiCadCliError("KiCad ERC finding does not meet its bound severity floor")
             if excluded:
                 exclusion_count += 1
             else:
@@ -1377,10 +1476,23 @@ def _parse_erc_report(
     if return_code != expected_return_code:
         raise KiCadCliError("KiCad ERC exit code does not match the report findings")
 
+    if expected_uuid_paths is not None:
+        if (
+            type(expected_uuid_paths) is not frozenset
+            or not expected_uuid_paths
+            or not all(
+                type(path) is str and _ERC_UUID_PATH.fullmatch(path) for path in expected_uuid_paths
+            )
+        ):
+            raise KiCadCliError("expected ERC sheet UUID paths are malformed")
+        canonical_expected_paths = {path.rstrip("/") for path in expected_uuid_paths}
+        if len(canonical_expected_paths) != len(expected_uuid_paths):
+            raise KiCadCliError("expected ERC sheet UUID paths are ambiguous")
+        if seen_uuid_paths != canonical_expected_paths:
+            raise KiCadCliError("KiCad ERC report sheet UUID paths do not match the project")
+
     error_count = severity_counts["error"]
-    return ErcSummary(
-        intent_digest=intent_digest,
-        schematic_digest=schematic_digest,
+    return _ErcObservation(
         kicad_version=kicad_version,
         erc_schema=KICAD_ERC_SCHEMA,
         coordinate_units="mm",
@@ -1391,6 +1503,39 @@ def _parse_erc_report(
         sheet_count=len(sheets),
         violation_type_counts=dict(sorted(violation_type_counts.items())),
         passed=error_count == 0,
+        normalized_report_digest=_normalized_erc_report_digest(report),
+        ignored_check_keys=tuple(sorted(check["key"] for check in ignored_checks)),
+    )
+
+
+def _parse_erc_report(
+    payload: bytes,
+    *,
+    return_code: int,
+    intent_digest: str,
+    schematic_digest: str,
+    expected_source: str,
+) -> ErcSummary:
+    """Parse legacy generated-schematic ERC evidence with its real artifact bindings."""
+
+    observation = _parse_erc_observation(
+        payload,
+        return_code=return_code,
+        expected_source=expected_source,
+    )
+    return ErcSummary(
+        intent_digest=intent_digest,
+        schematic_digest=schematic_digest,
+        kicad_version=observation.kicad_version,
+        erc_schema=observation.erc_schema,
+        coordinate_units=observation.coordinate_units,
+        error_count=observation.error_count,
+        warning_count=observation.warning_count,
+        exclusion_count=observation.exclusion_count,
+        ignored_check_count=observation.ignored_check_count,
+        sheet_count=observation.sheet_count,
+        violation_type_counts=observation.violation_type_counts,
+        passed=observation.passed,
     )
 
 

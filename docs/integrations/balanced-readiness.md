@@ -120,3 +120,14 @@ The frozen private result contains verified bytes and a bound hierarchy, not a p
 or ERC claim. Other project settings, library/model dependencies, BOM and candidate parity still
 need their own validation. No board write, approval or new MCP tool is added. See
 [ADR-0139](../adr/0139-captured-project-bytes-precede-electrical-execution.md).
+
+## Identity-neutral ERC observations
+
+The private CLI report adapter can now bind a hierarchical report to captured UUID instance paths
+and effective rule severity floors without fabricating Circuit Intent IDs. A full-finding digest
+normalizes only report date and collection order; descriptions and item details remain bound.
+Existing Circuit Intent summaries preserve their public shape and interpretation.
+
+This is report validation, not evidence authentication or complete source-load proof. The separate
+project executor, project parity and model authorities must still earn their own acceptance.
+See [ADR-0140](../adr/0140-project-erc-observations-do-not-invent-intent-identities.md).
