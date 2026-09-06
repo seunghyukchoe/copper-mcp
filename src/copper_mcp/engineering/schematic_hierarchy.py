@@ -51,6 +51,7 @@ _REFUSED_VARIABLES = {
     "VCSHASH",
     "VCSSHORTHASH",
 }
+_DIAGNOSTIC_VARIABLE_PREFIXES = ("ERC_WARNING", "ERC_ERROR", "DRC_WARNING", "DRC_ERROR")
 _INTEGER = re.compile(r"[+-]?[0-9]+")
 _NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 
@@ -350,7 +351,11 @@ def _expand_reference(
             if close < 0:
                 _fail("schematic hierarchy reference is malformed")
             name = raw_reference[index + 2 : close]
-            if not _VARIABLE_NAME.fullmatch(name) or name in _REFUSED_VARIABLES:
+            if (
+                not _VARIABLE_NAME.fullmatch(name)
+                or name in _REFUSED_VARIABLES
+                or name.startswith(_DIAGNOSTIC_VARIABLE_PREFIXES)
+            ):
                 _fail("schematic hierarchy reference is malformed")
             if name == "PROJECTNAME":
                 replacement = project_name

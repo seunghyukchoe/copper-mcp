@@ -819,6 +819,17 @@ def test_nested_variable_values_are_not_recursively_expanded() -> None:
         )
 
 
+@pytest.mark.parametrize("name", ("ERC_WARNING", "ERC_ERROR_X", "DRC_WARNING_X", "DRC_ERROR"))
+def test_native_suppressed_diagnostic_variables_cannot_select_a_file(name) -> None:
+    root = _source(ROOT_UUID, _sheet(SHEET_A_UUID, f"${{{name}}}.kicad_sch"))
+    with pytest.raises(SchematicHierarchyError, match="reference"):
+        derive_schematic_hierarchy(
+            "root.kicad_sch",
+            (_item("root.kicad_sch", root), _item("child.kicad_sch", _source(CHILD_ROOT_UUID))),
+            project_variables={name: "child"},
+        )
+
+
 def test_empty_nested_variable_expansion_is_refused_without_amplification() -> None:
     root = _source(ROOT_UUID, _sheet(SHEET_A_UUID, "${A}child.kicad_sch"))
     with pytest.raises(SchematicHierarchyError, match="reference"):

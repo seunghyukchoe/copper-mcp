@@ -41,7 +41,9 @@ using the declared ASCII identifier subset and values of at most 4096 characters
 is the root schematic stem. Do not consult process environment variables: `KIPRJMOD` in a sheet
 filename is supported only when explicitly declared in the project map. Substitute variable
 values once, as native `loadHierarchy` does; values containing another variable remain unresolved
-and are refused. Unknown, clock and version-control-dependent references also refuse. Bound both
+and are refused. Unknown, clock and version-control-dependent references also refuse. Refuse the
+case-sensitive `ERC_WARNING`, `ERC_ERROR`, `DRC_WARNING` and `DRC_ERROR` token prefixes that
+native non-ERC filename expansion suppresses; project-map values cannot override that behavior. Bound both
 input and expanded output to 4096 characters, check before appending each replacement and check
 the same deadline inside the single pass. There is no recursive amplification or repeated scan of
 substituted values. Nested variable names, math expressions and escaped-variable syntax remain
