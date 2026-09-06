@@ -96,6 +96,8 @@ class OptimizationPackage(ClosedModel):
                 row.source_board_revision != self.binding.board_revision
                 or row.placed_snapshot_digest != self.binding.placed_snapshot_digest
                 or row.route_bundle_id != self.binding.route_bundle_id
+                or row.input_digest != self.binding.placed_snapshot_digest
+                or row.normalized_output_digest != self.binding.candidate_board_revision
                 for row in self.backend_provenance
             )
         ):

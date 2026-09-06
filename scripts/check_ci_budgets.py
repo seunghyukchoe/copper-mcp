@@ -73,6 +73,15 @@ HALF_RULE_FACTOR = 2
 
 # The only conclusion a recorded run may have. See the module docstring.
 REQUIRED_CONCLUSION = "success"
+PENDING_JOBS = frozenset(
+    {
+        (".github/workflows/ci.yml", "quality"),
+        (".github/workflows/ci.yml", "compatibility"),
+        (".github/workflows/ci.yml", "evidence"),
+        (".github/workflows/ci.yml", "package"),
+    }
+)
+PENDING_MINUTES = 120
 
 _JOBS_KEY = re.compile(r"^jobs:\s*$")
 _JOB_ID = re.compile(r"^ {2}(?P<job>[A-Za-z_][A-Za-z0-9_-]*):\s*$")
@@ -169,7 +178,7 @@ def _read_workflows(failures: list[str]) -> list[Budget]:
     return budgets
 
 
-def _read_calibration(failures: list[str]) -> dict[tuple[str, str], list[dict[str, Any]]]:
+def _read_calibration(failures: list[str]) -> dict[tuple[str, str], list[dict[str, Any]] | None]:
     path = ROOT / CALIBRATION
     if not path.is_file():
         failures.append(f"missing {CALIBRATION}")
@@ -183,7 +192,7 @@ def _read_calibration(failures: list[str]) -> dict[tuple[str, str], list[dict[st
         failures.append(f"{CALIBRATION} must declare schema {CALIBRATION_SCHEMA!r}")
         return {}
 
-    recorded: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    recorded: dict[tuple[str, str], list[dict[str, Any]] | None] = {}
     entries = document.get("jobs")
     if not isinstance(entries, list) or not entries:
         failures.append(f"{CALIBRATION} records no calibrated jobs")
@@ -195,12 +204,35 @@ def _read_calibration(failures: list[str]) -> dict[tuple[str, str], list[dict[st
         workflow = entry.get("workflow")
         job = entry.get("job")
         observations = entry.get("observations")
+        status = entry.get("status", "measured")
         if not isinstance(workflow, str) or not isinstance(job, str):
             failures.append(f"{CALIBRATION} contains an entry with no workflow/job identity")
             continue
         key = (workflow, job)
         if key in recorded:
             failures.append(f"{CALIBRATION} calibrates {workflow}:{job} twice")
+            continue
+        if status == "pending":
+            if observations not in (None, []):
+                failures.append(
+                    f"{CALIBRATION} marks {workflow}:{job} pending but records observations; "
+                    "a provisional budget must not impersonate a measurement"
+                )
+                continue
+            if entry.get("release_blocking") is not True or not isinstance(
+                entry.get("reason"), str
+            ):
+                failures.append(
+                    f"{CALIBRATION} marks {workflow}:{job} pending without a "
+                    "release-blocking reason"
+                )
+                continue
+            recorded[key] = None
+            continue
+        if status != "measured":
+            failures.append(
+                f"{CALIBRATION} has unknown calibration status {status!r} for {workflow}:{job}"
+            )
             continue
         if not isinstance(observations, list) or not observations:
             failures.append(
@@ -233,7 +265,7 @@ def _read_calibration(failures: list[str]) -> dict[tuple[str, str], list[dict[st
     return recorded
 
 
-def _check(failures: list[str], notes: list[str]) -> None:
+def _check(failures: list[str], notes: list[str], *, require_calibrated: bool = False) -> None:
     budgets = _read_workflows(failures)
     recorded = _read_calibration(failures)
     if not budgets:
@@ -246,8 +278,7 @@ def _check(failures: list[str], notes: list[str]) -> None:
     calibrated: set[tuple[str, str]] = set()
     for budget in sorted(budgets, key=lambda item: (item.workflow, item.job)):
         key = (budget.workflow, budget.job)
-        observations = recorded.get(key)
-        if observations is None:
+        if key not in recorded:
             failures.append(
                 f"{budget.workflow}:{budget.line} sets `timeout-minutes: {budget.minutes}` on job "
                 f"{budget.job!r} with no entry in {CALIBRATION}; record what the job actually "
@@ -255,6 +286,32 @@ def _check(failures: list[str], notes: list[str]) -> None:
             )
             continue
         calibrated.add(key)
+        observations = recorded[key]
+        if observations is None:
+            if key not in PENDING_JOBS:
+                failures.append(
+                    f"{CALIBRATION} permits pending calibration only for explicit new CI jobs; "
+                    f"{budget.workflow}:{budget.job} is not one"
+                )
+                continue
+            if budget.minutes < PENDING_MINUTES:
+                failures.append(
+                    f"{budget.workflow}:{budget.line} has pending calibration but timeout "
+                    f"{budget.minutes} is below the provisional {PENDING_MINUTES}-minute floor"
+                )
+                continue
+            if require_calibrated:
+                failures.append(
+                    f"{budget.workflow}:{budget.job} remains pending hosted calibration; "
+                    "release is blocked until successful observations replace it"
+                )
+                continue
+            notes.append(
+                f"{budget.workflow}:{budget.job} provisional budget {budget.minutes} min; "
+                "pending hosted calibration is release-blocking"
+            )
+            continue
+        assert observations
         worst = max(observations, key=lambda item: int(item["seconds"]))
         required = HALF_RULE_FACTOR * int(worst["seconds"]) / 60
         if budget.minutes < required:
@@ -282,14 +339,24 @@ def _check(failures: list[str], notes: list[str]) -> None:
 
 
 def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--require-calibrated", action="store_true")
+    args = parser.parse_args()
     failures: list[str] = []
     notes: list[str] = []
-    _check(failures, notes)
+    _check(failures, notes, require_calibrated=args.require_calibrated)
     for note in notes:
         print(f"note: {note}")
     if failures:
         raise SystemExit("CI budget check failed:\n- " + "\n- ".join(failures))
-    print(f"CI budget check passed. {len(notes)} calibrated budget(s) clear the half rule.")
+    pending = sum("provisional budget" in note for note in notes)
+    measured = len(notes) - pending
+    print(
+        "CI budget check passed. "
+        f"{measured} measured calibration(s) clear the half rule; {pending} pending calibration(s)."
+    )
     return 0
 
 

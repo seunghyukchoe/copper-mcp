@@ -16,6 +16,7 @@ the model on the 2.1 line. `_ANTICIPATED_REFUSALS` below names those types expli
 from __future__ import annotations
 
 import functools
+import inspect
 import os
 import threading
 from collections.abc import Callable
@@ -80,6 +81,7 @@ from copper_mcp.mcp_contracts import (
     SourceToBoardParityToolResponse,
 )
 from copper_mcp.models import ManifestContractError
+from copper_mcp.optimization.mcp import register_optimization_tools
 from copper_mcp.placement.contracts import PlacementError
 from copper_mcp.post_placement_observation import PostPlacementObservationError
 from copper_mcp.request_boundary import RequestError
@@ -217,6 +219,17 @@ def _refusals_as_tool_errors(function: _ToolCallable) -> _ToolCallable:
     line, so this restores a surface rather than opening one (`SEC-163`).
     """
 
+    if inspect.iscoroutinefunction(function):
+
+        @functools.wraps(function)
+        async def refuse_async(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return await function(*args, **kwargs)
+            except _ANTICIPATED_REFUSALS as error:
+                raise ToolError(str(error)) from error
+
+        return refuse_async  # type: ignore[return-value]
+
     @functools.wraps(function)
     def refuse(*args: Any, **kwargs: Any) -> Any:
         try:
@@ -315,6 +328,11 @@ class CopperMCPServer(MCPServer[None]):
                 "preview_placement",
                 "inspect_live_editor_context",
                 "start_routing",
+                "start_optimization",
+                "get_optimization_job",
+                "cancel_optimization_job",
+                "export_optimization_package",
+                "approve_optimization_job",
                 "verify_external_route_candidate",
             }:
                 result.append(tool)
@@ -370,6 +388,14 @@ class CopperMCPServer(MCPServer[None]):
             raise ToolError("live editor context tool arguments are malformed")
         if name == "start_routing" and set(arguments) != {"request", "authorization_digest"}:
             raise ToolError("routing job start arguments are malformed")
+        if name in {
+            "start_optimization",
+            "get_optimization_job",
+            "cancel_optimization_job",
+            "export_optimization_package",
+            "approve_optimization_job",
+        } and set(arguments) != {"request"}:
+            raise ToolError("optimization tool arguments are malformed")
         if name == "get_routing_job" and set(arguments) != {"job_id", "authorization_digest"}:
             raise ToolError("routing job lookup arguments are malformed")
         if name == "cancel_routing_job" and frozenset(arguments) not in {
@@ -395,6 +421,9 @@ mcp: CopperMCPServer = CopperMCPServer(
         "candidates must be validated before any future apply operation."
     ),
 )
+
+
+_OPTIMIZATION_GATEWAY = register_optimization_tools(mcp, lambda: _SETTINGS)
 
 
 @mcp.tool()
@@ -634,8 +663,11 @@ def preview_route_bundle(request: RouteBundleToolRequest) -> RouteBundleToolResp
     Every reference must come from the same Circuit Scene and carry its board and snapshot
     compare-and-swap values.  The tool publishes a plan only when deterministic negotiated
     routing, a complete composition replay, and the bounded cross-net physical-clearance gate
-    all succeed. It never returns partial plans, a board derivative, DRC evidence, or apply
-    authority.
+    all succeed. It never returns partial plans, a board derivative, or apply
+    authority. Opt-in ``include_drc`` continues a routed plan through one authoritative KiCad
+    DRC run over the composed board on a private disposable copy, bound as bundle evidence;
+    it is single-invocation execution evidence, never a reproducible differential, and never
+    authorization to write copper.
     """
 
     return RouteBundleToolResponse.model_validate(preview_route_bundle_service(request, _SETTINGS))

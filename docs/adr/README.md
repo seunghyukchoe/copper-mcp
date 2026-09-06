@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0133**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0136**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -207,9 +207,13 @@ never silently widens it.
 | [0128](0128-private-surrogate-ranking-is-bounded-and-never-signs-off.md) | A private surrogate ranking is bounded and never signs off | Accepted |
 | [0129](0129-the-live-version-window-is-kicads-own-and-an-acceptance-is-not-a-proof.md) | The live version window is KiCad's own, and an acceptance is never published as a proof | Accepted |
 | [0130](0130-orcarouter-advisory-policy-provider.md) | Use OrcaRouter only as a redacted advisory policy provider | Proposed |
+| [0131](0131-bundle-drc-evidence-is-composed-not-cherry-picked.md) | Composed bundle DRC evidence | Accepted |
 | [0132](0132-supervised-optimization-keeps-evidence-and-consent-separate.md) | Supervised optimization keeps evidence, consent and application separate | Proposed; internal foundation only |
+| [0133](0133-native-optimization-execution-and-host-confirmation.md) | Native optimization execution and host confirmation | Proposed |
+| [0134](0134-freeze-readiness-requirements-before-measuring-progress.md) | Freeze readiness requirements before measuring progress | Proposed |
+| [0135](0135-inner-placement-exhaustion-is-not-completed-search-work.md) | Inner placement exhaustion is not completed search work | Proposed |
 
-One hundred and thirty numbers allocated, one hundred and twenty-five records, no duplicates — and
+One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
 its output, not this sentence: three earlier revisions of it stood here at once, disagreeing about
 the count, and each was stale by a landing or two before it was ever read. 0027, 0082, 0083, 0085
@@ -362,5 +366,8 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 - [ADR-0129: The live version window is KiCad's own, and an acceptance is never published as a proof](0129-the-live-version-window-is-kicads-own-and-an-acceptance-is-not-a-proof.md)
 - [ADR-0130: Use OrcaRouter only as a redacted advisory policy provider](0130-orcarouter-advisory-policy-provider.md)
 
-2026-09-05 allocation note: ADR-0131 remains a live claim in PR #265; ADR-0132
-steps over it for the internal optimization foundation and does not recycle it.
+- [ADR-0131: Composed bundle DRC evidence](0131-bundle-drc-evidence-is-composed-not-cherry-picked.md)
+- [ADR-0133: Native optimization execution and host confirmation](0133-native-optimization-execution-and-host-confirmation.md)
+
+2026-09-05 integration: the reserved ADR-0131 from PR #265 is included, and ADR-0133
+records execution above the existing ADR-0132 foundation. No spent identifier is recycled.

@@ -13,9 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
-import importlib
 import json
-import os
 import shutil
 import stat
 import tempfile
@@ -28,17 +26,15 @@ from unittest.mock import patch
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-# MCP server construction reads its default configuration at import time.  The harness pins that
-# unused default to the repository so caller configuration and secrets cannot affect the result.
+if __package__:
+    from .offline_mcp_harness import load_offline_mcp_server
+else:
+    from offline_mcp_harness import load_offline_mcp_server
+
 SCRIPT_FILE = Path(__file__).resolve()
 ROOT = SCRIPT_FILE.parents[1]
 SCRIPT_PATH = SCRIPT_FILE.relative_to(ROOT)
-for _environment_name in tuple(os.environ):
-    if _environment_name.startswith("COPPER_MCP_"):
-        del os.environ[_environment_name]
-os.environ["COPPER_MCP_WORKSPACE"] = str(ROOT)
-
-mcp_server = importlib.import_module("copper_mcp.mcp_server")
+mcp_server = load_offline_mcp_server()
 
 from copper_mcp.apply.tokens import ApplyBinding, ApplyTokenAuthority  # noqa: E402
 from copper_mcp.config import Settings  # noqa: E402
@@ -515,6 +511,12 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
         "fixture_id": fixture_id,
         "script": SCRIPT_PATH.as_posix(),
         "script_sha256": hashlib.sha256(SCRIPT_FILE.read_bytes()).hexdigest(),
+        "harness_helper": {
+            "path": "scripts/offline_mcp_harness.py",
+            "sha256": hashlib.sha256(
+                (ROOT / "scripts/offline_mcp_harness.py").read_bytes()
+            ).hexdigest(),
+        },
         "catalog_sha256": hashlib.sha256(
             (FIXTURE_DIRECTORY / "threat-cases.json").read_bytes()
         ).hexdigest(),

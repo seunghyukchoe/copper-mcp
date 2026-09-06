@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
 permissions:
@@ -14,31 +16,62 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Python ${{ matrix.python-version }}
+  quality:
+    name: Quality (Python 3.12)
     runs-on: ubuntu-latest
-    # 120 minutes, calibrated rather than chosen. The slowest recorded hosted leg of this job is
-    # 2,745 s (45m45s, Python 3.12, run 33639322391) under four xdist workers, so the half rule
-    # -- a budget is at least twice the longest recorded duration -- needs 91.50 minutes and this
-    # is 120. The margin is 28.50 minutes, restored from the 9.93 it had reached: the serial leg
-    # had grown 2,178 s -> 2,311 s -> 2,332 s -> 3,302 s across the 0.9.0 through 0.12.0 cuts, and
-    # running the step on four workers rather than one is what bought the room back. **The
-    # durations recorded from this change on measure a parallel suite and are not comparable with
-    # the serial ones before it**; the budget itself is deliberately unchanged, because a ceiling
-    # that follows the gate down stops being able to report the next growth. The numbers above are
-    # a transcription and go stale on their own; `.github/ci-budget-calibration.json` is the
-    # authority and `scripts/check_ci_budgets.py` enforces the rule against it, so re-read that
-    # file rather than trusting this comment, and do not move this number without re-recording it.
-    # This job had no budget at all before #184, which is not the same as having a generous one: an
-    # unbounded job cannot be cancelled by a ceiling, but it also cannot tell anyone the suite has
-    # grown.
+    # Provisional for this reshaped job, not a measured calibration. The pending calibration entry
+    # must be replaced with successful hosted samples before release.
     timeout-minutes: 120
-    # Hypothesis generation is pinned to one fixed example stream on the hosted runner only
-    # (#255). A coverage gate cannot tell "a test was lost" from "the dice rolled differently"
-    # while generation is random, so CI derandomizes; local runs keep the default profile and
-    # stay able to stumble onto a counterexample this fixed stream will never reach. Job-level
-    # rather than step-level so it covers every step that runs Python, and so a step's own
-    # `env:` block can be edited without silently dropping it.
+    outputs:
+      evidence-python: ${{ steps.plan.outputs.evidence-python }}
+      regular-marker: ${{ steps.plan.outputs.regular-marker }}
+      evidence-enabled: ${{ steps.plan.outputs.evidence-enabled }}
+      evidence-policy: ${{ steps.plan.outputs.evidence-policy }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,security]"
+      - id: plan
+        run: python scripts/ci_test_plan.py --github-output "$GITHUB_OUTPUT" --event-name "${{ github.event_name }}" --base-sha "${{ github.event.pull_request.base.sha || github.event.before }}" --head-sha "${{ github.sha }}"
+      - run: python -m ruff format --check .
+      - run: python -m ruff check .
+      - run: python -m mypy src
+      - run: python scripts/check_commit_message.py --range "${BASE_SHA}..${HEAD_SHA}"
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      - run: python scripts/check_version.py
+      - run: python scripts/check_ledgers.py
+      - run: python scripts/check_adr_numbers.py
+      - run: python scripts/check_doc_links.py
+      - run: python scripts/check_schema_sets.py
+      - run: PYTHONPATH=src python scripts/check_drc_comparability.py
+      - run: python scripts/check_ci_budgets.py
+      - run: python scripts/check_audio_benchmarks.py
+      - run: PYTHONPATH=src python scripts/check_circuit_intents.py
+      - run: python scripts/check_secrets.py
+      - run: python -m pip_audit .
+      - run: python -m build && python scripts/build_pcm_package.py
+      - run: python scripts/check_sdist_tracked.py --sdist dist/*.tar.gz
+      - run: sha256sum dist/*.whl dist/*.tar.gz dist/*.zip dist/*.metadata.json > dist/SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: quality-distributions
+          path: dist/
+          if-no-files-found: error
+
+  compatibility:
+    name: ${{ matrix.python-version == '3.12' && 'Compatibility Python 3.12' || format('Python {0}', matrix.python-version) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     env:
       HYPOTHESIS_PROFILE: deterministic-ci
     strategy:
@@ -46,88 +79,58 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        # The policy-order benchmark replays its committed evidence harness with `git show`.
-        # A shallow checkout omits that immutable historical source and makes all Python jobs fail.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: pyproject.toml
-      - name: Install project and development tools
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,security]"
-      # P0.4: the server twin of the `commit-msg` hook. The hook only ever protected an author who
-      # had it installed and did not bypass it, and a rejection swallowed by the loop driving the
-      # commit looks exactly like a hook that passed -- which is how this class reached `main`
-      # twice. It runs on one matrix leg because the answer cannot differ between interpreters,
-      # and inside this job rather than beside it so it needs no timeout budget of its own (see
-      # `.github/ci-budget-calibration.json`: an uncalibrated budget is a guess).
-      - name: Check commit message conventions
-        if: github.event_name == 'pull_request' && matrix.python-version == '3.12'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: python scripts/check_commit_message.py --range "${BASE_SHA}..${HEAD_SHA}"
-      - name: Check formatting
-        run: python -m ruff format --check .
-      - name: Lint
-        run: python -m ruff check .
-      - name: Type check
-        run: python -m mypy src
-      # `-n 4` is the runner, not a guess: a standard GitHub-hosted `ubuntu-latest` runner has four
-      # vCPUs. Nothing in an archived run log said so -- the log records the image and the agent but
-      # never the core count -- so the step below records it, and a runner-spec change becomes a
-      # visible line rather than a silent mismatch with this number.
-      #
-      # `--dist loadfile` and not `loadscope`/`load`: the expensive fixtures here are module-scoped
-      # and each takes hundreds of seconds, so distributing anything finer than a file would run
-      # them once per worker and make the suite slower. Measured serially with `--durations=0`,
-      # 98.8% of a 2,179 s local run is attributable to tests and the longest single *file* is
-      # `tests/test_benchmark_negotiated_multipin_branch_repair.py` at 610.2 s. That file is the
-      # ceiling: no worker count divides it, so the best achievable speed-up at any `-n` is 3.53x
-      # and `-n 8` buys nothing over `-n 4`. Raising the ceiling means making that file's
-      # `fresh_report` fixture cheaper, which is a separate change to the benchmark, not to this
-      # workflow.
-      - name: Record runner CPU count
-        run: nproc
-      - name: Unit tests
-        run: python -m pytest -n 4 --dist loadfile
-      - name: Validate metadata and ledgers
-        run: python scripts/check_version.py && python scripts/check_ledgers.py
-      - name: Validate ADR number allocation
-        run: python scripts/check_adr_numbers.py
-      - name: Check documentation links
-        run: python scripts/check_doc_links.py
-      - name: Check the sdist ships only tracked files
-        run: python scripts/check_sdist_tracked.py
-      # Reads every release tag with `git show`, so it depends on the full checkout above.
-      - name: Check published schema accepted sets
-        run: python scripts/check_schema_sets.py
-      - name: Check published DRC comparability literals
-        run: python scripts/check_drc_comparability.py
-      # P0.5: both of these have been in `make lint` since before this workflow existed and
-      # neither had ever run hosted, so a contributor without a local KiCad-era checkout could
-      # break either one and see a green pull request.
-      - name: Check audio benchmark catalog
-        run: python scripts/check_audio_benchmarks.py
-      - name: Check Circuit Intent fixtures
-        run: PYTHONPATH=src python scripts/check_circuit_intents.py
-      # P0.3: the budgets declared in this directory, against recorded hosted durations.
-      - name: Check CI timeout budgets
-        run: python scripts/check_ci_budgets.py
-      - name: Scan repository for secrets
-        run: python scripts/check_secrets.py
-      - name: Build packages
-        if: matrix.python-version == '3.12'
-        run: python -m build
-      - name: Upload packages
-        if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - run: make test-compat PYTHON=python TEST_MARKER="${{ github.event_name == 'pull_request' && 'not slow_evidence and not external_router and not networked_provider' || 'not slow_evidence' }}" COVERAGE_ARGS="${{ matrix.python-version == '3.12' && '--cov=copper_mcp --cov-report=term-missing' || '--no-cov' }}"
+
+  evidence:
+    name: Evidence (Python ${{ matrix.python-version }})
+    needs: quality
+    if: needs.quality.outputs.evidence-enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      HYPOTHESIS_PROFILE: deterministic-ci
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(needs.quality.outputs.evidence-python) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          name: python-distributions
-          path: dist/
-          if-no-files-found: error
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - run: make test-evidence PYTHON=python COVERAGE_ARGS=--no-cov
+
+  package:
+    # Preserve the existing protected check while making it depend on every required role.
+    name: Python 3.12
+    needs: [quality, compatibility, evidence]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Enforce all required roles
+        run: test "${{ needs.quality.result == 'success' && needs.compatibility.result == 'success' && (needs.evidence.result == 'success' || (github.event_name == 'pull_request' && needs.evidence.result == 'skipped' && needs.quality.outputs.evidence-enabled == 'false' && needs.quality.outputs.evidence-policy == 'skipped-nonsensitive-pr')) }}" = true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: quality-distributions
+          path: dist
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - run: sha256sum --check dist/SHA256SUMS
+      - run: python -m pip install --no-deps dist/*.whl
+      - run: python -c "from pathlib import Path; assert len(list(Path('dist').glob('*.whl'))) == 1; assert len(list(Path('dist').glob('*.tar.gz'))) == 1; assert len(list(Path('dist').glob('*.zip'))) == 1; assert len(list(Path('dist').glob('*.metadata.json'))) == 1"

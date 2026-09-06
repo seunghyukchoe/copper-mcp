@@ -198,7 +198,7 @@ def package(req: OptimizationRequest | None = None) -> OptimizationPackage:
                 source_board_revision=binding.board_revision,
                 placed_snapshot_digest=binding.placed_snapshot_digest,
                 route_bundle_id=binding.route_bundle_id,
-                normalized_output_digest=digest("9"),
+                normalized_output_digest=binding.candidate_board_revision,
             ),
         ),
     )
@@ -800,11 +800,11 @@ def test_corpus_release_requirements(field, value, blocker):
     assert blocker in release_blockers(changed)
 
 
-def test_no_optimization_tool_is_registered_prematurely():
+def test_optimization_tools_are_registered_through_the_host_gateway():
     from copper_mcp.mcp_server import mcp
 
     names = {tool.name for tool in asyncio.run(mcp.list_tools())}
-    assert not names.intersection(
+    assert names.issuperset(
         {
             "start_optimization",
             "get_optimization_job",
@@ -818,6 +818,14 @@ def test_no_optimization_tool_is_registered_prematurely():
 def test_schema_snapshot_matches_models():
     path = ROOT / "schemas" / "optimization-v1.schema.json"
     assert json.loads(path.read_text()) == command_schema()
+
+
+@pytest.mark.parametrize("field", ["input_digest", "normalized_output_digest"])
+def test_backend_provenance_cannot_borrow_another_input_or_output(field):
+    document = package().model_dump()
+    document["backend_provenance"][0][field] = digest("9")
+    with pytest.raises(ValidationError):
+        OptimizationPackage.model_validate(document)
 
 
 def test_bounded_json_value_count_and_field_count():
@@ -932,8 +940,14 @@ def test_server_info_separates_existing_observation_from_future_optimization():
     assert (
         "revision-bound post-placement scene and DRC observation (read-only)" in info["implemented"]
     )
-    assert "supervised optimization workflow with human review (optimization/v1)" in info["planned"]
-    assert not any("optimization" in item for item in info["implemented"])
+    assert (
+        "general optimization across external backends, fresh zone fill, and held-out boards"
+        in info["planned"]
+    )
+    assert (
+        "bounded native optimization jobs with repeated KiCad checks and host-confirmed "
+        "package review over stdio; no optimization apply authority" in info["implemented"]
+    )
 
 
 def test_optimization_messages_match_published_schema():

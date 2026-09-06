@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: install install-dev test lint format typecheck security build pcm check \
+.PHONY: install install-dev test test-fast test-full test-compat test-evidence lint format typecheck security build pcm check \
 	check-audio-benchmarks check-circuit-intents benchmark-audio benchmark-routing \
 	benchmark-external-corpus benchmark-cross-router evaluate-excessive-agency clean
 
@@ -12,6 +12,20 @@ install-dev:
 
 test:
 	PYTHONPATH=src $(PYTHON) -m pytest
+
+test-fast:
+	PYTHONPATH=src $(PYTHON) -m pytest -n 4 --dist loadfile --no-cov -m "not slow_evidence and not external_router and not networked_provider"
+
+test-full:
+	PYTHONPATH=src $(PYTHON) -m pytest
+
+TEST_MARKER ?= not slow_evidence
+COVERAGE_ARGS ?= --no-cov
+test-compat:
+	PYTHONPATH=src $(PYTHON) -m pytest -n 4 --dist loadfile -m "$(TEST_MARKER)" $(COVERAGE_ARGS)
+
+test-evidence:
+	PYTHONPATH=src $(PYTHON) -m pytest --no-cov tests/test_benchmark_negotiated_multipin_branch_repair.py::test_published_artifact_matches_one_current_source_bound_b141_recomputation
 
 lint:
 	$(PYTHON) -m ruff check .

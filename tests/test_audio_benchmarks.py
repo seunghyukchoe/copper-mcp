@@ -21,6 +21,7 @@ NE5532_FIXTURE = (
 )
 COPPERTONE = ROOT / "hardware" / "coppertone-buffer" / "coppertone-buffer.kicad_pcb"
 REAL_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
+SUBPROCESS_TIMEOUT_SECONDS = 120
 
 
 def _run(
@@ -28,6 +29,7 @@ def _run(
     *arguments: str,
     pythonpath_prefix: Path | None = None,
     extra_environment: dict[str, str] | None = None,
+    timeout_seconds: float = SUBPROCESS_TIMEOUT_SECONDS,
 ) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     python_paths = [str(ROOT / "src")]
@@ -43,7 +45,7 @@ def _run(
         capture_output=True,
         text=True,
         check=False,
-        timeout=30,
+        timeout=timeout_seconds,
     )
 
 
@@ -312,6 +314,35 @@ def test_capability_runner_never_changes_committed_board_sources() -> None:
     result = _run(RUNNER)
 
     assert result.returncode == 0, result.stderr
+    assert {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in (RC_FIXTURE, NE5532_FIXTURE, COPPERTONE)
+    } == before
+
+
+def test_capability_runner_outer_timeout_preserves_committed_board_sources(tmp_path: Path) -> None:
+    before = {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in (RC_FIXTURE, NE5532_FIXTURE, COPPERTONE)
+    }
+    hook = _write_sitecustomize(
+        tmp_path,
+        """import time
+from copper_mcp import tools
+
+_original_inspect_board_ir = tools.inspect_board_ir
+
+def _slow_inspection(payload, settings=None):
+    time.sleep(1)
+    return _original_inspect_board_ir(payload, settings)
+
+tools.inspect_board_ir = _slow_inspection
+""",
+    )
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        _run(RUNNER, pythonpath_prefix=hook, timeout_seconds=0.05)
+
     assert {
         path: (path.read_bytes(), path.stat().st_mtime_ns)
         for path in (RC_FIXTURE, NE5532_FIXTURE, COPPERTONE)

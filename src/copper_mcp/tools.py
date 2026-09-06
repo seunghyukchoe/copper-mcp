@@ -111,6 +111,8 @@ def server_info() -> dict[str, Any]:
             "opt-in authoritative DRC evidence for file-backed layered proposals",
             "versioned external route verification with mandatory candidate-bound KiCad DRC",
             "durable file-backed layered routing jobs with bounded worker execution",
+            "bounded native optimization jobs with repeated KiCad checks and host-confirmed "
+            "package review over stdio; no optimization apply authority",
             "authorization-bound candidate geometry export",
             "revision-bound live layered route proposal (read-only)",
         ],
@@ -119,7 +121,7 @@ def server_info() -> dict[str, Any]:
             "live placement/routing action compare-and-swap over KiCad IPC",
             "MCP Tasks negotiated progressive enhancement",
             "multilayer generalization beyond the two-signal subset",
-            "supervised optimization workflow with human review (optimization/v1)",
+            "general optimization across external backends, fresh zone fill, and held-out boards",
             "general whole-board hybrid routing with independently verified external backends",
         ],
     }

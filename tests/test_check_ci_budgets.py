@@ -248,6 +248,84 @@ def test_a_calibration_entry_with_no_observations_fails(
     assert any("with no observations" in failure for failure in failures)
 
 
+def test_an_explicit_release_blocking_pending_budget_is_not_fake_calibration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = {
+        "workflow": ".github/workflows/ci.yml",
+        "job": "quality",
+        "status": "pending",
+        "release_blocking": True,
+        "reason": "new job shape",
+    }
+    failures, notes = _tree(
+        tmp_path, monkeypatch, {"ci.yml": _workflow(job="quality", minutes=120)}, [entry]
+    )
+
+    assert failures == []
+    assert notes == [
+        ".github/workflows/ci.yml:quality provisional budget 120 min; "
+        "pending hosted calibration is release-blocking"
+    ]
+
+
+def test_a_pending_budget_with_observations_is_rejected_as_fabricated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = _entry([1])
+    entry.update({"status": "pending", "release_blocking": True, "reason": "new job shape"})
+    failures, _ = _tree(tmp_path, monkeypatch, {"ci.yml": _workflow(minutes=120)}, [entry])
+
+    assert any("must not impersonate a measurement" in failure for failure in failures)
+
+
+def test_pending_calibration_is_rejected_for_an_unapproved_job_or_short_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = {
+        "workflow": ".github/workflows/ci.yml",
+        "job": "test",
+        "status": "pending",
+        "release_blocking": True,
+        "reason": "new job shape",
+    }
+    failures, _ = _tree(tmp_path, monkeypatch, {"ci.yml": _workflow(minutes=119)}, [entry])
+
+    assert any("only for explicit new CI jobs" in failure for failure in failures)
+
+    entry["job"] = "quality"
+    failures, _ = _tree(
+        tmp_path / "short",
+        monkeypatch,
+        {"ci.yml": _workflow(job="quality", minutes=119)},
+        [entry],
+    )
+    assert any("provisional 120-minute floor" in failure for failure in failures)
+
+
+def test_require_calibrated_turns_pending_entries_into_a_release_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = {
+        "workflow": ".github/workflows/ci.yml",
+        "job": "quality",
+        "status": "pending",
+        "release_blocking": True,
+        "reason": "new job shape",
+    }
+    directory = tmp_path / ".github" / "workflows"
+    directory.mkdir(parents=True)
+    (directory / "ci.yml").write_text(_workflow(job="quality", minutes=120), encoding="utf-8")
+    (tmp_path / ".github" / "ci-budget-calibration.json").write_text(
+        json.dumps({"schema": "ci-budget-calibration/1", "jobs": [entry]}), encoding="utf-8"
+    )
+    monkeypatch.setattr(check_ci_budgets, "ROOT", tmp_path)
+    failures: list[str] = []
+    check_ci_budgets._check(failures, [], require_calibrated=True)
+
+    assert any("release is blocked" in failure for failure in failures)
+
+
 def test_a_failed_run_does_not_calibrate_a_budget(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -456,7 +534,8 @@ def test_the_committed_workflows_declare_calibrated_budgets() -> None:
     check_ci_budgets._check(failures, notes)
 
     assert failures == []
-    assert len(notes) == 3
+    assert len(notes) == 6
+    assert sum("provisional budget" in note for note in notes) == 4
 
 
 def test_every_committed_job_that_runs_the_suite_declares_a_budget() -> None:
@@ -472,41 +551,17 @@ def test_every_committed_job_that_runs_the_suite_declares_a_budget() -> None:
 
     assert failures == []
     assert {(budget.workflow, budget.job) for budget in budgets} == {
-        (".github/workflows/ci.yml", "test"),
+        (".github/workflows/ci.yml", "quality"),
+        (".github/workflows/ci.yml", "compatibility"),
+        (".github/workflows/ci.yml", "evidence"),
+        (".github/workflows/ci.yml", "package"),
         (".github/workflows/release.yml", "verify"),
         (".github/workflows/release.yml", "publish"),
     }
 
 
 def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
-    """The file pins the exact hosted runs it calibrates from, and nothing else.
-
-    Re-pinned because `ci.yml:test` **changed shape**, not because the suite grew.
-    Its `Unit tests` step now runs four xdist workers with `--dist loadfile`
-    (D-244, B-143), so the six serial legs pinned at the v0.12.0 boundary measured
-    a job that no longer exists and were replaced rather than kept. The v0.12.0
-    sample was two post-merge `main` pushes; this one is `workflow_dispatch` runs
-    on the branch that makes the change, because the four-worker job does not
-    exist on `main` until it lands and no post-merge sample of it can exist yet.
-    That is a real weakening of the sample, the calibration file's `note` says so,
-    and it carries the instruction to re-record from `main` pushes next wave.
-
-    The release sample is deliberately untouched at v0.11.0, and that matters
-    beyond tidiness: `docs/mutants/2026-08-14-ci-budget-gate.json` anchors mutant
-    CB11 on the string `"seconds": 2325`, which belongs to release.yml:verify.
-    Replacing only the ci.yml:test observations keeps that anchor matching exactly
-    once, which is the harness's requirement -- an observation that happened to be
-    2325s would make it ambiguous, and the mutant would report a stale anchor
-    instead of a kill.
-
-    ci.yml:test is still the longest duration in the file, at 2745s against
-    release.yml:verify's 2325s. Serially it was 3302s, which was 91.7% of the
-    3600s half of the 120-minute ceiling; the parallel job needs 91.50 minutes and
-    leaves 28.50 minutes of margin against that same unchanged ceiling.
-
-    This assertion is why the calibration file cannot drift silently: re-recording
-    it is a reviewed edit that must move these numbers too.
-    """
+    """Pending CI budgets are explicit; the release observation remains historical evidence."""
 
     document = json.loads((ROOT / check_ci_budgets.CALIBRATION).read_text(encoding="utf-8"))
     by_job = {(entry["workflow"], entry["job"]): entry for entry in document["jobs"]}
@@ -514,21 +569,24 @@ def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
     verify = by_job[(".github/workflows/release.yml", "verify")]
     assert [observation["seconds"] for observation in verify["observations"]] == [2325]
     assert verify["observations"][0]["run_id"] == 33162621059
+    assert (
+        sum(
+            observation["seconds"] == 2325
+            for entry in document["jobs"]
+            for observation in entry.get("observations", [])
+        )
+        == 1
+    )
 
-    ci = by_job[(".github/workflows/ci.yml", "test")]
-    assert len(ci["observations"]) == 3
-    assert {observation["run_id"] for observation in ci["observations"]} == {33639322391}
-    assert max(observation["seconds"] for observation in ci["observations"]) == 2745
+    for job in ("quality", "compatibility", "evidence", "package"):
+        ci = by_job[(".github/workflows/ci.yml", job)]
+        assert ci["status"] == "pending"
+        assert ci["release_blocking"] is True
+        assert isinstance(ci["reason"], str)
+        assert "observations" not in ci
 
-    # The retired serial figure is not an observation any more, and no observation
-    # may collide with the release sample the CB11 mutant anchors on.
-    assert 3302 not in {observation["seconds"] for observation in ci["observations"]}
-    assert 2325 not in {observation["seconds"] for observation in ci["observations"]}
-
-    # Every committed observation is a completed successful run, which is the only
-    # kind the checker will calibrate from.
     assert {
         observation["conclusion"]
         for entry in document["jobs"]
-        for observation in entry["observations"]
+        for observation in entry.get("observations", [])
     } == {check_ci_budgets.REQUIRED_CONCLUSION}

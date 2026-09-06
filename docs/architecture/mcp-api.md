@@ -11,8 +11,16 @@
 
 ## Implemented tools
 
+The [native optimization guide](../integrations/native-optimization.md) specifies the new launch,
+retention, host-confirmation and disclosure contracts and their current limitations.
+
 | Tool | Side effect | Description |
 |---|---|---|
+| `start_optimization` | Private local job metadata and bounded worker activity | Capture explicit native routing/placement inputs and queue an immutable review package; stdio execution only. |
+| `get_optimization_job` | Retention maintenance only | Read owner-bound state and all-domain judge reports; unknown physics never becomes pass. |
+| `cancel_optimization_job` | Local job CAS and worker fencing | Cancel using the exact record revision; stale workers cannot publish. |
+| `export_optimization_package` | Optional private expiring artifact | Export package metadata. Complete candidate-board disclosure additionally requires a trusted host confirmation. |
+| `approve_optimization_job` | Human-confirmed local metadata CAS | Confirm package/judge identities through the configured host. No board writes or apply tokens. |
 | `server_info` | None | Version, maturity, and honest capability inventory. |
 | `inspect_board` | None | Bounded read-only inspection inside the configured workspace. |
 | `run_board_drc` | Temporary report only | Fixed-argument KiCad DRC with a bounded, redacted summary. |

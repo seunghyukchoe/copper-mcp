@@ -8,18 +8,69 @@ All notable changes are documented here. The format follows
 
 ### Added
 
-- Internal draft `optimization/v1` foundation for the planned supervised autonomous routing
-  slice: closed command shapes, composed-candidate/judge metadata, pure CAS lifecycle, bounded
-  resource reservations and a default-off host-owned human-confirmation capability. No new
-  MCP tool, worker, backend execution, geometry export, live mutation or apply authority is
-  registered. A read-only release checklist rejects absent evidence but does not authorize a
-  release. See the [v0.13 staged plan](docs/plans/v0.13-supervised-optimization.md).
+- A private candidate-byte KiCad connectivity-parity runner checks the exact supplied board
+  revision against the bounded Circuit Intent projection, without reopening a workspace board.
+  Fixed default severities, oracle-liveness checks and deadlines remain mandatory. This is not
+  project-context ERC, physics judgement, or a new optimization approval/apply capability.
+- A private fifty-requirement balanced-readiness catalog and bounded receipt checker, plus
+  immutable `electrical-inputs/v1` declarations. Submitted points and declared input completeness
+  are not audited maturity, physics evidence or application authority. See the
+  [readiness guide](docs/integrations/balanced-readiness.md).
+- Bounded native `optimization/v1` jobs over the immutable foundation: owner-bound SQLite CAS,
+  fenced execution, cumulative reservations, placement search, private route composition and
+  repeated candidate-bound KiCad DRC/DRC-backed DFM. Optional captured Circuit Intent runs real
+  ERC independently; absent physics authorities remain inconclusive. Five MCP tools queue,
+  inspect, cancel, export and approve packages. Execution currently requires stdio; human
+  confirmation and full-board disclosure require an explicitly trusted host and are default-off.
+  Candidate resources expire after five minutes and grant no apply authority. General external
+  routing, zoned compositions, normal-workspace schematic ERC and held-out quality remain release
+  gates. See the [v0.13 staged plan](docs/plans/v0.13-supervised-optimization.md).
+- Disposable serialization for the existing two-through-eight-signal-layer candidate core,
+  retaining full-stack through-via spans and the existing replay/topology/round-trip gates.
+- Opt-in composed route-bundle KiCad DRC from the PR #265 integration, with a bundle-bound
+  in-toto statement and complete candidate-set bindings; this adds no bundle apply operation.
+- Isolated local container execution and fixed FreeRouting/SimpleRouteJson image recipes.
+  Missing runtime/images refuse before input disclosure. The authorized Colima/Docker setup
+  completed and both real routers passed public synthetic execution/format smokes with immutable
+  local images. Production format bridges and KiCad disposal of those outputs remain outstanding.
+  Native delivery rejects malformed/missing/mismatched bytes and un-inventoried executable modules;
+  human review/disclosure require verified parent delivery, rechecked after consent.
 
 ### Changed
 
-- `server_info` now lists existing placement DRC, post-placement observation and bounded
-  negotiated routing with their actual scopes, while keeping the supervised optimization
-  workflow and general whole-board hybrid routing planned rather than implemented.
+- Development, CI and commit hooks now use the same pinned Ruff 0.16.6. An explicit version
+  requirement and regression test prevent a locally passing check from using different rules
+  at commit time. The hook revision is pinned to its upstream commit.
+- Optimization approval requires freshly observed board and snapshot revisions rather than
+  substituting expected values. Parent delivery rechecks the job deadline through decoding and
+  callbacks; heartbeat renewal stays within remaining runtime, and cancellation promptly releases
+  completed private retention. Existing review-only completion and separate apply semantics remain.
+- Mutation tests isolate nested pytest worker/selection defaults while preserving declared spec
+  arguments. Import/collection failures cannot become apparent mutation kills through inherited
+  parallel-test settings; CLI test environments and killing-test collection are isolated as well.
+- Offline benchmark imports use a separate private server instance and restore caller configuration,
+  including real-router smoke settings, on initialization failure as well as success. The shared
+  application server retains its own configuration regardless of import order. Historical artifacts stay
+  byte-for-byte unchanged while independent current-harness tests reproduce their outcomes.
+- All four declared evidence markers are registered; changes to safety evaluation harnesses or
+  the CI classifier require evidence replay on every supported interpreter.
+- Fresh benchmark replay compiles inventoried source bytes directly, rejecting stale bytecode,
+  changed source and uninventoried executable modules before they can inherit a reproduction claim.
+- Placement search now propagates inner legalizer exhaustion instead of skipping it as an
+  evaluated pose; optimization and benchmark certification refuse incomplete searches. The
+  benchmark-only outer guard is configuration-bound; production deadlines are unchanged.
+- MCP metadata registration defers loading the optimization database/execution stack until a
+  local stdio operation actually needs it. Tool schemas and consent semantics are unchanged.
+- CI separates canonical quality/build, Python 3.11–3.13 compatibility, source-bound evidence
+  replay, and package reuse. Fast/full/compatibility/evidence Make targets are additive; serial
+  `make test` remains. Historical B-141 loading is separate from fresh implementation replay,
+  and the current-source receipt verifies its source inventory before and after recomputation.
+  New job timeouts remain provisionally 120 minutes and block release until hosted calibration.
+- `server_info` distinguishes bounded native optimization from the remaining general hybrid
+  routing and engineering-judgement release gates.
+- Leaf policy imports defer unrelated routing/persistence backends while retaining the public
+  routing facade and its type information. Worker deadlines are unchanged; this reduces cold-start
+  work but does not establish the overall PR/local speed targets.
 
 - The live KiCad IPC surfaces now bind to a **declared major-version compatibility window**
   instead of consuming `kicad-python`'s `check_version()` boolean, and an acceptance is

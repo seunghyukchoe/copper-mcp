@@ -18,8 +18,8 @@
     {
       "id": "CB2-the-ci-job-loses-the-budget-it-never-had-before",
       "file": ".github/workflows/ci.yml",
-      "anchor": "    timeout-minutes: 120\n",
-      "replacement": "",
+      "anchor": "  quality:\n    name: Quality (Python 3.12)\n    runs-on: ubuntu-latest\n    # Provisional for this reshaped job, not a measured calibration. The pending calibration entry\n    # must be replaced with successful hosted samples before release.\n    timeout-minutes: 120\n",
+      "replacement": "  quality:\n    name: Quality (Python 3.12)\n    runs-on: ubuntu-latest\n    # Provisional for this reshaped job, not a measured calibration. The pending calibration entry\n    # must be replaced with successful hosted samples before release.\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_check_ci_budgets.py::test_every_committed_job_that_runs_the_suite_declares_a_budget",
@@ -111,8 +111,8 @@
     {
       "id": "CB11-the-recorded-hosted-gate-duration-is-edited-down",
       "file": ".github/ci-budget-calibration.json",
-      "anchor": "          \"seconds\": 2325\n",
-      "replacement": "          \"seconds\": 600\n",
+      "anchor": "\"seconds\": 2325",
+      "replacement": "\"seconds\": 600",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_check_ci_budgets.py::test_the_calibration_file_records_the_hosted_runs_it_claims_to"

@@ -1,9 +1,10 @@
-"""Closed, immutable draft optimization/v1 messages, not registered MCP tools.
+"""Closed, immutable internal optimization/v1 messages.
 
-The five command shapes reserve a transport contract. Parsing a message establishes shape,
-not authorization, board fidelity, evidence authenticity, or permission to execute a backend.
+These foundation command shapes are not registered verbatim as MCP tools; the transport wrappers
+use server-derived launches and trusted-host elicitation instead of caller-provided capabilities.
+Parsing establishes shape, not authorization, evidence authenticity or permission to execute.
 Raw requests (including footprint references and confirmation capabilities) are ephemeral;
-only the explicitly redacted lifecycle record is intended for a future durable repository.
+only explicitly redacted lifecycle/package metadata belongs in the durable repository.
 """
 
 from __future__ import annotations

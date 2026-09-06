@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import io
 import json
+import os
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
@@ -894,6 +895,11 @@ class McpSurfaceTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def setUp(self) -> None:
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def _run(self, *arguments: str) -> tuple[int, str, str]:
         stdout, stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):

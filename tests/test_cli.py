@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -24,6 +25,11 @@ def _file_state(path: Path) -> tuple[bytes, int, int, int]:
 
 
 class CliTests(unittest.TestCase):
+    def setUp(self) -> None:
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def test_info_is_machine_readable(self) -> None:
         stdout = io.StringIO()
         with redirect_stdout(stdout):

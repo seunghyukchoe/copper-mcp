@@ -31,9 +31,10 @@ explicit one-value literal rather than as an absent or optimistic value. `not_ru
 
 ## Tool reference
 
-29 tools are registered over MCP on the `stdio` transport, 28 on `streamable-http`:
+34 tools are registered over MCP on the `stdio` transport, 33 on `streamable-http`:
 `render_circuit_schematic` is registered only when the transport is `stdio`. Every other tool is
-available on both transports, and `observe_board_scene` refuses only its `include_render` flag off
+listed on both transports; optimization execution currently refuses network transports lacking
+authenticated owner integration. `observe_board_scene` refuses its `include_render` flag off
 stdio. `tests/test_agents_doc.py` asserts in both directions that the table below names exactly the
 registered set; the count in this sentence is prose and is not one of the things it checks.
 
@@ -43,6 +44,11 @@ that are **off by default** — if a flag is not listed, the tool takes no opt-i
 
 | Tool | Observes / produces | Binds (in → out) | Flags |
 |---|---|---|---|
+| `start_optimization` | Queue a bounded native placement/routing/judge package using explicit target refs, source revisions and constraints. Source/intent data stays private. | source and snapshot → owner-bound job ID and request digest | stdio only; native backend currently implemented |
+| `get_optimization_job` | Read redacted lifecycle and judge reports, including failed/inconclusive domains. | job ID → record revision, package/judge digests | stdio only |
+| `cancel_optimization_job` | Fence execution and revoke unconsumed candidate-resource access. | job ID and expected record revision → cancelled record | stdio only |
+| `export_optimization_package` | Export exact package metadata; optional complete candidate-board resource only after trusted-host disclosure consent. | job ID, record revision, package digest → immutable package, optional five-minute resource | `include_geometry`; `COPPER_MCP_OPTIMIZATION_HOST_CONFIRMATION` |
+| `approve_optimization_job` | Ask the trusted host to confirm this exact package. Approval preserves unknown domains and never grants route/placement apply authority. | job ID, record revision, package/judge digests → approval receipt and completed package workflow | `COPPER_MCP_OPTIMIZATION_HOST_CONFIRMATION`, default off |
 | `server_info` | Server name, version, `maturity`, and the implemented/planned capability lists. Also published as the `pcb://server/manifest` resource. | none → none | none |
 | `inspect_board` | Bounded read-only inspection of one workspace `.kicad_pcb`: format, size, and object counts. | none → board revision | none |
 | `run_board_drc` | Authoritative fixed-argument `kicad-cli` DRC over a workspace board. Returns aggregate counts, violation-type counts, KiCad version, `passed`, `clean` — never findings, net names, UUIDs, or coordinates. | none → `base_revision`, `drc_context_revision` | none |
@@ -50,7 +56,7 @@ that are **off by default** — if a flag is not listed, the tool takes no opt-i
 | `observe_board_scene` | Circuit Scene `0.4.0` for a **mandatory** region: `static` (outline, footprints, pads, keepouts, rules) and `mutable` (segments, arcs, vias, zones) objects, each with a `ref_id`, `ref_stability`, `locked`, and exact integer geometry, plus an explicit `truncation` record. Every array is **complete** for the region; a kind that did not fit is a `withheld_by_ceiling` object in its place, never an empty array. | none → `board_revision`, `snapshot_digest` | `include_annotations`, `include_render` (stdio only; spawns KiCad) |
 | `preview_route` | One deterministic single-layer route candidate on the documented Board IR subset: `candidate_id`, endpoint pads, `patch.paths`, exact cost decomposition, search metrics, and the ceilings that produced it. Or `already_connected`, or a typed diagnostic. | `expect_board_revision`, `expect_snapshot_digest` → `candidate_id`, `base_revision`, `snapshot_digest`, optional `apply_token` | `include_drc`, `include_fill_authority`, `include_apply_token` |
 | `verify_external_route_candidate` | Disposes one closed v1/v2 foreign route through bounded Board IR validation and mandatory authoritative KiCad DRC. Accepted output is aggregate and candidate-bound; refused output is typed and fixed. It never returns geometry, board bytes or names, paths, tokens, capabilities, or mutation claims. MCP only; no CLI, persistence, repair, apply, or live-IPC peer. | `net_ref_id`, `expect_board_revision`, `expect_snapshot_digest` → recomputed `candidate_id`, aggregate DRC evidence | bounded coordinator `seed`/`settings`; no DRC or standalone budget switch |
-| `preview_route_bundle` | One atomic plan over two to eight known net references, or nothing. Publishes only when negotiated routing, a complete composition replay, and the cross-net clearance gate all succeed. No partial plans, no DRC, no token. | `expect_board_revision`, `expect_snapshot_digest` → `bundle_id`, `base_revision`, `snapshot_digest` | none |
+| `preview_route_bundle` | One atomic plan over two to eight known net references, or nothing. Publishes only when negotiated routing, complete composition replay and the cross-net clearance gate succeed. Optional composed KiCad DRC is bundle-bound; no partial plans or apply token. | `expect_board_revision`, `expect_snapshot_digest` → `bundle_id`, `base_revision`, `snapshot_digest` | `include_drc` |
 | `preview_layered_route` | One two-signal-layer candidate with per-layer integer paths and full-stack through-vias. The net is inferred from `start_pad_id` and `end_pad_id`; there is no net-name selector. | `expect_board_revision`, `expect_snapshot_digest` → `candidate_id`, `base_revision`, `snapshot_digest` | `include_drc` |
 | `preview_placement` | A placement candidate reporting four direction-typed legality checks — pad overlap, outline containment, keepout respect, and per-courtyard-layer courtyard overlap — plus per-rule evidence. A check is `inconclusive` rather than guessed when its bounds/core bracket cannot prove either endpoint. Positions are derived by the server and snapped to `placement_grid_nm`; the rule language cannot state an absolute coordinate. | `expect_board_revision`, `expect_snapshot_digest` (both optional) → `candidate_id`, `base_revision`, `view_revision`, `snapshot_digest`, optional `apply_token` | `include_drc`, `include_apply_token` |
 | `observe_post_placement` | One scene **and** one aggregate KiCad DRC summary built from a single capture of the same board and context, for an exactly expected revision. Rejects the whole result if the context moves mid-capture. Issues and consumes no token. | `expect_board_revision` → `board_revision`, `snapshot_digest` | `include_annotations` |

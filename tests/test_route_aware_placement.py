@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -50,6 +51,47 @@ def test_original_audio_fixture_route_aware_selection_meets_predeclared_criterio
     assert search["probes_per_candidate"] == 1
     assert metrics["criterion"]["minimum_improvement_percent"] == 10
     assert metrics["criterion"]["passed"] is True
+
+
+@pytest.mark.parametrize(
+    ("status", "evaluations"),
+    (("deadline_exhausted", 127), ("work_exhausted", 127), ("legalizer_exhausted", 128)),
+)
+def test_incomplete_search_never_becomes_successful_replay_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+    evaluations: int,
+) -> None:
+    before = (benchmark.FIXTURE.read_bytes(), benchmark.FIXTURE.stat().st_mtime_ns)
+    interrupted = SimpleNamespace(status=status, evaluations=evaluations, ranked=(object(),))
+    monkeypatch.setattr(benchmark, "solve_placement", lambda *_args, **_kwargs: interrupted)
+
+    with pytest.raises(
+        benchmark.RouteAwarePlacementBenchmarkError,
+        match="did not reach its deterministic work ceiling",
+    ):
+        benchmark.run_benchmark(3)
+
+    assert (benchmark.FIXTURE.read_bytes(), benchmark.FIXTURE.stat().st_mtime_ns) == before
+
+
+def test_nested_deadline_on_last_evaluation_cannot_certify_replay(monkeypatch):
+    from copper_mcp.placement import solver as solver_module
+
+    actual = solver_module.evaluate_placement
+    calls = 0
+
+    def exhaust_last_evaluation(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == benchmark.SEARCH_SETTINGS["max_evaluations"]:
+            kwargs["deadline_seconds"] = 0.0
+        return actual(*args, **kwargs)
+
+    monkeypatch.setattr(solver_module, "evaluate_placement", exhaust_last_evaluation)
+    with pytest.raises(benchmark.RouteAwarePlacementBenchmarkError, match="legalizer_exhausted"):
+        benchmark.run_benchmark(3)
+    assert calls == benchmark.SEARCH_SETTINGS["max_evaluations"]
 
 
 def test_the_two_ranked_policies_run_different_searches_not_one_shared_candidate_set() -> None:
@@ -111,6 +153,8 @@ def test_the_report_binds_its_probe_configuration_into_its_run_id(
     configuration = benchmark._configuration()
 
     assert configuration["estimator_id"] == route_scoring.ROUTE_AWARE_ESTIMATOR_ID
+    assert configuration["search_settings"]["max_evaluations"] == 128
+    assert configuration["search_settings"]["deadline_seconds"] == 60.0
     assert configuration["ranking_max_probes"] == 1
     assert (
         configuration["ranking_probe_settings_digest"]

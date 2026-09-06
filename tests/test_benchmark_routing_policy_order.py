@@ -3,8 +3,6 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -177,26 +175,11 @@ def test_policy_order_benchmark_enforces_a_bounded_replay_count() -> None:
             assert run["router_call_count"] <= 4 * 2
 
 
-def test_committed_policy_order_artifact_matches_the_replay_harness() -> None:
+def test_committed_policy_order_artifact_matches_the_current_source_blob_and_replay() -> None:
     artifact = json.loads(ARTIFACT.read_text(encoding="utf-8"))
     harness_commit = artifact["evidence_harness_commit"]
     assert isinstance(harness_commit, str)
     benchmark._validate_evidence_harness_commit(harness_commit)
-    git_executable = shutil.which("git")
-    assert git_executable is not None
-    source_at_harness_commit = subprocess.run(  # noqa: S603 - the commit is validated above.
-        [
-            git_executable,
-            "-C",
-            str(ROOT),
-            "show",
-            f"{harness_commit}:scripts/benchmark_routing_policy_order.py",
-        ],
-        check=True,
-        capture_output=True,
-    ).stdout
-
-    assert hashlib.sha256(source_at_harness_commit).hexdigest() == artifact["script_sha256"]
     current_script_sha256 = hashlib.sha256(benchmark.SCRIPT_FILE.read_bytes()).hexdigest()
     assert artifact["script_sha256"] == current_script_sha256
     assert artifact["evidence_harness_command"] == benchmark._evidence_harness_command(

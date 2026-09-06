@@ -10,7 +10,7 @@
 Create a virtual environment and install all checks:
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev,security]"
@@ -22,6 +22,10 @@ pre-commit install --install-hooks
 | Command | Purpose |
 |---|---|
 | `make test` | Pytest unit and contract suite. |
+| `make test-fast` | Four file-distributed workers, no coverage, excluding slow evidence and real external/provider effects. |
+| `make test-full` | Complete serial local suite with coverage, including the one source-bound replay. |
+| `make test-compat PYTHON=...` | Non-evidence compatibility tests on a chosen interpreter; no coverage by default. |
+| `make test-evidence` | The single isolated, source-inventory-bound B-141 recomputation test. |
 | `make lint` | Ruff plus version and ledger structure. |
 | `make typecheck` | Strict static typing. |
 | `make security` | Secret and dependency audit. |
@@ -65,27 +69,29 @@ adversarial review lost 27 false failures to exactly this before spotting it. Al
 a brand-new test fails with a `ModuleNotFoundError`, `AttributeError`, or an assertion about a
 field that plainly exists in your diff, check this first.
 
-### CI runs the suite on four workers; `make test` does not
+### Canonical quality, compatibility, evidence, and package reuse
 
-The hosted `Unit tests` step runs `python -m pytest -n 4 --dist loadfile`. Four because a standard
-GitHub-hosted `ubuntu-latest` runner has four vCPUs, and `loadfile` because the two most expensive
-modules in this suite hang their whole cost on **module-scoped** fixtures that rebuild a benchmark
-report from scratch: anything finer than a file would rebuild them once per worker and make the
-suite slower, not faster.
+Quality/static/type/security checks and the single wheel/sdist/PCM build run on Python 3.12.
+Compatibility runs 3.11/3.12/3.13 with four xdist workers and `--dist loadfile`; only 3.12 collects
+coverage. Expensive evidence is excluded from every compatibility leg and executed once per
+selected interpreter in its own job. Package verification reuses the quality-built artifacts.
 
-`make test` is deliberately left serial. `-n 4` is a claim about the hosted runner, not about your
-laptop, and the number that is right for CI is not automatically right anywhere else — pass `-n`
-yourself if you want it. What this does mean is that **CI is now the first place a test's hidden
-ordering or shared-state dependency will show up**, because workers run four files at once in an
-order no serial run produces. If a test passes locally and fails only hosted, suspect that before
-suspecting the runner.
+`make test` stays serial and `test-fast` is the explicit local parallel path. Registered markers
+are `slow_evidence`, `real_kicad`, `external_router`, and `networked_provider`. Fast runs exclude
+the first and the last two; mocked adapter contracts remain ordinary tests on every version.
+Real-KiCad tests run when available and must report missing prerequisites explicitly.
 
-The ceiling is worth knowing before you try to raise it. Measured serially with `--durations=0`,
-98.8% of the run is attributable to tests, and the longest single *file* —
-`tests/test_benchmark_negotiated_multipin_branch_repair.py`, at 610.2 s of a 2,179 s local run —
-is 28.3% of the total on its own. No scheduler splits a file, so **3.53x is the best any worker
-count can do** and `-n 8` buys nothing over `-n 4`. Going faster than that means making that
-module's `fresh_report` fixture cheaper, not adding workers.
+The historical baseline was a 610.2-second B-141 module-scoped recomputation in a 2,179-second
+serial run. Contract tests now load its self-digesting historical artifact; one marked isolated
+command verifies that current source reproduces the metrics under an unchanged complete Python
+source/input inventory. Loading the historical companion alone proves no current execution.
+
+Nonsensitive PRs explicitly skip expensive replay. Sensitive/unknown changes fan it out to all
+supported versions; main, daily nightly and release retain the full evidence policy. New
+120-minute job budgets remain provisional until successful hosted observations replace them.
+The release workflow requires `check_ci_budgets.py --require-calibrated`; normal CI reports
+provisional budgets distinctly. The under-20-minute PR and 3x local speed targets need successful
+measurements and cannot be inferred from the workflow diff.
 
 Tests should not require network access or proprietary boards. GPU and KiCad integration tests must
 be separately marked and have deterministic CPU or fixture-based coverage where practical.

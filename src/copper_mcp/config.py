@@ -103,6 +103,9 @@ class Settings:
     #: disk. Reading an already-granted pair as mutation consent would retroactively widen what
     #: past operators agreed to. See ADR-0074.
     allow_live_apply: bool = False
+    # Operator attestation that the connected local MCP host presents elicitation to a human.
+    # Capability negotiation alone is insufficient: an agent client can auto-answer elicitation.
+    optimization_host_confirmation: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -287,6 +290,11 @@ class Settings:
             # editor, so it must never be switched on by an ambiguous spelling either.
             raise ConfigurationError('COPPER_MCP_ALLOW_LIVE_IPC must be exactly "0" or "1"')
         raw_allow_live_apply = os.environ.get("COPPER_MCP_ALLOW_LIVE_APPLY", "0")
+        raw_host_confirmation = os.environ.get("COPPER_MCP_OPTIMIZATION_HOST_CONFIRMATION", "0")
+        if raw_host_confirmation not in {"0", "1"}:
+            raise ConfigurationError(
+                'COPPER_MCP_OPTIMIZATION_HOST_CONFIRMATION must be exactly "0" or "1"'
+            )
         if raw_allow_live_apply not in {"0", "1"}:
             # Same exact-membership rule again, for the same reason: this flag is the only
             # consent that authorizes mutating a document the operator has open in front of
@@ -323,4 +331,5 @@ class Settings:
             allow_apply=raw_allow_apply == "1",
             allow_live_ipc=raw_allow_live_ipc == "1",
             allow_live_apply=raw_allow_live_apply == "1",
+            optimization_host_confirmation=raw_host_confirmation == "1",
         )

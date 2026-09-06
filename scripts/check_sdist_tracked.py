@@ -122,11 +122,15 @@ def _tracked_files(root: Path = ROOT) -> set[str]:
     return {name for name in result.stdout.split("\0") if name}
 
 
-def main(root: Path = ROOT) -> int:
-    with tempfile.TemporaryDirectory() as staging:
-        tarball = build_sdist(root, Path(staging))
-        name = tarball.name
-        members = sdist_members(tarball)
+def main(root: Path = ROOT, sdist: Path | None = None) -> int:
+    if sdist is None:
+        with tempfile.TemporaryDirectory() as staging:
+            tarball = build_sdist(root, Path(staging))
+            name = tarball.name
+            members = sdist_members(tarball)
+    else:
+        name = sdist.name
+        members = sdist_members(sdist)
     extras = untracked_members(members, _tracked_files(root))
     if extras:
         raise SystemExit(
@@ -139,4 +143,9 @@ def main(root: Path = ROOT) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sdist", type=Path)
+    args = parser.parse_args()
+    raise SystemExit(main(sdist=args.sdist))

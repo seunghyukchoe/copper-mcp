@@ -45,6 +45,7 @@ from copper_mcp.placement.route_scoring import (
 )
 from copper_mcp.placement.solver import (
     PlacementScoringPolicy,
+    PlacementSolveResult,
     PlacementSolverSettings,
     score_placement_candidate,
     solve_placement,
@@ -86,7 +87,10 @@ SEARCH_SETTINGS = {
     "beam_width": 4,
     "max_ranked": 8,
     "step_nm": 5_000_000,
-    "deadline_seconds": 30.0,
+    # This remains a real fail-closed deadline, but successful evidence is accepted only when the
+    # deterministic evaluation ceiling below wins.  Sixty seconds is the solver's supported
+    # maximum and leaves load headroom without turning a partial wall-clock result into evidence.
+    "deadline_seconds": 60.0,
     "legalizer_max_checks": 200_000,
     "legalizer_deadline_seconds": 3.0,
 }
@@ -95,6 +99,17 @@ MINIMUM_IMPROVEMENT_PERCENT = 10
 
 class RouteAwarePlacementBenchmarkError(RuntimeError):
     """Raised when fixture provenance, determinism, or the declared criterion drifts."""
+
+
+def _require_deterministic_search(result: PlacementSolveResult, *, label: str) -> None:
+    """Refuse partial wall-clock results before they can enter replay evidence."""
+
+    expected_evaluations = SEARCH_SETTINGS["max_evaluations"]
+    if result.status != "work_exhausted" or result.evaluations != expected_evaluations:
+        raise RouteAwarePlacementBenchmarkError(
+            f"{label} search did not reach its deterministic work ceiling "
+            f"(status={result.status}, evaluations={result.evaluations}/{expected_evaluations})"
+        )
 
 
 def _git_commit() -> str:
@@ -251,7 +266,9 @@ def run_benchmark(repetitions: int = 3) -> dict[str, Any]:
     first_metrics: dict[str, Any] | None = None
     for _ in range(repetitions):
         baseline = solve_placement(intent, snapshot, view, settings=baseline_settings)
+        _require_deterministic_search(baseline, label="baseline")
         aware = solve_placement(intent, snapshot, view, settings=aware_settings)
+        _require_deterministic_search(aware, label="route-aware")
         if not baseline.ranked or not aware.ranked:
             raise RouteAwarePlacementBenchmarkError("solver retained no legal candidate")
         baseline_choice = baseline.ranked[0]

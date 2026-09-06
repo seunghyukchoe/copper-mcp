@@ -1,7 +1,8 @@
 """Regression cover for the excessive-agency evaluation suite.
 
-Two things are pinned here. The first is the *result*: the committed artifact must replay from the
-harness it names, and the suite must still reach zero failures. The second is the *discriminator*:
+Two things are pinned here. The first is the *result*: the historical artifact stays immutable,
+the current harness reproduces its outcomes, and the suite still reaches zero failures. The
+second is the *discriminator*:
 a suite that cannot fail is not evidence, so several tests deliberately break a boundary and
 require the harness to record a failure rather than a pass.
 """
@@ -298,15 +299,37 @@ def test_cli_ignores_inherited_copper_configuration(tmp_path: Path) -> None:
     assert written == evaluation.build_report(evidence_harness_commit=TEST_HARNESS_COMMIT)
 
 
-def test_committed_artifact_replays_from_its_recorded_harness() -> None:
-    artifact = json.loads(ARTIFACT.read_text(encoding="utf-8"))
-    assert (
-        artifact["script_sha256"] == hashlib.sha256(evaluation.SCRIPT_FILE.read_bytes()).hexdigest()
+def test_historical_artifact_is_unchanged_and_current_harness_reproduces_outcomes() -> None:
+    historical_bytes = ARTIFACT.read_bytes()
+    # Preserve the original record, including its provenance; do not re-sign it after a fix.
+    assert hashlib.sha256(historical_bytes).hexdigest() == (
+        "0694bd533b3c281a95e5ca71a1ad994e0a891e335203a87edb51f225917d2923"
     )
+    artifact = json.loads(historical_bytes)
     assert artifact["catalog_sha256"] == hashlib.sha256(CATALOG.read_bytes()).hexdigest()
-    assert artifact == evaluation.build_report(
-        evidence_harness_commit=artifact["evidence_harness_commit"]
+    current = evaluation.build_report(evidence_harness_commit=TEST_HARNESS_COMMIT)
+    assert (
+        current["script_sha256"] == hashlib.sha256(evaluation.SCRIPT_FILE.read_bytes()).hexdigest()
     )
+    assert current["evidence_harness_command"] == artifact["evidence_harness_command"].replace(
+        artifact["evidence_harness_commit"], TEST_HARNESS_COMMIT
+    )
+    assert current["harness_helper"] == {
+        "path": "scripts/offline_mcp_harness.py",
+        "sha256": hashlib.sha256(
+            (ROOT / "scripts/offline_mcp_harness.py").read_bytes()
+        ).hexdigest(),
+    }
+    provenance = {
+        "evidence_harness_commit",
+        "evidence_harness_command",
+        "script_sha256",
+        "run_id",
+        "harness_helper",
+    }
+    assert {key: value for key, value in artifact.items() if key not in provenance} == {
+        key: value for key, value in current.items() if key not in provenance
+    }
 
 
 # ------------------------------------------------------------------------------------------

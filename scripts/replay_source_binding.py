@@ -10,12 +10,17 @@ the historical report. Only aggregate digests and counts leave the process.
 from __future__ import annotations
 
 import hashlib
+import importlib.abc
+import importlib.machinery
 import json
+import os
 import platform
 import stat
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import CodeType, ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
 _ROOTS = ("src/copper_mcp", "scripts", "benchmarks/corpora/tscircuit-benchmark")
@@ -45,15 +50,73 @@ class SourceBinding:
         return _digest(self.entries)
 
 
+class _BoundSourceLoader(importlib.machinery.SourceFileLoader):
+    """Compile the inventoried bytes directly; timestamp-valid bytecode is not evidence."""
+
+    def __init__(self, name: str, path: str, expected_digest: str) -> None:
+        super().__init__(name, path)
+        self.expected_digest = expected_digest
+
+    def get_code(self, fullname: str) -> CodeType:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        descriptor = os.open(self.path, flags)
+        with os.fdopen(descriptor, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ReplayBindingError("replay module is not a regular source file")
+            source = stream.read(8 * 1024 * 1024 + 1)
+        if (
+            len(source) > 8 * 1024 * 1024
+            or hashlib.sha256(source).hexdigest() != self.expected_digest
+        ):
+            raise ReplayBindingError("replay module changed after its source inventory")
+        return self.source_to_code(source, self.path)
+
+
+class _InventoriedImports(importlib.abc.MetaPathFinder):
+    """Bootstrap without importing project helpers before their bytes have been verified."""
+
+    def __init__(self, binding: SourceBinding, root: Path) -> None:
+        self.origins = {
+            str(root / name): digest for name, digest in binding.entries if name.endswith(".py")
+        }
+        self.namespace_directories = {str(Path(name).parent) for name in self.origins}
+
+    def find_spec(
+        self, fullname: str, path: Sequence[str] | None = None, target: ModuleType | None = None
+    ) -> importlib.machinery.ModuleSpec | None:
+        if fullname.split(".", 1)[0] not in {"copper_mcp", "scripts"}:
+            return None
+        spec = importlib.machinery.PathFinder.find_spec(fullname, path)
+        if spec is not None and spec.loader is None and spec.submodule_search_locations:
+            if all(
+                str(location) in self.namespace_directories
+                for location in spec.submodule_search_locations
+            ):
+                return spec
+        if (
+            spec is None
+            or not isinstance(spec.loader, importlib.machinery.SourceFileLoader)
+            or spec.origin not in self.origins
+        ):
+            raise ReplayBindingError("replay module is not inventoried Python source")
+        assert spec.origin is not None
+        spec.loader = _BoundSourceLoader(fullname, spec.origin, self.origins[spec.origin])
+        return spec
+
+
 def capture_source_binding(root: Path = ROOT) -> SourceBinding:
     """Hash a conservative executable-source superset and all declared replay inputs."""
 
     paths: set[Path] = {root / name for name in _ARTIFACTS}
+    nodes = 0
     for name in _ROOTS:
         directory = root / name
         if directory.is_symlink() or not directory.is_dir():
             raise ReplayBindingError("replay source inventory is unavailable")
         for path in directory.rglob("*"):
+            nodes += 1
+            if nodes > 16_384:
+                raise ReplayBindingError("replay source inventory exceeds its node budget")
             if "__pycache__" in path.parts:
                 continue
             if path.is_symlink():
@@ -90,8 +153,12 @@ def main() -> int:
     # Invoke with `python -I`: production modules are imported only after the before-inventory.
     if not sys.flags.isolated:
         raise ReplayBindingError("replay requires an isolated interpreter (-I)")
+    if any(name.split(".", 1)[0] in {"copper_mcp", "scripts"} for name in sys.modules):
+        raise ReplayBindingError("replay requires fresh project imports")
     before = capture_source_binding()
     sys.path[:0] = [str(ROOT / "src"), str(ROOT)]
+    sys.meta_path.insert(0, _InventoriedImports(before, ROOT))
+    sys.dont_write_bytecode = True
     from scripts import benchmark_negotiated_multipin_branch_repair as benchmark
 
     published = benchmark.load_artifact()

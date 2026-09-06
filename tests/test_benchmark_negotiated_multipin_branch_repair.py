@@ -591,13 +591,6 @@ def prepared_population() -> tuple[tuple[benchmark.PreparedBoard, ...], dict[str
     return benchmark.prepare_population()
 
 
-@pytest.fixture(scope="module")
-def fresh_report() -> dict[str, Any]:
-    """Run two repetitions; timing is intentionally not part of parity assertions."""
-
-    return benchmark.build_report(repetitions=2)
-
-
 def _admitted_board(
     prepared_population: tuple[tuple[benchmark.PreparedBoard, ...], dict[str, Any]],
 ) -> benchmark.PreparedBoard:
@@ -778,9 +771,22 @@ def test_population_is_exactly_twenty_boards_with_a_16_4_admission_partition(
     assert sum(board.reference_nets_routed for board in prepared) == 70
 
 
-def test_published_artifact_uses_the_exact_b141_basename_and_self_digest(
-    fresh_report: dict[str, Any],
-) -> None:
+@pytest.mark.slow_evidence
+def test_published_artifact_matches_one_current_source_bound_b141_recomputation() -> None:
+    """The isolated wrapper binds the current source inventory before and after recomputing."""
+
+    completed = subprocess.run(  # noqa: S603 - fixed interpreter and repository script.
+        [
+            sys.executable,
+            "-I",
+            str(benchmark.ROOT / "scripts" / "replay_source_binding.py"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=3_600,
+    )
+    receipt = json.loads(completed.stdout)
     report = _artifact()
     body = {key: value for key, value in report.items() if key != "run_id"}
 
@@ -788,8 +794,15 @@ def test_published_artifact_uses_the_exact_b141_basename_and_self_digest(
     assert report["schema"] == benchmark.REPORT_SCHEMA
     assert isinstance(report["run_id"], str) and SHA256.fullmatch(report["run_id"])
     assert report["run_id"] == _canonical_digest(body)
-    assert report["metrics"] == fresh_report["metrics"]
-    assert report["configuration"] == fresh_report["configuration"]
+    assert receipt["schema"] == "copper-mcp/current-evidence-replay/v1"
+    assert receipt["status"] == "reproduced"
+    assert receipt["repetitions"] == 2
+    assert SHA256.fullmatch(receipt["source_inventory_digest"])
+    assert receipt["source_inventory_files"] > 0
+    assert receipt["metrics_digest"] == _canonical_digest(report["metrics"])
+    assert receipt["configuration_digest"] == _canonical_digest(report["configuration"])
+    body = {key: value for key, value in receipt.items() if key != "receipt_digest"}
+    assert receipt["receipt_digest"] == _canonical_digest(body)
     assert benchmark.load_artifact(EXPECTED_ARTIFACT) == report
 
 
@@ -810,12 +823,9 @@ def test_committed_artifact_records_the_exact_zero_control_and_one_repaired_trea
     assert report["metrics"]["differential"]["negotiated_nets_completed_delta"] == 2
 
 
-def test_artifact_binds_the_reference_runner_b140_and_current_runner_bytes(
-    fresh_report: dict[str, Any],
-) -> None:
+def test_artifact_binds_the_reference_runner_b140_and_current_runner_bytes() -> None:
     report = _artifact()
     configuration = report["configuration"]
-    fresh_configuration = fresh_report["configuration"]
     without_digest = {
         key: value for key, value in configuration.items() if key != "configuration_sha256"
     }
@@ -831,7 +841,7 @@ def test_artifact_binds_the_reference_runner_b140_and_current_runner_bytes(
     assert configuration["reference_source_commit"] == benchmark.B088_SOURCE_COMMIT
     assert configuration["b140_artifact_run_id"] == benchmark.B140_RUN_ID
     assert configuration["reference_artifact_run_id"] == benchmark.REFERENCE_RUN_ID
-    assert configuration == fresh_configuration
+    assert configuration == benchmark._configuration()
     assert report["population_binding"] == {
         "benchmark": "B-140",
         "artifact": benchmark.B140_ARTIFACT.relative_to(benchmark.ROOT).as_posix(),
@@ -1195,10 +1205,8 @@ def test_a_generic_self_digest_cannot_make_a_synthetic_configuration_authoritati
         benchmark._validate_authoritative_bindings(tampered)
 
 
-def test_fresh_report_reconciles_both_arms_and_keeps_refusal_taxonomies_closed(
-    fresh_report: dict[str, Any],
-) -> None:
-    metrics = fresh_report["metrics"]
+def test_published_report_reconciles_both_arms_and_keeps_refusal_taxonomies_closed() -> None:
+    metrics = _artifact()["metrics"]
     assert metrics["population"] == EXPECTED_POPULATION
     assert metrics["deterministic_replays"] is True
     assert metrics["control"]["repair_enabled"] is False
@@ -1754,13 +1762,12 @@ def test_validate_and_load_reject_a_self_consistent_semantic_tamper(
         benchmark.load_artifact(destination)
 
 
-def test_public_report_contains_no_board_net_candidate_or_geometry_payload(
-    fresh_report: dict[str, Any],
-) -> None:
+def test_public_report_contains_no_board_net_candidate_or_geometry_payload() -> None:
     forbidden = benchmark.FORBIDDEN_PUBLIC_KEYS
-    assert _nested_keys(fresh_report).isdisjoint(forbidden)
+    synthetic = _synthetic_public_report()
+    assert _nested_keys(synthetic).isdisjoint(forbidden)
     assert _nested_keys(_artifact()).isdisjoint(forbidden)
-    serialized = json.dumps(fresh_report, sort_keys=True)
+    serialized = json.dumps(synthetic, sort_keys=True)
     assert all(secret not in serialized for secret in ("ts01_led", "ts18_dual_reg", "net:n0"))
 
 
@@ -2037,10 +2044,8 @@ def test_completed_with_repair_requires_a_final_completed_result(
     assert aggregate["repair_outcome_breakdown"]["repair_published"] == 0
 
 
-def test_validate_report_rejects_a_rewritten_configuration_digest(
-    fresh_report: dict[str, Any],
-) -> None:
-    tampered = json.loads(json.dumps(fresh_report))
+def test_validate_report_rejects_a_rewritten_configuration_digest() -> None:
+    tampered = _synthetic_public_report()
     tampered["configuration"]["control"]["repair_settings"] = {"unexpected": True}
     body = {key: value for key, value in tampered.items() if key != "run_id"}
     tampered["run_id"] = _canonical_digest(body)

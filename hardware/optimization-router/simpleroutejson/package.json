@@ -1,0 +1,10 @@
+{
+  "name": "copper-mcp-simpleroutejson-wrapper",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@tscircuit/capacity-autorouter": "0.0.872"
+  }
+}

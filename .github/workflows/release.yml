@@ -49,7 +49,7 @@ jobs:
       - name: Verify requested version
         run: python scripts/check_version.py --tag "${RELEASE_VERSION}"
       - name: Run release gate
-        run: make check
+        run: python scripts/check_ci_budgets.py --require-calibrated && make check
       # The KiCad Plugin and Content Manager archive is built into the same dist/ directory as the
       # wheel and the sdist, so `actions/attest` covers it under the existing `dist/*` subject path
       # and `gh release create` uploads it. There is deliberately no separate attestation step to

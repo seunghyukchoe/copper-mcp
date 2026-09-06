@@ -1,0 +1,16 @@
+{
+  "layerCount": 2,
+  "minTraceWidth": 0.1,
+  "bounds": {"minX": -10, "maxX": 10, "minY": -10, "maxY": 10},
+  "obstacles": [
+    {"type": "rect", "center": {"x": -4, "y": 0}, "width": 1, "height": 1, "layers": ["top"], "connectedTo": ["a"]},
+    {"type": "rect", "center": {"x": 4, "y": 0}, "width": 1, "height": 1, "layers": ["top"], "connectedTo": ["b"]}
+  ],
+  "connections": [{
+    "name": "signal",
+    "pointsToConnect": [
+      {"x": -4, "y": 0, "layer": "top", "pointId": "a"},
+      {"x": 4, "y": 0, "layer": "top", "pointId": "b"}
+    ]
+  }]
+}
