@@ -159,3 +159,10 @@ freshness observation is not an atomic snapshot or an enduring permission to mut
 There is no new MCP tool or optimization/v1 interpretation. General library/model coverage, v2
 orchestration and the original held-out/physics/human gates remain open. See
 [ADR-0142](../adr/0142-project-connectivity-erc-binds-execution-and-source-freshness.md).
+
+The private execution context owns setup, native source probes and successful-exit verification.
+It checks retained and per-file byte limits before discovery, and combined retained/probe byte
+and file counts before staging each disposable syntax copy. Original snapshot verification occurs
+after all syntax probes and again at closure; private configuration is still checked after each
+probe. This internal extraction preserves ERC report identities and does not add project parity
+or a new authority surface.

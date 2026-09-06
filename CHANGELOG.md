@@ -60,6 +60,9 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Project connectivity ERC now uses one private native execution context for setup, original-source
+  loading and final verification. It checks retained, per-file and peak syntax-copy budgets before
+  staging, while preserving existing report identities, backend requirements and authority limits.
 - Census admission and provenance refusal tests use the existing small KiCad crossing fixture,
   with real solo/coordinator execution and a positive parity control. Full current-corpus replay,
   coverage, interpreter support and production routing budgets remain unchanged.

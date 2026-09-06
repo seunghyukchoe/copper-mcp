@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from test_project_erc import build_project
 
+from copper_mcp.engineering import kicad_project_execution
 from copper_mcp.engineering.erc_profile import BACKEND_VERSION, OUTSIDE_CONNECTIVITY_SCOPE
 from copper_mcp.engineering.project_erc import _ERC_FLAGS, ProjectErcError, run_project_erc
 from copper_mcp.kicad_cli import KICAD_ERC_SCHEMA
@@ -17,9 +18,11 @@ from copper_mcp.kicad_cli import KICAD_ERC_SCHEMA
 @pytest.fixture(autouse=True)
 def synthetic_backend_authority(monkeypatch):
     """These are orchestration faults, never native/signature acceptance evidence."""
-    from copper_mcp.engineering import project_erc
-
-    monkeypatch.setattr(project_erc, "_authenticate_backend", lambda *_args: "sha256:" + "a" * 64)
+    monkeypatch.setattr(
+        kicad_project_execution,
+        "_authenticate_backend",
+        lambda *_args: "sha256:" + "a" * 64,
+    )
 
 
 def _fake_executable(tmp_path: Path) -> Path:
@@ -69,7 +72,7 @@ def _report(
     }
 
 
-def _install_invoke(monkeypatch, project_erc, uuid_paths, *, mode="pass"):
+def _install_invoke(monkeypatch, project_execution, uuid_paths, *, mode="pass"):
     calls = []
 
     def fake_invoke(command, *, settings, environment, deadline, stdout=subprocess.DEVNULL):
@@ -157,7 +160,7 @@ def _install_invoke(monkeypatch, project_erc, uuid_paths, *, mode="pass"):
             Path(command[4]).write_bytes(b"changed executable")
         return 5 if finding else 0
 
-    monkeypatch.setattr(project_erc, "_invoke", fake_invoke)
+    monkeypatch.setattr(project_execution, "_invoke", fake_invoke)
     return calls
 
 
@@ -171,7 +174,7 @@ def _run(tmp_path, monkeypatch, mode="pass", **settings_changes):
         **settings_changes,
     )
     uuid_paths = {item.uuid_path for item in capture.hierarchy.instance_paths}
-    calls = _install_invoke(monkeypatch, project_erc, uuid_paths, mode=mode)
+    calls = _install_invoke(monkeypatch, kicad_project_execution, uuid_paths, mode=mode)
     error = None
     try:
         result = run_project_erc(capture, libraries, settings)
@@ -195,6 +198,88 @@ def test_fake_baseline_is_pass_only_with_scope_and_no_apply(tmp_path, monkeypatc
     assert report.native_syntax_file_count == 2
 
 
+def test_shared_context_verifies_original_snapshot_after_all_syntax_probes(tmp_path, monkeypatch):
+    from copper_mcp.config import Settings
+    from copper_mcp.engineering.capture import CaptureLimits
+    from copper_mcp.engineering.project_erc_inputs import prepare_project_erc
+
+    capture, libraries, _ = build_project(tmp_path)
+    deadline = time.monotonic() + 30
+    prepared = prepare_project_erc(capture, libraries, limits=CaptureLimits(), deadline=deadline)
+    settings = Settings(workspace=tmp_path, kicad_cli=_fake_executable(tmp_path))
+    calls = _install_invoke(
+        monkeypatch,
+        kicad_project_execution,
+        {item.uuid_path for item in capture.hierarchy.instance_paths},
+    )
+    verify = kicad_project_execution._verify_files
+    observed = []
+
+    def record(snapshot, files, settings, deadline):
+        observed.append((snapshot.name, len(calls)))
+        return verify(snapshot, files, settings, deadline)
+
+    monkeypatch.setattr(kicad_project_execution, "_verify_files", record)
+    with kicad_project_execution.open_project_execution_context(prepared, settings, deadline):
+        assert observed == [("input", 3)]  # Version + both native root probes, then one sweep.
+    assert observed == [("input", 3), ("input", 3)]  # Final closure still revalidates.
+
+
+def test_shared_context_caps_retained_snapshot_plus_child_probe(tmp_path, monkeypatch):
+    from copper_mcp import kicad_cli
+    from copper_mcp.config import Settings
+    from copper_mcp.engineering.capture import CaptureLimits
+    from copper_mcp.engineering.project_erc_inputs import prepare_project_erc
+
+    capture, libraries, _ = build_project(tmp_path)
+    deadline = time.monotonic() + 30
+    prepared = prepare_project_erc(capture, libraries, limits=CaptureLimits(), deadline=deadline)
+    retained = sum(len(data) for _, data in prepared.files)
+    project = dict(prepared.files)[capture.project_path]
+    ceiling = 2 * retained + len(project) // 2
+    settings = Settings(
+        workspace=tmp_path, kicad_cli=_fake_executable(tmp_path), max_drc_context_bytes=ceiling
+    )
+    _install_invoke(
+        monkeypatch,
+        kicad_project_execution,
+        {item.uuid_path for item in capture.hierarchy.instance_paths},
+    )
+    write = kicad_cli._write_drc_snapshot
+
+    def bounded_write(files, destination):
+        if destination.name != "input":
+            assert retained + sum(map(len, files.values())) <= ceiling, "unbudgeted child snapshot"
+        return write(files, destination)
+
+    monkeypatch.setattr(kicad_cli, "_write_drc_snapshot", bounded_write)
+    with pytest.raises(ProjectErcError, match="budget"):
+        with kicad_project_execution.open_project_execution_context(prepared, settings, deadline):
+            pytest.fail("peak context should have been refused")
+
+
+def test_shared_context_file_ceiling_is_checked_before_discovery(tmp_path, monkeypatch):
+    from copper_mcp import kicad_cli
+    from copper_mcp.config import Settings
+    from copper_mcp.engineering.capture import CaptureLimits
+    from copper_mcp.engineering.project_erc_inputs import prepare_project_erc
+
+    capture, libraries, _ = build_project(tmp_path)
+    deadline = time.monotonic() + 30
+    prepared = prepare_project_erc(capture, libraries, limits=CaptureLimits(), deadline=deadline)
+    settings = Settings(
+        workspace=tmp_path, max_board_bytes=max(len(data) for _, data in prepared.files) - 1
+    )
+    monkeypatch.setattr(
+        kicad_cli,
+        "discover_kicad_cli",
+        lambda *_a: pytest.fail("oversized source reached discovery"),
+    )
+    with pytest.raises(ProjectErcError, match="budget"):
+        with kicad_project_execution.open_project_execution_context(prepared, settings, deadline):
+            pytest.fail("oversized source reached execution")
+
+
 @pytest.mark.parametrize("phase", ("before", "during"))
 @pytest.mark.parametrize("source", ("root", "project", "child"))
 def test_workspace_source_changes_refuse_before_execution_or_delivery(
@@ -209,7 +294,9 @@ def test_workspace_source_changes_refuse_before_execution_or_delivery(
     original = (tmp_path / name).read_bytes()
     settings = project_erc.Settings(workspace=tmp_path, kicad_cli=_fake_executable(tmp_path))
     _install_invoke(
-        monkeypatch, project_erc, {item.uuid_path for item in capture.hierarchy.instance_paths}
+        monkeypatch,
+        kicad_project_execution,
+        {item.uuid_path for item in capture.hierarchy.instance_paths},
     )
     execute = project_erc._execute
     executions = []
@@ -279,7 +366,11 @@ def test_malformed_cli_path_refuses_before_discovery(tmp_path, monkeypatch, exec
 
     capture, libraries, _ = build_project(tmp_path)
     settings = dataclasses.replace(project_erc.Settings(workspace=tmp_path), kicad_cli=executable)
-    monkeypatch.setattr(project_erc, "_invoke", lambda *_a, **_k: pytest.fail("must not invoke"))
+    monkeypatch.setattr(
+        kicad_project_execution,
+        "_invoke",
+        lambda *_a, **_k: pytest.fail("must not invoke"),
+    )
     with pytest.raises(ProjectErcError) as caught:
         run_project_erc(capture, libraries, settings)
     assert caught.value.__cause__ is None and caught.value.__context__ is None
@@ -287,7 +378,6 @@ def test_malformed_cli_path_refuses_before_discovery(tmp_path, monkeypatch, exec
 
 def test_report_decode_expiry_stops_before_normalization(tmp_path, monkeypatch):
     from copper_mcp import kicad_cli
-    from copper_mcp.engineering import project_erc
 
     clock = [100.0]
     loads = kicad_cli.json.loads
@@ -301,7 +391,7 @@ def test_report_decode_expiry_stops_before_normalization(tmp_path, monkeypatch):
     def forbidden_normalization(*args, **kwargs):
         pytest.fail("expired report reached normalization")
 
-    monkeypatch.setattr(project_erc.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(kicad_project_execution.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(kicad_cli.json, "loads", expiring_loads)
     monkeypatch.setattr(kicad_cli, "_normalized_erc_report_digest", forbidden_normalization)
     result, _calls, error = _run(tmp_path, monkeypatch)
@@ -315,11 +405,13 @@ def test_final_workspace_read_respects_original_size_and_shared_deadline(tmp_pat
     expected = {item.path: item.content for item in capture._files}
     settings = project_erc.Settings(workspace=tmp_path, kicad_cli=_fake_executable(tmp_path))
     _install_invoke(
-        monkeypatch, project_erc, {item.uuid_path for item in capture.hierarchy.instance_paths}
+        monkeypatch,
+        kicad_project_execution,
+        {item.uuid_path for item in capture.hierarchy.instance_paths},
     )
     reads = []
     clock = [100.0]
-    read = project_erc.read_workspace_file
+    read = kicad_project_execution.read_workspace_file
 
     def expiring_read(workspace, path, **kwargs):
         observed = read(workspace, path, **kwargs)
@@ -332,7 +424,7 @@ def test_final_workspace_read_respects_original_size_and_shared_deadline(tmp_pat
         return observed
 
     monkeypatch.setattr(project_erc.time, "monotonic", lambda: clock[0])
-    monkeypatch.setattr(project_erc, "read_workspace_file", expiring_read)
+    monkeypatch.setattr(kicad_project_execution, "read_workspace_file", expiring_read)
     with pytest.raises(ProjectErcError):
         run_project_erc(capture, libraries, settings)
     assert reads == list(expected) * 2
@@ -397,7 +489,7 @@ def test_report_identity_faults_refuse(tmp_path, monkeypatch, mode):
         output.write_text(json.dumps(report))
         return 0
 
-    monkeypatch.setattr(project_erc, "_invoke", fake_invoke)
+    monkeypatch.setattr(kicad_project_execution, "_invoke", fake_invoke)
     with pytest.raises(ProjectErcError):
         run_project_erc(
             capture,
@@ -429,7 +521,11 @@ def test_budget_guard_refuses_before_operator(tmp_path, monkeypatch, deadline):
     from copper_mcp.engineering import project_erc
 
     capture, libraries, _ = build_project(tmp_path)
-    monkeypatch.setattr(project_erc, "_invoke", lambda **_: pytest.fail("operator must not run"))
+    monkeypatch.setattr(
+        kicad_project_execution,
+        "_invoke",
+        lambda **_: pytest.fail("operator must not run"),
+    )
     with pytest.raises(ProjectErcError):
         run_project_erc(
             capture, libraries, project_erc.Settings(workspace=tmp_path), deadline=deadline

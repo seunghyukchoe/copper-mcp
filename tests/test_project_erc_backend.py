@@ -8,7 +8,7 @@ import pytest
 from test_project_erc import build_project
 
 from copper_mcp.config import Settings
-from copper_mcp.engineering import project_erc
+from copper_mcp.engineering import kicad_project_execution, project_erc
 from copper_mcp.kicad_cli import _private_kicad_environment
 
 
@@ -32,7 +32,9 @@ def test_configured_forged_executable_cannot_invoke_itself(tmp_path, monkeypatch
     forged.write_bytes(b"unreviewed")
     forged.chmod(0o700)
     monkeypatch.setattr(
-        project_erc, "_invoke", lambda *_a, **_k: pytest.fail("unapproved executable must not run")
+        kicad_project_execution,
+        "_invoke",
+        lambda *_a, **_k: pytest.fail("unapproved executable must not run"),
     )
     with pytest.raises(project_erc.ProjectErcError):
         project_erc.run_project_erc(
@@ -42,7 +44,7 @@ def test_configured_forged_executable_cannot_invoke_itself(tmp_path, monkeypatch
 
 def test_platform_authority_is_fixed_and_binds_the_sealed_closure(tmp_path, monkeypatch):
     bundle, executable = _bundle(tmp_path)
-    monkeypatch.setattr(project_erc.sys, "platform", "darwin")
+    monkeypatch.setattr(kicad_project_execution.sys, "platform", "darwin")
     commands = []
 
     def verifier(command, **kwargs):
@@ -55,17 +57,17 @@ def test_platform_authority_is_fixed_and_binds_the_sealed_closure(tmp_path, monk
         assert kwargs["timeout"] > 0
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(project_erc.subprocess, "run", verifier)
+    monkeypatch.setattr(kicad_project_execution.subprocess, "run", verifier)
     environment = _private_kicad_environment(tmp_path / "state")
     settings = Settings(workspace=tmp_path)
-    first = project_erc._authenticate_backend(
+    first = kicad_project_execution._authenticate_backend(
         executable, settings, environment, time.monotonic() + 5
     )
     assert len(commands) == 2 and "--deep" in commands[0]
     assert 'identifier "org.kicad.kicad"' in commands[0][-2]
     assert 'identifier "kicad-cli"' in commands[1][-2]
     (bundle / "Contents/_CodeSignature/CodeResources").write_bytes(b"other hypothetical sealed set")
-    second = project_erc._authenticate_backend(
+    second = kicad_project_execution._authenticate_backend(
         executable, settings, environment, time.monotonic() + 5
     )
     assert first != second
@@ -74,7 +76,11 @@ def test_platform_authority_is_fixed_and_binds_the_sealed_closure(tmp_path, monk
 @pytest.mark.parametrize("fault", ("signature", "timeout", "platform"))
 def test_unverified_unavailable_or_late_platform_authority_refuses(tmp_path, monkeypatch, fault):
     _, executable = _bundle(tmp_path)
-    monkeypatch.setattr(project_erc.sys, "platform", "linux" if fault == "platform" else "darwin")
+    monkeypatch.setattr(
+        kicad_project_execution.sys,
+        "platform",
+        "linux" if fault == "platform" else "darwin",
+    )
 
     def verifier(command, **_kwargs):
         if fault == "platform":
@@ -83,9 +89,9 @@ def test_unverified_unavailable_or_late_platform_authority_refuses(tmp_path, mon
             raise subprocess.TimeoutExpired(command, 1)
         return SimpleNamespace(returncode=1)
 
-    monkeypatch.setattr(project_erc.subprocess, "run", verifier)
+    monkeypatch.setattr(kicad_project_execution.subprocess, "run", verifier)
     with pytest.raises((project_erc.ProjectErcError, subprocess.TimeoutExpired)):
-        project_erc._authenticate_backend(
+        kicad_project_execution._authenticate_backend(
             executable,
             Settings(workspace=tmp_path),
             _private_kicad_environment(tmp_path / "state"),
