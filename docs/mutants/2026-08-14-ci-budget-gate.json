@@ -18,8 +18,8 @@
     {
       "id": "CB2-the-ci-job-loses-the-budget-it-never-had-before",
       "file": ".github/workflows/ci.yml",
-      "anchor": "  quality:\n    name: Quality (Python 3.12)\n    runs-on: ubuntu-latest\n    # Provisional for this reshaped job, not a measured calibration. The pending calibration entry\n    # must be replaced with successful hosted samples before release.\n    timeout-minutes: 120\n",
-      "replacement": "  quality:\n    name: Quality (Python 3.12)\n    runs-on: ubuntu-latest\n    # Provisional for this reshaped job, not a measured calibration. The pending calibration entry\n    # must be replaced with successful hosted samples before release.\n",
+      "anchor": "    timeout-minutes: 120\n    outputs:\n",
+      "replacement": "    outputs:\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_check_ci_budgets.py::test_every_committed_job_that_runs_the_suite_declares_a_budget",
@@ -61,11 +61,12 @@
     {
       "id": "CB6-an-uncalibrated-budget-is-waved-through",
       "file": "scripts/check_ci_budgets.py",
-      "anchor": "        if observations is None:\n",
-      "replacement": "        if observations is None and False:\n",
+      "anchor": "        if key not in recorded:\n            failures.append(\n                f\"{budget.workflow}:{budget.line} sets `timeout-minutes: {budget.minutes}` on job \"\n                f\"{budget.job!r} with no entry in {CALIBRATION}; record what the job actually \"\n                \"costs on a hosted runner before declaring a ceiling for it\"\n            )\n            continue\n",
+      "replacement": "        if key not in recorded:\n            continue\n",
       "expectation": "killed",
       "killing_tests": [
-        "tests/test_check_ci_budgets.py::test_a_budget_with_no_calibration_entry_fails"
+        "tests/test_check_ci_budgets.py::test_a_budget_with_no_calibration_entry_fails",
+        "tests/test_check_ci_budgets.py::test_one_missing_entry_cannot_hide_among_valid_calibrated_jobs"
       ]
     },
     {

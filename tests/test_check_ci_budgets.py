@@ -235,6 +235,26 @@ def test_a_budget_with_no_calibration_entry_fails(
     assert any("with no entry in" in failure for failure in failures)
 
 
+def test_one_missing_entry_cannot_hide_among_valid_calibrated_jobs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    failures, notes = _tree(
+        tmp_path,
+        monkeypatch,
+        {"ci.yml": _workflow(minutes=120), "other.yml": _workflow(minutes=120)},
+        [
+            {
+                "workflow": ".github/workflows/other.yml",
+                "job": "test",
+                "observations": [_observation(60)],
+            }
+        ],
+    )
+
+    assert len(failures) == 1 and "with no entry in" in failures[0]
+    assert len(notes) == 1 and ".github/workflows/other.yml:test" in notes[0]
+
+
 def test_a_calibration_entry_with_no_observations_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -527,7 +547,7 @@ def test_a_workflow_whose_jobs_it_cannot_read_fails(
 
 
 def test_the_committed_workflows_declare_calibrated_budgets() -> None:
-    """Green here, and green because three real budgets clear the rule against real runs."""
+    """Every committed budget is backed by successful hosted observations."""
 
     failures: list[str] = []
     notes: list[str] = []
@@ -535,7 +555,10 @@ def test_the_committed_workflows_declare_calibrated_budgets() -> None:
 
     assert failures == []
     assert len(notes) == 6
-    assert sum("provisional budget" in note for note in notes) == 4
+    assert not any("provisional budget" in note for note in notes)
+    calibrated_failures: list[str] = []
+    check_ci_budgets._check(calibrated_failures, [], require_calibrated=True)
+    assert calibrated_failures == []
 
 
 def test_every_committed_job_that_runs_the_suite_declares_a_budget() -> None:
@@ -561,14 +584,15 @@ def test_every_committed_job_that_runs_the_suite_declares_a_budget() -> None:
 
 
 def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
-    """Pending CI budgets are explicit; the release observation remains historical evidence."""
+    """Two successful main runs replace provisional CI entries without retiring history."""
 
     document = json.loads((ROOT / check_ci_budgets.CALIBRATION).read_text(encoding="utf-8"))
     by_job = {(entry["workflow"], entry["job"]): entry for entry in document["jobs"]}
 
-    verify = by_job[(".github/workflows/release.yml", "verify")]
-    assert [observation["seconds"] for observation in verify["observations"]] == [2325]
-    assert verify["observations"][0]["run_id"] == 33162621059
+    for job, job_id, seconds in (("verify", 98820457912, 2325), ("publish", 98828444636, 12)):
+        assert by_job[(".github/workflows/release.yml", job)]["observations"] == [
+            {"run_id": 33162621059, "job_id": job_id, "conclusion": "success", "seconds": seconds}
+        ]
     assert (
         sum(
             observation["seconds"] == 2325
@@ -578,12 +602,51 @@ def test_the_calibration_file_records_the_hosted_runs_it_claims_to() -> None:
         == 1
     )
 
-    for job in ("quality", "compatibility", "evidence", "package"):
+    expected = {
+        "quality": [(34019964835, 101450604349, 59), (34021596538, 101455077704, 51)],
+        "compatibility": [
+            (34019964835, 101450604441, 507),
+            (34019964835, 101450604455, 1308),
+            (34019964835, 101450604468, 538),
+            (34021596538, 101455077860, 1213),
+            (34021596538, 101455077896, 297),
+            (34021596538, 101455077909, 533),
+        ],
+        "evidence": [
+            (34019964835, 101450728974, 465),
+            (34019964835, 101450728980, 325),
+            (34019964835, 101450728998, 478),
+            (34021596538, 101455189568, 482),
+            (34021596538, 101455189572, 422),
+            (34021596538, 101455189603, 402),
+        ],
+        "package": [(34019964835, 101453288870, 9), (34021596538, 101457632550, 6)],
+    }
+    for job, observations in expected.items():
         ci = by_job[(".github/workflows/ci.yml", job)]
-        assert ci["status"] == "pending"
-        assert ci["release_blocking"] is True
-        assert isinstance(ci["reason"], str)
-        assert "observations" not in ci
+        assert ci["status"] == "measured"
+        assert [
+            (row["run_id"], row["job_id"], row["seconds"]) for row in ci["observations"]
+        ] == observations
+    assert document["repository"] == "seunghyukchoe/copper-mcp"
+    assert document["main_runs"] == [
+        {
+            "run_id": 34019964835,
+            "head_sha": "a0a572b3c80050485d4a4a76be1724f3f0bc17b6",
+            "branch": "main",
+            "event": "push",
+            "conclusion": "success",
+            "required_path_seconds": 1323,
+        },
+        {
+            "run_id": 34021596538,
+            "head_sha": "5fbada04f6571f714f9bfbba5859dd7be110ecf4",
+            "branch": "main",
+            "event": "push",
+            "conclusion": "success",
+            "required_path_seconds": 1226,
+        },
+    ]
 
     assert {
         observation["conclusion"]

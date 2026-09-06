@@ -19,8 +19,8 @@ jobs:
   quality:
     name: Quality (Python 3.12)
     runs-on: ubuntu-latest
-    # Provisional for this reshaped job, not a measured calibration. The pending calibration entry
-    # must be replaced with successful hosted samples before release.
+    # Successful main samples are recorded in .github/ci-budget-calibration.json.
+    # Keep the conservative ceiling; faster observations do not retire older samples.
     timeout-minutes: 120
     outputs:
       evidence-python: ${{ steps.plan.outputs.evidence-python }}

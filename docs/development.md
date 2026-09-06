@@ -91,11 +91,14 @@ command verifies that current source reproduces the metrics under an unchanged c
 source/input inventory. Loading the historical companion alone proves no current execution.
 
 Nonsensitive PRs explicitly skip expensive replay. Sensitive/unknown changes fan it out to all
-supported versions; main, daily nightly and release retain the full evidence policy. New
-120-minute job budgets remain provisional until successful hosted observations replace them.
+supported versions; main, daily nightly and release retain the full evidence policy. The
+120-minute job budgets now retain measurements from successful main runs 34019964835 and
+34021596538, including every supported compatibility/evidence interpreter. No timeout was lowered.
 The release workflow requires `check_ci_budgets.py --require-calibrated`; normal CI reports
 provisional budgets distinctly. The under-20-minute PR and 3x local speed targets need successful
-measurements and cannot be inferred from the workflow diff.
+measurements and cannot be inferred from the workflow diff. PR 269 recorded an 11m34s required
+path, the first of the required three consecutive qualifying PR observations. Its subsequent
+main path was 20m26s; main timing is recorded separately and is not a PR-speed result.
 
 The first reshaped hosted draft run passed in 32m12s and missed the speed target. Compatibility
 jobs now request per-test duration output. B-140's once-per-module current corpus recomputation
