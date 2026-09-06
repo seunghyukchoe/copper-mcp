@@ -144,3 +144,18 @@ Preparation does not run ERC or establish source-load completeness, complete lib
 support, parity, physics, fabrication or application authority. Inherited used symbols and
 cached-name overrides remain unsupported. See
 [ADR-0141](../adr/0141-project-erc-prepares-an-explicit-rule-and-library-derivative.md).
+
+## Private project connectivity ERC
+
+`engineering.project_erc.run_project_erc()` executes the prepared connectivity profile using
+an operator-selected, vendor-sealed KiCad 10.0.5 macOS backend. It validates each original
+schematic's native loading in disposable copies, runs project ERC twice, binds full-finding
+observations and rechecks every captured workspace source before execution and delivery.
+No user source is rewritten; the syntax command's resaved copies never enter final ERC.
+
+The result's pass/fail/inconclusive status applies only to that connectivity profile. Simulation,
+fabrication, board parity and typography are not run, and application authority is none. A source
+freshness observation is not an atomic snapshot or an enduring permission to mutate the editor.
+There is no new MCP tool or optimization/v1 interpretation. General library/model coverage, v2
+orchestration and the original held-out/physics/human gates remain open. See
+[ADR-0142](../adr/0142-project-connectivity-erc-binds-execution-and-source-freshness.md).
