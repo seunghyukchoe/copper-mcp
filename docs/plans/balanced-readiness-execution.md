@@ -167,3 +167,13 @@ ERC, followed by general schematic/PCB parity and actual BOM/model reconciliatio
 Circuit Intent ERC/parity paths remain unchanged; they cannot be relabelled ordinary project
 authorities. Private hierarchy metadata is being implemented separately and earns no complete
 electrical-input, physics or application credit by itself.
+
+## M1 split: hierarchy before capture and execution
+
+The first M1 publication contains only private schematic hierarchy derivation and its adversarial
+contracts. Shared child files expand into distinct UUID instance paths; references and project
+variables resolve under exact declared bindings and independent work/time ceilings. It adds no
+MCP surface, native process or authority claim. Source capture/settings and the distinct real
+connectivity-ERC executor remain subsequent reviewed slices, followed by general project parity
+and BOM/model reconciliation. This split preserves the original M1 objective rather than calling
+metadata-only support complete. No frozen requirement is marked passed by this checkpoint.

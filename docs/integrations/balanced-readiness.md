@@ -93,3 +93,17 @@ change production defaults or re-sign historical evidence.
 
 See [ADR-0134](../adr/0134-freeze-readiness-requirements-before-measuring-progress.md) and
 [ADR-0135](../adr/0135-inner-placement-exhaustion-is-not-completed-search-work.md).
+
+## Private schematic hierarchy metadata
+
+`engineering.schematic_hierarchy.derive_schematic_hierarchy()` derives deterministic file edges
+and UUID instance paths from immutable supplied schematic bytes, including multiple instances of
+one child file. It performs no filesystem reads or library lookup. Exact reference bindings,
+canonical paths, source/edge/instance/depth ceilings, copied byte/time limits and a separate
+single-pass variable expansion with pre-append size checks are mandatory. Native project-variable
+resolution is a bounded subset; unresolved substituted values refuse, and process environment
+variables do not supply sheet filenames.
+
+This metadata is private, not a project-completeness or ERC report. Filesystem capture, project
+settings and library closure, actual ERC/parity, BOM/models and all physical judgement still need
+separate evidence. See [ADR-0138](../adr/0138-schematic-hierarchy-is-private-bounded-metadata.md).

@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private schematic hierarchy derivation handles nested/shared sheet instances from captured
+  bytes with exact confined references, bounded project-variable expansion and immutable UUID
+  metadata. It performs no file reads, ERC, completeness certification or board mutation.
 - Private electrical artifact capture verifies every declared file through bounded, descriptor-
   confined reads and a complete second sweep. Portable path aliases, control characters, stale
   bytes and invalid or changing limits refuse. Its redacted projection explicitly grants no
