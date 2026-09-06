@@ -19,6 +19,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Any, Literal
 
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
@@ -1267,6 +1268,11 @@ class _ErcObservation:
     passed: bool
     normalized_report_digest: str
     ignored_check_keys: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "violation_type_counts", MappingProxyType(dict(self.violation_type_counts))
+        )
 
 
 def _normalized_erc_report_digest(report: dict[str, Any]) -> str:

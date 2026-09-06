@@ -56,6 +56,15 @@ def _observe(
 
 
 class ProjectErcReportTests(unittest.TestCase):
+    def test_observation_counts_cannot_change_after_validation(self):
+        report = _report(
+            sheets=[{"path": "/", "uuid_path": _ROOT_UUID, "violations": [_violation()]}]
+        )
+        observation = _observe(report, return_code=5)
+        with self.assertRaises(TypeError):
+            observation.violation_type_counts["pin_not_connected"] = 0
+        self.assertEqual(observation.violation_type_counts["pin_not_connected"], 1)
+
     def test_severity_map_is_validated_even_without_findings(self):
         report = _report(sheets=[{"path": "/", "uuid_path": _ROOT_UUID, "violations": []}])
         cases = ({}, [], {"rule": False}, {"rule": "off"}, {"": "error"}, {"r" * 129: "error"})
