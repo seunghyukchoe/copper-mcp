@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private project-level connectivity ERC runs a pinned vendor-sealed KiCad backend twice over
+  captured hierarchical inputs, validates original-source loading, and rechecks workspace freshness
+  before execution and delivery. Bound findings do not grant physics, fabrication or apply authority;
+  the initial backend profile is macOS KiCad 10.0.5 and unsupported profiles refuse explicitly.
 - Private project ERC preparation binds captured source, an explicit local symbol-library set
   and a disclosed connectivity-rule derivative without changing source files or executing ERC.
   The initial KiCad 10.0.5 profile requires exact flat symbol equivalence; outside-profile checks
