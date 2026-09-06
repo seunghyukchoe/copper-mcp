@@ -73,6 +73,38 @@ Strict mypy passed 137 source modules; lint/metadata, secret/audit and wheel/sdi
 The capture/input/readiness group also passed 84 tests on each of Python 3.11 and 3.13.
 These are local observations, not hosted target acceptance or complete electrical project capture.
 
+## Matched feedback measurement and next CI increment
+
+On clean commit `94dafe9b2b9552068eb42b4aa9df9c485d6dcae8`, the same macOS 26.6.2 arm64
+host and Python 3.12.13 completed the serial `make test` in **1,475.20 seconds** (4,649 passed,
+two skipped, 779 subtests; 89% coverage), then `make test-fast` in **152.89 seconds**
+(4,646 passed, two skipped, 779 subtests). The source/input fingerprint above was unchanged.
+Both used `HYPOTHESIS_PROFILE=deterministic-ci`, `PYTEST_ADDOPTS='-q --durations=10'`,
+default-off apply/live flags and the same configured local router images. No other local heavy
+validation ran concurrently. The fast target uses four workers, no coverage and its declared
+slow-evidence/external-router/networked-provider exclusions; the serial target retains them.
+The measured end-to-end ratio is **9.65x**, satisfying the local 3x feedback target for this host
+and this pair of approved target semantics. This is one sequential pair, not a repeated statistical
+estimate or equal-workload parallel scaling measurement.
+
+The [second hosted run](https://github.com/seunghyukchoe/copper-mcp/actions/runs/34012739235)
+passed on that commit, with **20m10s** from creation to final package completion. Canonical pytest
+reported 4,558 passed and ninety skips in 1,176.35 seconds. This improves the first 32m12s run but
+still misses the under-twenty-minute target by ten seconds. Neither PR run calibrates main.
+
+Its per-test timings show three separate identical placement benchmark calls costing 111.43,
+113.00 and 109.58 seconds. The next test-only increment shares one fresh three-replay measurement
+across those read-only assertion groups, decoding an independent nested result for each consumer.
+All original assertions remain. Separate negative-criterion, interruption and two-report
+determinism executions remain fresh; no persistent report cache, reduced search budget, marker
+exclusion or production behavior change is introduced. Hosted improvement must be measured anew;
+the sum of saved test durations is not a prediction of critical-path savings.
+
+The test-only increment passed all thirty placement tests on Python 3.11, 3.12 and 3.13,
+plus `make lint` and the changed-file formatting check. Independent read-only review found no
+lost assertions or fixture/monkeypatch isolation issues. The full-suite results above belong to
+the preceding clean baseline, not a claimed full rerun of this test-only increment.
+
 ## Acceptance and human gates
 
 Use at least twelve open-licensed held-out boards, all three electrical profiles, at least three

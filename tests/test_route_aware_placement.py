@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
@@ -39,8 +40,32 @@ def _solved(*, aware: bool = True) -> tuple[Any, Any, Any]:
     return snapshot, view, result
 
 
-def test_original_audio_fixture_route_aware_selection_meets_predeclared_criterion() -> None:
-    metrics = benchmark.run_benchmark(3)
+@pytest.fixture(scope="module")
+def _fresh_metrics_json() -> str:
+    """One fresh three-replay run, never a loaded historical benchmark artifact."""
+
+    return json.dumps(benchmark.run_benchmark(3), allow_nan=False)
+
+
+@pytest.fixture
+def fresh_metrics(_fresh_metrics_json: str) -> dict[str, Any]:
+    """Decode separately so no consumer can mutate another test's evidence."""
+
+    return json.loads(_fresh_metrics_json)
+
+
+def test_shared_replay_consumers_receive_independent_nested_metrics(
+    fresh_metrics: dict[str, Any], _fresh_metrics_json: str
+) -> None:
+    assert fresh_metrics["repetitions"] == 3
+    fresh_metrics["criterion"]["minimum_improvement_percent"] = -1
+    assert json.loads(_fresh_metrics_json)["criterion"]["minimum_improvement_percent"] == 10
+
+
+def test_original_audio_fixture_route_aware_selection_meets_predeclared_criterion(
+    fresh_metrics: dict[str, Any],
+) -> None:
+    metrics = fresh_metrics
     search = metrics["search_comparison"]
 
     assert metrics["all_retained_candidates_legal"] is True
@@ -94,7 +119,9 @@ def test_nested_deadline_on_last_evaluation_cannot_certify_replay(monkeypatch):
     assert calls == benchmark.SEARCH_SETTINGS["max_evaluations"]
 
 
-def test_the_two_ranked_policies_run_different_searches_not_one_shared_candidate_set() -> None:
+def test_the_two_ranked_policies_run_different_searches_not_one_shared_candidate_set(
+    fresh_metrics: dict[str, Any],
+) -> None:
     """F1: the score orders the beam, so the policies do not share a candidate set.
 
     The recorded improvement is a different-search-trajectory result.  Measured here: at the
@@ -102,7 +129,7 @@ def test_the_two_ranked_policies_run_different_searches_not_one_shared_candidate
     that, and must carry the separate re-ranking measurement rather than implying it.
     """
 
-    metrics = benchmark.run_benchmark(3)
+    metrics = fresh_metrics
     search = metrics["search_comparison"]
     rerank = metrics["rerank_comparison"]
 
@@ -117,10 +144,12 @@ def test_the_two_ranked_policies_run_different_searches_not_one_shared_candidate
     assert rerank["route_aware_route_wire_length_nm"] < rerank["manhattan_route_wire_length_nm"]
 
 
-def test_the_report_records_the_honest_all_probeable_net_observation() -> None:
+def test_the_report_records_the_honest_all_probeable_net_observation(
+    fresh_metrics: dict[str, Any],
+) -> None:
     """F4: "zero unrouted probes" was a one-net statement; record the whole-fixture one."""
 
-    observation = benchmark.run_benchmark(3)["multi_probe_observation"]
+    observation = fresh_metrics["multi_probe_observation"]
     baseline = observation["baseline_choice"]
     aware = observation["route_aware_choice"]
 

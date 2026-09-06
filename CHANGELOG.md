@@ -42,6 +42,10 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Placement benchmark contract assertions share one fresh three-replay result with independent
+  per-test copies; negative, interruption and independent determinism runs remain separate.
+  Matched local serial/fast feedback measured 9.65x faster on the recorded host. The latest
+  hosted PR path remains 20m10s, still above the under-twenty-minute target.
 - Full B-140 census recomputation now runs once per compatibility leg in a fixed source-bound
   subprocess without inherited coverage tracing. Every current-report assertion remains; the
   historical runner/artifacts and default B-141 replay are unchanged. Hosted compatibility jobs
