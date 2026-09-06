@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private identity-neutral parity observations bind full report details and explicit enabled-check
+  expectations without borrowing Circuit Intent identities. Existing parity evidence retains its
+  liveness invariant and accepted set; the parser alone does not establish native execution.
 - Private project-level connectivity ERC runs a pinned vendor-sealed KiCad backend twice over
   captured hierarchical inputs, validates original-source loading, and rechecks workspace freshness
   before execution and delivery. Bound findings do not grant physics, fabrication or apply authority;

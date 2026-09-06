@@ -1849,32 +1849,75 @@ class SourceToBoardParityEvidence:
             raise ValueError("source-to-board parity verdict does not match its findings")
 
 
-def _parse_parity_report(
+@dataclass(frozen=True, slots=True)
+class _ParityObservation:
+    kicad_version: str
+    parity_type_counts: Mapping[str, int]
+    drc_finding_count: int
+    unconnected_finding_count: int
+    normalized_report_digest: str | None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "parity_type_counts", MappingProxyType(dict(self.parity_type_counts))
+        )
+
+
+def _check_parity_report_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise KiCadCliError("KiCad parity report deadline expired")
+
+
+def _normalized_parity_report_digest(report: dict[str, Any], deadline: float | None) -> str:
+    def ordered_json(value: object) -> str:
+        _check_parity_report_deadline(deadline)
+        encoded = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        _check_parity_report_deadline(deadline)
+        return encoded
+
+    normalized = {key: value for key, value in report.items() if key != "date"}
+    for name in ("violations", "unconnected_items", "schematic_parity", "ignored_checks"):
+        normalized[name] = sorted(normalized[name], key=ordered_json)
+        _check_parity_report_deadline(deadline)
+    canonical = ordered_json(normalized).encode()
+    _check_parity_report_deadline(deadline)
+    digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    _check_parity_report_deadline(deadline)
+    return digest
+
+
+def _parse_parity_observation(
     payload: bytes,
     *,
     return_code: int,
-    component_count: int,
-    intent_digest: str,
-    schematic_digest: str,
-    parity_schematic_digest: str,
-    board_revision: str,
-) -> SourceToBoardParityEvidence:
-    """Accept only the reviewed DRC report shape and reduce its parity array to counts.
-
-    Nothing here decides what parity *is* — KiCad already did. This transports the verdict and
-    enforces the one thing KiCad will not tell us: whether the check actually ran.
-    """
-
+    expected_source: str,
+    required_enabled_checks: frozenset[str] | None = None,
+    deadline: float | None = None,
+) -> _ParityObservation:
+    """Validate native parity observations without inventing Circuit Intent identities."""
+    if deadline is not None:
+        if type(deadline) not in (int, float):
+            raise KiCadCliError("KiCad parity report deadline is malformed")
+        try:
+            deadline = float(deadline)
+        except OverflowError:
+            deadline = float("nan")
+        if not math.isfinite(deadline):
+            raise KiCadCliError("KiCad parity report deadline is malformed")
+    _check_parity_report_deadline(deadline)
+    checkpoint = None if deadline is None else lambda: _check_parity_report_deadline(deadline)
     try:
         text = payload.decode("utf-8", errors="strict")
-        _preflight_drc_json(text)
+        _check_parity_report_deadline(deadline)
+        _preflight_drc_json(text, check_deadline=checkpoint)
         report: Any = json.loads(
             text,
             object_pairs_hook=_drc_object_pairs,
             parse_constant=_reject_json_constant,
             parse_float=_finite_json_float,
         )
-        _validate_drc_json_tree(report)
+        _check_parity_report_deadline(deadline)
+        _validate_drc_json_tree(report, check_deadline=checkpoint)
     except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as error:
         raise KiCadCliError("KiCad parity report is not valid UTF-8 JSON") from error
     if not isinstance(report, dict):
@@ -1883,7 +1926,7 @@ def _parse_parity_report(
         raise KiCadCliError("KiCad parity report schema is unsupported")
     if report.get("coordinate_units") != "mm":
         raise KiCadCliError("KiCad parity report must use millimetres")
-    if report.get("source") != PARITY_BOARD_SNAPSHOT_NAME:
+    if report.get("source") != expected_source:
         raise KiCadCliError("KiCad parity report source does not match the board snapshot")
     report_date = report.get("date")
     if not isinstance(report_date, str):
@@ -1921,6 +1964,7 @@ def _parse_parity_report(
 
     parity_type_counts: Counter[str] = Counter()
     for finding in schematic_parity:
+        _check_parity_report_deadline(deadline)
         if not isinstance(finding, dict):
             raise KiCadCliError("KiCad parity finding is malformed")
         finding_type = finding.get("type")
@@ -1930,12 +1974,12 @@ def _parse_parity_report(
         excluded = finding.get("excluded", False)
         if not isinstance(finding_type, str) or not 1 <= len(finding_type) <= 128:
             raise KiCadCliError("KiCad parity finding type is malformed")
-        if (
-            not isinstance(description, str)
-            or not isinstance(items, list)
-            or not all(isinstance(item, dict) for item in items)
-        ):
+        if not isinstance(description, str) or not isinstance(items, list):
             raise KiCadCliError("KiCad parity finding fields are malformed")
+        for item in items:
+            _check_parity_report_deadline(deadline)
+            if not isinstance(item, dict):
+                raise KiCadCliError("KiCad parity finding fields are malformed")
         if severity not in _SEVERITIES:
             raise KiCadCliError("KiCad parity finding severity is unsupported")
         if not isinstance(excluded, bool):
@@ -1946,6 +1990,85 @@ def _parse_parity_report(
         if excluded:
             raise KiCadCliError("KiCad parity findings cannot be excluded in a private snapshot")
         parity_type_counts[finding_type] += 1
+
+    # Extra project expectations are explicit; the legacy wrapper keeps its prior accepted set.
+    normalized_digest = None
+    if required_enabled_checks is not None:
+        if (
+            type(required_enabled_checks) is not frozenset
+            or not required_enabled_checks
+            or not required_enabled_checks <= _PARITY_TYPES
+        ):
+            raise KiCadCliError("KiCad parity check constraints are malformed")
+        ignored = report.get("ignored_checks")
+        if not isinstance(ignored, list) or len(ignored) > 10_000:
+            raise KiCadCliError("KiCad parity ignored checks are malformed")
+        seen: set[str] = set()
+        for check in ignored:
+            _check_parity_report_deadline(deadline)
+            if not isinstance(check, dict):
+                raise KiCadCliError("KiCad parity ignored check is malformed")
+            key = check.get("key")
+            if (
+                not isinstance(key, str)
+                or not 1 <= len(key) <= 128
+                or key in seen
+                or not isinstance(check.get("description"), str)
+            ):
+                raise KiCadCliError("KiCad parity ignored check is malformed")
+            if key in required_enabled_checks:
+                raise KiCadCliError("KiCad parity required check was ignored")
+            seen.add(key)
+        for name in ("violations", "unconnected_items"):
+            for finding in report[name]:
+                _check_parity_report_deadline(deadline)
+                if (
+                    not isinstance(finding, dict)
+                    or not isinstance(finding.get("type"), str)
+                    or not 1 <= len(finding["type"]) <= 128
+                    or not isinstance(finding.get("description"), str)
+                    or finding.get("severity") not in _SEVERITIES
+                    or not isinstance(finding.get("items"), list)
+                    or not isinstance(finding.get("excluded", False), bool)
+                ):
+                    raise KiCadCliError("KiCad parity companion finding is malformed")
+                for item in finding["items"]:
+                    _check_parity_report_deadline(deadline)
+                    if not isinstance(item, dict):
+                        raise KiCadCliError("KiCad parity companion item is malformed")
+        normalized_digest = _normalized_parity_report_digest(report, deadline)
+    observation = _ParityObservation(
+        kicad_version=kicad_version,
+        parity_type_counts=dict(sorted(parity_type_counts.items())),
+        drc_finding_count=len(report["violations"]),
+        unconnected_finding_count=len(report["unconnected_items"]),
+        normalized_report_digest=normalized_digest,
+    )
+    _check_parity_report_deadline(deadline)
+    return observation
+
+
+def _parse_parity_report(
+    payload: bytes,
+    *,
+    return_code: int,
+    component_count: int,
+    intent_digest: str,
+    schematic_digest: str,
+    parity_schematic_digest: str,
+    board_revision: str,
+) -> SourceToBoardParityEvidence:
+    """Accept only the reviewed DRC report shape and reduce its parity array to counts.
+
+    Nothing here decides what parity *is* — KiCad already did. This transports the verdict and
+    enforces the one thing KiCad will not tell us: whether the check actually ran.
+    """
+
+    observation = _parse_parity_observation(
+        payload, return_code=return_code, expected_source=PARITY_BOARD_SNAPSHOT_NAME
+    )
+    kicad_version = observation.kicad_version
+    parity_type_counts = Counter(observation.parity_type_counts)
 
     # ADR-0084's liveness invariant. Under a board-eligible, footprint-less projection every
     # component must appear exactly once as either missing_footprint (absent from the board) or

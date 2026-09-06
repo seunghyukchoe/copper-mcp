@@ -166,3 +166,15 @@ and file counts before staging each disposable syntax copy. Original snapshot ve
 after all syntax probes and again at closure; private configuration is still checked after each
 probe. This internal extraction preserves ERC report identities and does not add project parity
 or a new authority surface.
+
+## Identity-neutral parity observations
+
+The private report adapter accepts an exact expected source name and optional required-check
+constraints without inventing Circuit Intent identities. It validates companion findings and
+ignored-check structure, binds full normalized report details, and applies a cooperative deadline.
+Its observation contains no pass/fail verdict or application authority. Existing Circuit Intent
+parity retains its component-accounting liveness rule and accepted set.
+
+Native ordinary-project execution and independent liveness proof remain a separate increment.
+An empty parity array alone does not prove KiCad ran the check. See
+[ADR-0143](../adr/0143-project-parity-uses-native-liveness-and-immutable-candidates.md).
