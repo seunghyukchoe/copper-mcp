@@ -56,9 +56,11 @@ source/library contents. Failures converge on a fixed ProjectErcError without un
 or contexts, including malformed/cyclic workspace resolution. Privileged traceback-local inspection
 is not covered by that disclosure boundary.
 
-Hard findings take precedence and produce `fail`. Missing or unequal repeated observations,
-unexpected ignored checks/exclusions, or library parity findings produce `inconclusive`. A `pass`
-means equivalent zero-hard-error observations within this connectivity profile; warnings can remain.
+For admissible observations, hard findings take precedence and produce `fail`. Unequal repeated
+observations, library parity findings or a nonconforming ignored-check set produce `inconclusive`.
+Missing outputs, malformed reports, excluded findings and ignored active rules instead cause a
+sanitized execution/validation refusal: no report is delivered. A `pass` means equivalent
+zero-hard-error observations within this connectivity profile; warnings can remain.
 Simulation, fabrication, board parity and typography remain explicitly not run, and apply authority
 remains none. There is no aggregate engineering sign-off or new public optimization package here.
 
