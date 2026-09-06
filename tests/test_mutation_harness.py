@@ -21,6 +21,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -34,6 +35,7 @@ from scripts.mutation_harness import (
     OUTCOME_SURVIVED,
     OUTCOME_SURVIVED_DECLARED_EQUIVALENT,
     SpecError,
+    _run_tests,
     anchor_occurrences,
     baseline_tests,
     build_report,
@@ -342,6 +344,58 @@ class TestVerdicts:
         assert results[0].mutant_returncode == 4
         assert results[0].control_returncode == 0
 
+    def test_nested_runs_ignore_poisoned_parent_selection_and_xdist(self, tmp_path: Path) -> None:
+        """The harness must run its exact nodeids serially under a hostile outer pytest."""
+        _write_project(tmp_path, BOUNDARY_TEST)
+        spec = load_spec(
+            _write_spec(
+                tmp_path,
+                [
+                    _boundary_mutant(
+                        anchor="def is_wide(value: int) -> bool:",
+                        replacement=(
+                            'raise RuntimeError("import bomb")\n'
+                            "\n"
+                            "\n"
+                            "def is_wide(value: int) -> bool:"
+                        ),
+                    )
+                ],
+            )
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "PYTEST_ADDOPTS": (
+                    "-q -n4 --dist loadfile -k definitely_not_this_test "
+                    "-m definitely_not_this_marker --lf --durations=10"
+                )
+            },
+        ):
+            results, passed, baseline_returncode = run_spec(tmp_path, spec)
+        assert baseline_returncode == 0
+        assert passed is False
+        assert results[0].outcome == OUTCOME_INVALID_RUN
+        assert results[0].control_returncode == 0
+        assert results[0].mutant_returncode == 4
+        assert (tmp_path / "src" / "widget.py").read_bytes() == WIDGET_SOURCE.encode()
+
+    def test_nested_runs_preserve_spec_args_before_fixed_serial_suffix(
+        self, tmp_path: Path
+    ) -> None:
+        completed = subprocess.CompletedProcess([], 0, stdout=b"", stderr=None)
+        with patch("scripts.mutation_harness.subprocess.run", return_value=completed) as run:
+            _run_tests(tmp_path, ("--tb=short",), ("tests/test_widget.py::test_boundary",))
+        argv = run.call_args.args[0]
+        assert argv[3:] == [
+            "--tb=short",
+            "-o",
+            "addopts=",
+            "-n0",
+            "tests/test_widget.py::test_boundary",
+        ]
+        assert "PYTEST_ADDOPTS" not in run.call_args.kwargs["env"]
+
     def test_baseline_tests_deduplicate_in_order(self, tmp_path: Path) -> None:
         first = _boundary_mutant()
         second = _boundary_mutant(
@@ -457,17 +511,33 @@ class TestCommittedSpecs:
             for mutant in spec.mutants:
                 nodes.extend(mutant.killing_tests)
         assert nodes
-        environment = dict(os.environ)
-        environment["PYTHONPATH"] = f"src{os.pathsep}."
-        argv = [sys.executable, "-m", "pytest", "--collect-only", "-q", "--no-cov", *nodes]
-        completed = subprocess.run(  # noqa: S603 - fixed interpreter, argv from committed specs
-            argv,
-            cwd=REPO_ROOT,
-            env=environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        with patch.dict(
+            os.environ,
+            {
+                "COPPER_MCP_WORKSPACE": str(REPO_ROOT / "deleted-parent-workspace"),
+                "COPPER_MCP_TRANSPORT": "invalid-parent-transport",
+            },
+        ):
+            # Collection must not inherit operator/provider settings from the test runner.  Keep
+            # only the interpreter search path, locale, repository imports, and explicit gates.
+            environment = {
+                "PATH": os.defpath,
+                "LANG": "C.UTF-8",
+                "PYTHONPATH": f"{REPO_ROOT / 'src'}{os.pathsep}{REPO_ROOT}",
+                "COPPER_MCP_WORKSPACE": str(REPO_ROOT),
+                "COPPER_MCP_ALLOW_APPLY": "0",
+                "COPPER_MCP_ALLOW_LIVE_IPC": "0",
+                "COPPER_MCP_ALLOW_LIVE_APPLY": "0",
+            }
+            argv = [sys.executable, "-m", "pytest", "--collect-only", "-q", "--no-cov", *nodes]
+            completed = subprocess.run(  # noqa: S603 - fixed interpreter, argv from committed specs
+                argv,
+                cwd=REPO_ROOT,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
         assert completed.returncode == 0, (
             "a committed spec names a killing test that no longer collects; re-point the spec "
             "(and re-run it) rather than letting the claim rot:\n"

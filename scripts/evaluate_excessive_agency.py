@@ -27,9 +27,7 @@ import argparse
 import asyncio
 import copy
 import hashlib
-import importlib
 import json
-import os
 import re
 import secrets
 import shutil
@@ -43,17 +41,15 @@ from pathlib import Path
 from typing import Any, Literal
 from unittest.mock import patch
 
-# MCP server construction reads its default configuration at import time.  Pin that unused default
-# to the repository so caller configuration and secrets cannot affect the result.
+if __package__:
+    from .offline_mcp_harness import load_offline_mcp_server
+else:
+    from offline_mcp_harness import load_offline_mcp_server
+
 SCRIPT_FILE = Path(__file__).resolve()
 ROOT = SCRIPT_FILE.parents[1]
 SCRIPT_PATH = SCRIPT_FILE.relative_to(ROOT)
-for _environment_name in tuple(os.environ):
-    if _environment_name.startswith("COPPER_MCP_"):
-        del os.environ[_environment_name]
-os.environ["COPPER_MCP_WORKSPACE"] = str(ROOT)
-
-mcp_server = importlib.import_module("copper_mcp.mcp_server")
+mcp_server = load_offline_mcp_server()
 
 from copper_mcp import mcp_contracts  # noqa: E402
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes  # noqa: E402
@@ -2083,6 +2079,12 @@ def build_report(*, evidence_harness_commit: str) -> dict[str, Any]:
         "schema": EVALUATION_SCHEMA,
         "script": SCRIPT_PATH.as_posix(),
         "script_sha256": hashlib.sha256(SCRIPT_FILE.read_bytes()).hexdigest(),
+        "harness_helper": {
+            "path": "scripts/offline_mcp_harness.py",
+            "sha256": hashlib.sha256(
+                (ROOT / "scripts/offline_mcp_harness.py").read_bytes()
+            ).hexdigest(),
+        },
         "catalog": CATALOG_FILE.relative_to(ROOT).as_posix(),
         "catalog_sha256": hashlib.sha256(CATALOG_FILE.read_bytes()).hexdigest(),
         "evidence_harness_commit": commit,

@@ -94,6 +94,80 @@ def build_candidate_drc_statement(
     }
 
 
+def build_bundle_drc_statement(
+    *,
+    bundle_id: str,
+    bundle_base_revision: str,
+    candidate_ids: tuple[str, ...],
+    source_revision: str,
+    patched_board_revision: str,
+    patched_drc_context_revision: str,
+    summary: DrcSummary,
+) -> dict[str, Any]:
+    """Build one redacted, unsigned in-toto Link Statement payload for a composed bundle.
+
+    One DRC run covers the whole composition, so there is one statement and its subject is
+    the bundle, not any single candidate: per-candidate statements sharing one run would
+    invite cherry-picked differentials. The composed candidate set rides as a sorted
+    byproduct digest list, bound the same way every other revision is.
+    """
+
+    revisions = {
+        "bundle_id": bundle_id,
+        "bundle_base_revision": bundle_base_revision,
+        "source_revision": source_revision,
+        "patched_board_revision": patched_board_revision,
+        "patched_drc_context_revision": patched_drc_context_revision,
+    }
+    for name, revision in revisions.items():
+        if not isinstance(revision, str) or not _SHA256_ID.fullmatch(revision):
+            raise AttestationError(f"{name} must be content-addressed with sha256")
+    if (
+        not isinstance(candidate_ids, tuple)
+        or not 2 <= len(candidate_ids) <= 8
+        or any(
+            not isinstance(item, str) or not _SHA256_ID.fullmatch(item) for item in candidate_ids
+        )
+        or len(set(candidate_ids)) != len(candidate_ids)
+    ):
+        raise AttestationError("bundle candidate ids must be two to eight distinct digests")
+    if not isinstance(summary, DrcSummary):
+        raise AttestationError("summary must be strict KiCad DRC evidence")
+    if summary.base_revision != patched_board_revision:
+        raise AttestationError("DRC summary is not bound to the patched board revision")
+    if summary.drc_context_revision != patched_drc_context_revision:
+        raise AttestationError("DRC summary is not bound to the patched context revision")
+
+    materials = [
+        _resource_descriptor("board-source", source_revision),
+        _resource_descriptor("board-ir-base", bundle_base_revision),
+        _resource_descriptor("patched-board", patched_board_revision),
+        _resource_descriptor("patched-drc-context", patched_drc_context_revision),
+    ]
+    materials.sort(key=lambda descriptor: descriptor["name"])
+    return {
+        "_type": INTOTO_STATEMENT_TYPE,
+        "subject": [_resource_descriptor("route-bundle", bundle_id)],
+        "predicateType": INTOTO_LINK_PREDICATE_TYPE,
+        "predicate": {
+            "name": LINK_STEP_NAME,
+            "command": [],
+            "materials": materials,
+            "byproducts": {
+                "drc_summary": summary.to_dict(),
+                "evidence_scope": EVIDENCE_SCOPE,
+                "candidate_ids": sorted(candidate_ids),
+            },
+            "environment": {
+                "tool": "kicad-cli",
+                "kicad_version": summary.kicad_version,
+                "drc_schema": summary.drc_schema,
+                "coordinate_units": summary.coordinate_units,
+            },
+        },
+    }
+
+
 def canonical_statement_bytes(statement: dict[str, Any]) -> bytes:
     """Serialize a Statement deterministically without signing or hashing it."""
 

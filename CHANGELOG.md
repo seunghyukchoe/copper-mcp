@@ -6,7 +6,86 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Private electrical artifact capture verifies every declared file through bounded, descriptor-
+  confined reads and a complete second sweep. Portable path aliases, control characters, stale
+  bytes and invalid or changing limits refuse. Its redacted projection explicitly grants no
+  project-completeness, model-validity, simulation, readiness or apply authority.
+- A private candidate-byte KiCad connectivity-parity runner checks the exact supplied board
+  revision against the bounded Circuit Intent projection, without reopening a workspace board.
+  Fixed default severities, oracle-liveness checks and deadlines remain mandatory. This is not
+  project-context ERC, physics judgement, or a new optimization approval/apply capability.
+- A private fifty-requirement balanced-readiness catalog and bounded receipt checker, plus
+  immutable `electrical-inputs/v1` declarations. Submitted points and declared input completeness
+  are not audited maturity, physics evidence or application authority. See the
+  [readiness guide](docs/integrations/balanced-readiness.md).
+- Bounded native `optimization/v1` jobs over the immutable foundation: owner-bound SQLite CAS,
+  fenced execution, cumulative reservations, placement search, private route composition and
+  repeated candidate-bound KiCad DRC/DRC-backed DFM. Optional captured Circuit Intent runs real
+  ERC independently; absent physics authorities remain inconclusive. Five MCP tools queue,
+  inspect, cancel, export and approve packages. Execution currently requires stdio; human
+  confirmation and full-board disclosure require an explicitly trusted host and are default-off.
+  Candidate resources expire after five minutes and grant no apply authority. General external
+  routing, zoned compositions, normal-workspace schematic ERC and held-out quality remain release
+  gates. See the [v0.13 staged plan](docs/plans/v0.13-supervised-optimization.md).
+- Disposable serialization for the existing two-through-eight-signal-layer candidate core,
+  retaining full-stack through-via spans and the existing replay/topology/round-trip gates.
+- Opt-in composed route-bundle KiCad DRC from the PR #265 integration, with a bundle-bound
+  in-toto statement and complete candidate-set bindings; this adds no bundle apply operation.
+- Isolated local container execution and fixed FreeRouting/SimpleRouteJson image recipes.
+  Missing runtime/images refuse before input disclosure. The authorized Colima/Docker setup
+  completed and both real routers passed public synthetic execution/format smokes with immutable
+  local images. Production format bridges and KiCad disposal of those outputs remain outstanding.
+  Native delivery rejects malformed/missing/mismatched bytes and un-inventoried executable modules;
+  human review/disclosure require verified parent delivery, rechecked after consent.
+
 ### Changed
+
+- Global/nested pytest hooks and test configuration changes require all-interpreter evidence.
+  The mandatory evidence target runs the fixed isolated replay outside pytest, preserving its
+  one-hour ceiling and propagating failures so a pytest skip hook cannot replace execution.
+- Placement benchmark contract assertions share one fresh three-replay result with independent
+  per-test copies; negative, interruption and independent determinism runs remain separate.
+  Matched local serial/fast feedback measured 9.65x faster on the recorded host. The latest
+  hosted PR path remains 20m10s, still above the under-twenty-minute target.
+- Full B-140 census recomputation now runs once per compatibility leg in a fixed source-bound
+  subprocess without inherited coverage tracing. Every current-report assertion remains; the
+  historical runner/artifacts and default B-141 replay are unchanged. Hosted compatibility jobs
+  print per-test durations; the first 32m12s hosted run remains a missed speed target.
+- Development, CI and commit hooks now use the same pinned Ruff 0.16.6. An explicit version
+  requirement and regression test prevent a locally passing check from using different rules
+  at commit time. The hook revision is pinned to its upstream commit.
+- Optimization approval requires freshly observed board and snapshot revisions rather than
+  substituting expected values. Parent delivery rechecks the job deadline through decoding and
+  callbacks; heartbeat renewal stays within remaining runtime, and cancellation promptly releases
+  completed private retention. Existing review-only completion and separate apply semantics remain.
+- Mutation tests isolate nested pytest worker/selection defaults while preserving declared spec
+  arguments. Import/collection failures cannot become apparent mutation kills through inherited
+  parallel-test settings; CLI test environments and killing-test collection are isolated as well.
+- Offline benchmark imports use a separate private server instance and restore caller configuration,
+  including real-router smoke settings, on initialization failure as well as success. The shared
+  application server retains its own configuration regardless of import order. Historical artifacts stay
+  byte-for-byte unchanged while independent current-harness tests reproduce their outcomes.
+- All four declared evidence markers are registered; changes to safety evaluation harnesses or
+  the CI classifier require evidence replay on every supported interpreter.
+- Fresh benchmark replay compiles inventoried source bytes directly, rejecting stale bytecode,
+  changed source and uninventoried executable modules before they can inherit a reproduction claim.
+- Placement search now propagates inner legalizer exhaustion instead of skipping it as an
+  evaluated pose; optimization and benchmark certification refuse incomplete searches. The
+  benchmark-only outer guard is configuration-bound; production deadlines are unchanged.
+- MCP metadata registration defers loading the optimization database/execution stack until a
+  local stdio operation actually needs it. Tool schemas and consent semantics are unchanged.
+- CI separates canonical quality/build, Python 3.11–3.13 compatibility, source-bound evidence
+  replay, and package reuse. Fast/full/compatibility/evidence Make targets are additive; serial
+  `make test` remains. Historical B-141 loading is separate from fresh implementation replay,
+  and the current-source receipt verifies its source inventory before and after recomputation.
+  New job timeouts remain provisionally 120 minutes and block release until hosted calibration.
+- `server_info` distinguishes bounded native optimization from the remaining general hybrid
+  routing and engineering-judgement release gates.
+- Leaf policy imports defer unrelated routing/persistence backends while retaining the public
+  routing facade and its type information. Worker deadlines are unchanged; this reduces cold-start
+  work but does not establish the overall PR/local speed targets.
 
 - The live KiCad IPC surfaces now bind to a **declared major-version compatibility window**
   instead of consuming `kicad-python`'s `check_version()` boolean, and an acceptance is
@@ -49,6 +128,51 @@ All notable changes are documented here. The format follows
   than serial rather than as optimal -- the predeclared hosted `-n 2` comparison was not run. The
   ceiling on any worker count is one 610 s file, and raising it is a separate change. See B-143 and
   D-244.
+- B-141's verified provenance is now **content, not revision**, superseding the binding #252
+  installed without editing its record. #252 rebound the artifact to squash commit
+  `86634180e5a3f0956cf2ede4168710f1fce8fbcb` as a one-time unblock, correctly, under a contract
+  that required a recorded revision to resolve; this change removes that requirement, so the field
+  #252 repaired is no longer load-bearing. The recurrence is measured rather than predicted: a
+  `--depth=1` clone of `main`, running `main`'s own code against `main`'s own artifact, resolves
+  the recorded revision to `None` and refuses -- so the rebinding holds only while a consumer's
+  clone is deep enough, and clone depth, fetch policy and fork boundaries are properties of the
+  consumer's checkout rather than of the evidence. `_bound_input_paths()` is now the verified
+  provenance set and the only producer of published file digests: the configuration derives all
+  six by digesting exactly those paths, a derived guard closes the reverse direction against the
+  closed configuration key set, and a drifting input is refused **by name** instead of as one
+  opaque binding failure. `source_commit` becomes informational at every guarantee level, is never
+  resolved by any validation path, and its demotion is published as a seventh `not_claimed` entry
+  so a consumer reading the JSON alone learns it; it is still derived at publication, because the
+  evidence date is read from it and publication happens inside the repository that owns the
+  revision. `date_utc` is likewise informational, pinned against re-signing by the companion's
+  `artifact_run_id`, with the new opt-in `verify_evidence_date_against_history` reporting
+  `agrees` / `disagrees` / `undeterminable` and returning rather than raising on all three --
+  `disagrees` is the ordinary outcome of review taking more than a day, and `undeterminable` is
+  *not yet answerable* rather than *wrong*, which is the conflation that turned `main` red in
+  #250. The guarantee vocabulary is unchanged and `load_artifact` still reaches `companion_bound`.
+  The accepted cost is stated rather than buried: a re-signed `date_utc` or `source_commit` used
+  to be refused at `repository_bound` by Git and is now refused at `companion_bound` by
+  `artifact_run_id`, so nothing moves at the authoritative entry point while a caller stopping at
+  `repository_bound` accepts a document naming any revision. The republication reproduced the
+  pinned whole-metrics digest
+  `sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly -- a
+  re-binding, not a re-measurement -- while freshly observing descriptive mean timings of
+  **47.348s** control and **51.310s** treatment. `test_published_artifact_records_a_default_branch_ancestor`,
+  the `COPPER_MCP_DEFAULT_BRANCH_REF` CI injection and its workflow regression are removed
+  together: they mechanize the rule this change retires and would refuse this change itself. The
+  archived `b7c71d4d` bytes are untouched; because the claim list gained an entry and claim lists
+  are validated exactly, that archived document no longer validates against the current contract,
+  which is the correct reading of an append-only archive. The simulated squash -- a `--depth=50`
+  clone of `main` carrying this branch's file content but none of its commits -- resolves the
+  recorded revision to `None`, re-digests all six bound inputs as matching, and now **accepts at
+  `companion_bound`**. Focused evidence validation is **200/200 focused tests** and mutation evidence is
+  **79/79 evidence-contract mutants killed**, with zero survivors, zero stale anchors, zero
+  control failures, zero invalid runs and zero `not_run`. Five mutants whose code this change
+  deletes were retired rather than silently dropped, two were re-anchored onto the successor code,
+  and six new mutants pin the new guards. One mutant survived the first run and was a real coverage
+  gap rather than a mapping typo: nothing exercised the whole-configuration comparison, so `seed`,
+  the router version and every declared ceiling were unpinned against a re-signed document; a new
+  test closes it (`D-245`, `R-191`, `SEC-178`, `B-141`, `ADR-0127`).
 
 ### Added
 

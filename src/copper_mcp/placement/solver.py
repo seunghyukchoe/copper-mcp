@@ -23,6 +23,7 @@ from copper_mcp.board_ir import BoardIRSnapshot, PointNM
 from copper_mcp.placement.contracts import (
     FootprintPlacement,
     PlacementCandidate,
+    PlacementFailureCode,
     PlacementIntent,
     PlacementProposal,
     PlacementResult,
@@ -184,6 +185,7 @@ class PlacementSolveResult:
             "completed",
             "cancelled",
             "deadline_exhausted",
+            "legalizer_exhausted",
             "work_exhausted",
             "input_refused",
         }:
@@ -303,6 +305,11 @@ def solve_placement(
         board_path=board_path,
     )
     evaluations = 1
+    if (
+        initial.diagnostic is not None
+        and initial.diagnostic.code is PlacementFailureCode.BUDGET_EXHAUSTED
+    ):
+        return outcome(stopped() or "legalizer_exhausted", initial, None, (), evaluations)
     if initial.candidate is None:
         return outcome("input_refused", initial, None, (), evaluations)
 
@@ -352,6 +359,14 @@ def solve_placement(
                         board_path=board_path,
                     )
                     evaluations += 1
+                    if (
+                        result.diagnostic is not None
+                        and result.diagnostic.code is PlacementFailureCode.BUDGET_EXHAUSTED
+                    ):
+                        # An inner deadline/work refusal is not an evaluated illegal pose.
+                        # Do not continue until the outer evaluation count looks complete.
+                        status = "legalizer_exhausted"
+                        break
                     if result.candidate is None:
                         continue
                     score, evidence, score_status = _score(

@@ -97,19 +97,44 @@ CORPUS_MANIFEST_ERROR = "the B-088 corpus membership is not the exact pinned fil
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 _DATE_UTC = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
-_EVIDENCE_DATE_ERROR = "the B-141 evidence date is not its recorded commit's UTC date"
-# An absent object and a disagreeing object are different facts and get different verdicts.  A
-# repository that does not contain the recorded commit has observed no tampering whatsoever, and
-# saying it did would be a false claim about the artifact.  This is not hypothetical: a CI run
-# refused a valid revision this way because the commit was reachable only from an unrelated side
-# branch, so fetching the pull-request ref and its base never brought the object in -- `fetch-depth:
-# 0` does not help when nothing fetched reaches it.  A fresh clone before its first fetch, a shallow
-# checkout, and a consumer validating an artifact published from another fork are the same case.
-# This refusal therefore names what could not be resolved and that it was looked for here.
+_EVIDENCE_DATE_ERROR = "the B-141 evidence date could not be derived from a recorded commit"
+# Raised only where a *named revision* is genuinely required: deriving the published evidence date
+# at publication time, inside the repository that is publishing.  It is deliberately not raised by
+# any validation path.  An absent object and a disagreeing object are different facts, and a
+# repository that does not contain a recorded commit has observed no tampering whatsoever; saying
+# it did would be a false claim about the artifact.  That is not hypothetical -- it turned `main`
+# red once already (issue #250), because a squash merge discards the branch commit the artifact
+# recorded.  A fresh clone before its first fetch, a shallow checkout, and a consumer validating an
+# artifact published from another fork are the same case.
 _COMMIT_ABSENT_ERROR = (
     "the B-141 recorded source commit is not present in this repository, so its provenance could "
     "not be consulted"
 )
+_BOUND_INPUT_ERROR = "the B-141 bound input does not match this repository"
+_BOUND_INPUT_COVERAGE_ERROR = (
+    "the B-141 verified provenance set does not cover every published file digest"
+)
+
+# What the recorded evidence date can be compared against, once the run's runner blob has reached
+# the default branch.  Three outcomes, because "I cannot tell yet" is not "it disagrees": before the
+# merge -- and in any clone whose history does not reach far enough back, or that has no Git at all
+# -- there is no default-branch commit to compare with, and reporting that as a disagreement is the
+# same false claim the absent-commit conflation made.  These are also deliberately not verdicts:
+# `disagrees` is the *expected* outcome whenever review took longer than a day, so nothing refuses
+# on it.  See :func:`verify_evidence_date_against_history`.
+EVIDENCE_DATE_AGREES = "agrees"
+EVIDENCE_DATE_DISAGREES = "disagrees"
+EVIDENCE_DATE_UNDETERMINABLE = "undeterminable"
+EVIDENCE_DATE_OUTCOMES: tuple[str, ...] = (
+    EVIDENCE_DATE_AGREES,
+    EVIDENCE_DATE_DISAGREES,
+    EVIDENCE_DATE_UNDETERMINABLE,
+)
+# How far back first-parent history is walked looking for the commit that introduced the bound
+# runner blob.  Bounded on purpose: an unbounded walk over a large history is a denial-of-service
+# surface at a validation boundary, and a blob older than this is reported as undeterminable rather
+# than searched for indefinitely.
+_EVIDENCE_DATE_HISTORY_LIMIT = 200
 
 # How much of the contract a validation call actually established, weakest first.  This is returned
 # rather than left to the reader because "validate_report accepted it" is a weaker statement than
@@ -180,6 +205,11 @@ NOT_CLAIMED: tuple[str, ...] = (
     "apply, editor, hardware, or network behaviour",
     "any board, net, revision, candidate, path, geometry, or private corpus identity",
     "generalisation beyond the exact committed 20-board B-088 subset",
+    # The demotion of `source_commit`, published rather than left in the runner's docstrings: a
+    # consumer reading this JSON has no other way to learn that the field is a note.
+    "that source_commit names a revision any repository still has, since this project's "
+    "linear-history merge policy discards every commit a pull request creates; the verified "
+    "provenance is the content digests in configuration, not that revision",
 )
 
 _B140_PRIMARY_EXPECTED: dict[str, int] = {
@@ -551,57 +581,69 @@ def _resolve_recorded_commit(commit: str) -> str | None:
     return resolved
 
 
-def _validate_source_commit_runner_binding(
-    document: dict[str, Any], *, allow_absent_commit: bool = False
-) -> bool:
-    """Require the report runner digest to come from its declared Git revision.
+def _bound_input_paths() -> dict[str, Path]:
+    """Every file this run read, keyed by the configuration field that binds its content.
 
-    Returns whether the repository was actually consulted.  ``False`` means the recorded commit is
-    not in this repository and the caller allowed that; it never means the binding held.
+    This mapping is the verified provenance set, and it is the *only* place a bound file digest is
+    produced: :func:`_configuration` publishes exactly these digests by digesting exactly these
+    paths, so a field cannot be published without also being verified.
+
+    Location and revision are both unstable under this repository's merge policy; content is not.
+    Each entry is checked by digesting the file that is here now, with no Git involved at all, so
+    the check means the same thing in a shallow clone, a fresh clone, a fork, or an exported
+    tarball -- and means exactly as much after the merge as it did at publication.
     """
 
-    source_commit = document.get("source_commit")
+    return {
+        "runner_sha256": ROOT / SCRIPT_PATH,
+        "b140_runner_sha256": B140_RUNNER_PATH,
+        "b140_artifact_sha256": B140_ARTIFACT,
+        "reference_runner_sha256": REFERENCE_RUNNER_PATH,
+        "reference_adapter_sha256": B088_ADAPTER_PATH,
+        "reference_artifact_sha256": REFERENCE_ARTIFACT,
+    }
+
+
+def _assert_bound_inputs_cover_published_digests() -> None:
+    """Refuse a published file digest that the verified provenance set does not re-digest.
+
+    Derived, not hand-listed, for the reason :func:`_assert_commitment_covers_claims` is: a future
+    field that binds a new input is worthless if nothing checks it, and an unchecked ``*_sha256``
+    reads to a consumer exactly like a checked one.  ``configuration_sha256`` is excluded because
+    it digests the configuration object itself rather than a file, and is verified by the nested
+    digest check in :func:`validate_report`.
+    """
+
+    published = {
+        key
+        for key in _CONFIGURATION_KEYS
+        if key.endswith("_sha256") and key != "configuration_sha256"
+    }
+    if published != set(_bound_input_paths()):
+        raise NegotiatedDifferentialError(_BOUND_INPUT_COVERAGE_ERROR)
+
+
+def _validate_bound_input_content(document: dict[str, Any]) -> None:
+    """Require every bound input's content to be what this repository holds, input by input.
+
+    This is the provenance the strongest level now rests on.  The check it replaces resolved
+    ``source_commit`` and compared the runner blob at that revision; ``main`` sets
+    ``required_linear_history=true``, so squash and rebase both rewrite SHAs and no commit a pull
+    request creates survives its own merge.  The revision binding was therefore guaranteed to break
+    on every merge, and did (issue #250).  Content survives every merge strategy, and a per-input
+    refusal names which input drifted rather than reporting one opaque binding failure.
+    """
+
+    _assert_bound_inputs_cover_published_digests()
     configuration = document.get("configuration")
-    if (
-        not isinstance(source_commit, str)
-        or _GIT_COMMIT.fullmatch(source_commit) is None
-        or not isinstance(configuration, dict)
-        or not isinstance(configuration.get("runner_sha256"), str)
-        or _SHA256.fullmatch(configuration["runner_sha256"]) is None
-    ):
-        raise NegotiatedDifferentialError(
-            "the B-141 source commit/runner binding could not be verified"
-        )
-    git = shutil.which("git")
-    if git is None:
-        raise NegotiatedDifferentialError(
-            "the B-141 source commit/runner binding could not be verified"
-        )
-    resolved = _resolve_recorded_commit(source_commit)
-    if resolved is None:
-        # Absent, not disagreeing.  Nothing about the binding has been observed either way.
-        if allow_absent_commit:
-            return False
-        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)
-    try:
-        # The commit is here, so a failure past this point is a real binding failure: the revision
-        # does not carry the runner it is bound to.
-        runner_bytes = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
-            [git, "show", f"{resolved}:{SCRIPT_PATH}"],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            timeout=5,
-        ).stdout
-    except (OSError, subprocess.SubprocessError):
-        raise NegotiatedDifferentialError(
-            "the B-141 source commit/runner binding could not be verified"
-        ) from None
-    if "sha256:" + hashlib.sha256(runner_bytes).hexdigest() != configuration["runner_sha256"]:
-        raise NegotiatedDifferentialError(
-            "the B-141 source commit/runner binding could not be verified"
-        )
-    return True
+    if not isinstance(configuration, dict):
+        raise NegotiatedDifferentialError(_BOUND_INPUT_ERROR)
+    for key, path in _bound_input_paths().items():
+        recorded = configuration.get(key)
+        if not isinstance(recorded, str) or _SHA256.fullmatch(recorded) is None:
+            raise NegotiatedDifferentialError(f"{_BOUND_INPUT_ERROR}: {key}")
+        if _file_digest(path) != recorded:
+            raise NegotiatedDifferentialError(f"{_BOUND_INPUT_ERROR}: {key}")
 
 
 def _commit_utc_date(commit: str) -> str:
@@ -638,31 +680,101 @@ def _commit_utc_date(commit: str) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%d")
 
 
-def _validate_evidence_date_binding(
-    document: dict[str, Any], *, allow_absent_commit: bool = False
-) -> bool:
-    """Require the published evidence date to be the recorded commit's own UTC date.
+def _first_parent_commit_introducing_runner(runner_sha256: str, *, ref: str = "HEAD") -> str | None:
+    """Return the oldest first-parent commit whose runner blob is the bound content, if any.
 
-    Returns whether the repository was actually consulted.  A recorded commit this repository does
-    not contain yields ``_COMMIT_ABSENT_ERROR`` or ``False`` -- never the tampering refusal, which
-    would assert a disagreement nobody observed.
+    First-parent order is what makes this answerable at all: it is the default branch's own
+    narrative, so a squash lands as exactly one commit on it and the blob it carries is findable
+    afterwards even though the branch commits that produced it are gone.  ``None`` means "not
+    found here" and never "wrong" -- an unmerged branch, a clone whose history does not reach
+    ``_EVIDENCE_DATE_HISTORY_LIMIT`` commits back, and a checkout with no Git at all all land here.
+    """
+
+    git = shutil.which("git")
+    if git is None or not isinstance(runner_sha256, str):
+        return None
+    if _SHA256.fullmatch(runner_sha256) is None:
+        return None
+    try:
+        touched = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+            [
+                git,
+                "log",
+                "--first-parent",
+                f"--max-count={_EVIDENCE_DATE_HISTORY_LIMIT}",
+                "--format=%H",
+                ref,
+                "--",
+                SCRIPT_PATH,
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        ).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    # Newest first from Git; the introducing commit is the oldest one carrying the bound content.
+    for commit in reversed(touched):
+        if _GIT_COMMIT.fullmatch(commit) is None:
+            continue
+        try:
+            blob = subprocess.run(  # noqa: S603 - fixed local Git executable and argv
+                [git, "show", f"{commit}:{SCRIPT_PATH}"],
+                cwd=ROOT,
+                check=True,
+                capture_output=True,
+                timeout=15,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if "sha256:" + hashlib.sha256(blob).hexdigest() == runner_sha256:
+            return commit
+    return None
+
+
+def verify_evidence_date_against_history(document: dict[str, Any], *, ref: str = "HEAD") -> str:
+    """Compare the recorded evidence date with the default branch, as a *later*, opt-in check.
+
+    Deliberately not part of any guarantee level, never called by :func:`validate_report` or
+    :func:`load_artifact`, and never written into the artifact -- so it is not part of the report's
+    self-digest either.  It cannot be, and that is the whole reason it lives out here.  The only
+    date a run can record is the date of the commit it read, which is a branch commit; the only
+    date the default branch can later confirm is the date of the commit that carried the runner
+    blob onto it.  Those differ by however long review took.  Requiring them to agree at
+    publication would require a value that does not exist yet, and writing the post-merge answer
+    into the document would mean the artifact could not be signed until after it was merged --
+    while re-signing it afterwards would change the ``run_id`` the companion commitment pins.
+
+    Returns one of ``EVIDENCE_DATE_OUTCOMES``, and returns rather than raises because none of the
+    three is a verdict about the artifact:
+
+    * ``agrees`` -- the run was published and merged on the same UTC day;
+    * ``disagrees`` -- it was not, which is the ordinary outcome of review taking more than a day
+      and is not evidence of anything;
+    * ``undeterminable`` -- this checkout cannot answer: the blob has not reached the default
+      branch yet, the history here does not reach back far enough, or there is no Git.
+
+    Only the caller knows which of those matters to it, so only the caller decides.
     """
 
     recorded = document.get("date_utc")
-    source_commit = document.get("source_commit")
+    configuration = document.get("configuration")
     if (
         not isinstance(recorded, str)
         or _DATE_UTC.fullmatch(recorded) is None
-        or not isinstance(source_commit, str)
+        or not isinstance(configuration, dict)
     ):
         raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
-    if _resolve_recorded_commit(source_commit) is None:
-        if allow_absent_commit:
-            return False
-        raise NegotiatedDifferentialError(_COMMIT_ABSENT_ERROR)
-    if recorded != _commit_utc_date(source_commit):
-        raise NegotiatedDifferentialError(_EVIDENCE_DATE_ERROR)
-    return True
+    introducing = _first_parent_commit_introducing_runner(
+        configuration.get("runner_sha256", ""), ref=ref
+    )
+    if introducing is None:
+        return EVIDENCE_DATE_UNDETERMINABLE
+    if _commit_utc_date(introducing) != recorded:
+        return EVIDENCE_DATE_DISAGREES
+    return EVIDENCE_DATE_AGREES
 
 
 def _load_object(path: Path, *, label: str) -> dict[str, Any]:
@@ -1557,17 +1669,18 @@ def _configuration() -> dict[str, Any]:
         "run_outcome_taxonomy": list(RUN_OUTCOME_TAXONOMY),
         "repair_outcome_taxonomy": list(REPAIR_OUTCOME_TAXONOMY),
         "upper_bounds": _upper_bounds(),
-        "runner_sha256": _file_digest(ROOT / SCRIPT_PATH),
         "b140_source_commit": B140_SOURCE_COMMIT,
-        "b140_runner_sha256": _file_digest(B140_RUNNER_PATH),
-        "b140_artifact_sha256": _file_digest(B140_ARTIFACT),
         "b140_artifact_run_id": B140_RUN_ID,
         "reference_source_commit": B088_SOURCE_COMMIT,
-        "reference_runner_sha256": _file_digest(REFERENCE_RUNNER_PATH),
-        "reference_adapter_sha256": _file_digest(B088_ADAPTER_PATH),
-        "reference_artifact_sha256": _file_digest(REFERENCE_ARTIFACT),
         "reference_artifact_run_id": B088_RUN_ID,
     }
+    # Every file digest comes from the verified provenance set and from nowhere else, so a digest
+    # this report publishes is a digest `_validate_bound_input_content` re-computes.  The two
+    # historical `*_source_commit` values above are not in that set and are not provenance: they
+    # are notes saying which revision each historical authority was published from, and this
+    # repository's linear-history policy means no such revision is guaranteed to still exist.
+    for key, path in _bound_input_paths().items():
+        configuration[key] = _file_digest(path)
     configuration["configuration_sha256"] = _digest(configuration)
     return configuration
 
@@ -1605,7 +1718,23 @@ def build_report(
     *,
     source_commit: str | None = None,
 ) -> dict[str, Any]:
-    """Build a canonical self-digesting report without writing it."""
+    """Build a canonical self-digesting report without writing it.
+
+    ``source_commit`` records the revision this run happened to read.  It is *informational*: the
+    published report says so in ``not_claimed``, and no validation path resolves it.  Under this
+    repository's ``required_linear_history`` policy a squash or rebase rewrites every commit a
+    pull request creates, so the revision a run can name is by construction not the revision that
+    ends up on the default branch, and demanding that it resolve turned ``main`` red once already
+    (issue #250).  A commit SHA is simply not a durable identifier for anything a pull request
+    produces here; the durable identifiers are content digests, and those are what the verified
+    provenance set holds.
+
+    It is still *derived* here rather than accepted from a caller unchecked, because the evidence
+    date is read from it: a hand-written date can name a day the run did not happen on, and did in
+    the first version of this artifact.  So publication -- which happens inside the repository that
+    owns the revision -- still requires the commit to resolve, and validation, which may happen
+    anywhere, never does.
+    """
 
     if repetitions != BENCHMARK_REPETITIONS:
         raise ValueError("B-141 requires exactly two repetitions")
@@ -1855,6 +1984,39 @@ _ROOT_KEYS = frozenset(
         "differential_definition",
         "not_claimed",
         "run_id",
+    }
+)
+# Named rather than inlined into the shape validator because the verified provenance set is checked
+# against it: every published file digest must be one `_bound_input_paths` actually re-digests.
+_CONFIGURATION_KEYS = frozenset(
+    {
+        "adapter_version",
+        "router_version",
+        "routing_policy",
+        "negotiated_routing_policy",
+        "fixed_grid_step_nm",
+        "router_limits",
+        "envelope_budgets",
+        "seed",
+        "request_local_grid_origins",
+        "selected_layer_pad_count",
+        "control",
+        "treatment",
+        "refusal_taxonomy",
+        "run_outcome_taxonomy",
+        "repair_outcome_taxonomy",
+        "upper_bounds",
+        "runner_sha256",
+        "b140_source_commit",
+        "b140_runner_sha256",
+        "b140_artifact_sha256",
+        "b140_artifact_run_id",
+        "reference_source_commit",
+        "reference_runner_sha256",
+        "reference_adapter_sha256",
+        "reference_artifact_sha256",
+        "reference_artifact_run_id",
+        "configuration_sha256",
     }
 )
 _METRICS_KEYS = frozenset(
@@ -2208,35 +2370,7 @@ def _validate_aggregate_shape(aggregate: Any, *, treatment: bool) -> dict[str, A
 
 
 def _validate_configuration_shape(configuration: Any) -> None:
-    required_keys = {
-        "adapter_version",
-        "router_version",
-        "routing_policy",
-        "negotiated_routing_policy",
-        "fixed_grid_step_nm",
-        "router_limits",
-        "envelope_budgets",
-        "seed",
-        "request_local_grid_origins",
-        "selected_layer_pad_count",
-        "control",
-        "treatment",
-        "refusal_taxonomy",
-        "run_outcome_taxonomy",
-        "repair_outcome_taxonomy",
-        "upper_bounds",
-        "runner_sha256",
-        "b140_source_commit",
-        "b140_runner_sha256",
-        "b140_artifact_sha256",
-        "b140_artifact_run_id",
-        "reference_source_commit",
-        "reference_runner_sha256",
-        "reference_adapter_sha256",
-        "reference_artifact_sha256",
-        "reference_artifact_run_id",
-        "configuration_sha256",
-    }
+    required_keys = _CONFIGURATION_KEYS
     if type(configuration) is not dict or set(configuration) != required_keys:
         raise NegotiatedDifferentialError("the B-141 configuration is malformed")
     if (
@@ -2633,9 +2767,11 @@ def _validate_report_shape(document: Any) -> dict[str, Any]:
         or record["differential_definition"] != DIFFERENTIAL_DEFINITION
     ):
         raise NegotiatedDifferentialError("the B-141 report shape is malformed")
-    # The shape check no longer pins a literal date: the value is bound to the recorded commit by
-    # `_validate_evidence_date_binding`.  It must still be a real calendar day, so `9999-99-99`
-    # cannot pass the regex and then be excused as merely unverified.
+    # The shape check does not pin a literal date, and nothing here relates the value to history:
+    # `date_utc` is informational, pinned against re-signing by the companion's `artifact_run_id`
+    # and related to the default branch only by the opt-in
+    # `verify_evidence_date_against_history`.  It must still be a real calendar day, so
+    # `9999-99-99` cannot pass the regex and then be excused as merely unverified.
     try:
         date.fromisoformat(record["date_utc"])
     except ValueError as error:
@@ -3026,29 +3162,28 @@ def _validate_authoritative_bindings(
     corpus: Path = b140.CORPUS,
     artifact_path: Path | None = None,
     require_commitment: bool = False,
-    allow_absent_source_commit: bool = False,
 ) -> GuaranteeLevel:
-    """Bind a generic report to the live runner, historical roots, corpus, and optional sidecar.
+    """Bind a generic report to the live inputs, historical roots, corpus, and optional sidecar.
 
     Returns the guarantee reached: ``repository_bound`` without a companion, ``companion_bound``
     with one.
 
-    ``allow_absent_source_commit`` is the answer to "what if this clone does not have the recorded
-    commit?".  By default that refuses, because every current call site invokes validation for its
-    exception rather than its return value, and a silent downgrade would hand such a caller an
-    artifact whose provenance was never checked.  A caller that knows it may be working in a
-    shallow checkout or against another fork's artifact can opt in instead, and is told what was
-    actually established: the return drops to ``offline``, which by construction claims no
-    repository binding at all.  Neither branch ever reports tampering that was not observed.
+    Provenance here is *content*, not revision.  ``source_commit`` is not resolved and its absence
+    is not an error: under ``required_linear_history`` no commit a pull request creates survives its
+    own merge, so a revision binding was guaranteed to break on merge and did.  What is checked is
+    that every bound input's bytes are the bytes this repository holds -- which is true in a shallow
+    clone, a fresh clone, a fork, or an exported tarball, and is exactly as strong afterwards as it
+    was at publication.
+
+    ``source_commit`` and ``date_utc`` are therefore not checked at ``repository_bound`` at all.
+    They are checked at ``companion_bound``, but as *document* fields rather than as claims about
+    the world: ``artifact_run_id`` is the digest of the whole body, so re-signing either one is
+    refused, while nothing here asserts that the revision exists or that the date is any
+    particular day.  That is the honest division -- the companion can pin what the artifact says,
+    and no repository can confirm a revision this project's merge policy destroys.
     """
 
-    runner_bound = _validate_source_commit_runner_binding(
-        document, allow_absent_commit=allow_absent_source_commit
-    )
-    date_bound = _validate_evidence_date_binding(
-        document, allow_absent_commit=allow_absent_source_commit
-    )
-    provenance_consulted = runner_bound and date_bound
+    _validate_bound_input_content(document)
     configuration = document.get("configuration")
     if not isinstance(configuration, dict) or configuration != _configuration():
         raise NegotiatedDifferentialError("the B-141 source/configuration binding drifted")
@@ -3074,10 +3209,6 @@ def _validate_authoritative_bindings(
     _validate_population_binding_shape(population_binding)
     if population_binding != expected_population_binding:
         raise NegotiatedDifferentialError("the B-141 corpus manifest binding drifted")
-    if not provenance_consulted:
-        # Everything checkable without the recorded commit has been checked, and none of it
-        # establishes provenance.  `offline` is the strongest honest answer.
-        return GUARANTEE_OFFLINE
     if not require_commitment:
         return GUARANTEE_REPOSITORY_BOUND
     candidate = DEFAULT_OUTPUT if artifact_path is None else Path(artifact_path).expanduser()
@@ -3112,7 +3243,6 @@ def validate_report(
     corpus: Path = b140.CORPUS,
     verify_live_bindings: bool = False,
     require_semantics: bool = True,
-    allow_absent_source_commit: bool = False,
 ) -> GuaranteeLevel:
     """Validate a report to a stated guarantee level, and return the level actually reached.
 
@@ -3126,26 +3256,26 @@ def validate_report(
     closed taxonomies, every declared count/breakdown partition, the closed aggregate ceilings, the
     iteration floor, the control arm's inability to publish repairs, and the differential.
 
-    **NOT checked unless ``verify_live_bindings``** -- everything whose truth lives in the
-    repository rather than in the document:
+    **NOT checked unless ``verify_live_bindings``** -- everything whose truth lives in this
+    repository's files rather than in the document: that every digest in the verified provenance
+    set is the digest of the file that is here now, and that the B-140/B-088 roots and the corpus
+    manifest are the pinned authorities.
 
-    * that ``date_utc`` is the UTC committer date of the revision the report records, so a
-      re-signed artifact may name a day the run did not happen on;
-    * that ``source_commit`` resolves to a commit that exists and whose runner blob is the one the
-      report binds, so a well-formed 40-hex value naming nothing is accepted here;
-    * that the configuration matches the live runner, and that the B-140/B-088 roots and the corpus
-      manifest are the pinned authorities.
+    **NEVER checked by this function, at any argument:**
 
-    **NEVER checked by this function, at any argument** -- the companion commitment and the exact
-    measurement pins. A self-consistent re-signing that moves a headline total is accepted by
-    ``validate_report`` alone; only the companion refuses it.
-
-    **When the recorded commit is not in this repository** -- a shallow checkout, a fresh clone
-    before its first fetch, an artifact published from another fork -- nothing about its provenance
-    has been observed, so it is never reported as a date or binding disagreement. By default that
-    refuses with ``_COMMIT_ABSENT_ERROR``, naming what could not be resolved. With
-    ``allow_absent_source_commit`` it instead downgrades: the checks that do not need the commit
-    still run, and the level returned drops to ``offline``.
+    * the companion commitment and the exact measurement pins -- a self-consistent re-signing that
+      moves a headline total is accepted by ``validate_report`` alone; only the companion refuses
+      it;
+    * ``date_utc``, which is informational at every level here.  It is the UTC date of the commit
+      the run read.  What pins it against re-signing is the companion, whose ``artifact_run_id``
+      digests it along with the rest of the body; what relates it to the default branch is the
+      separate opt-in :func:`verify_evidence_date_against_history`, whose three outcomes are
+      reported and never refused on;
+    * ``source_commit``, which is likewise informational and is never resolved.  A well-formed
+      40-hex value naming nothing is accepted at every level, on purpose: under
+      ``required_linear_history`` no commit a pull request creates survives its own merge, so a
+      recorded revision that resolves nowhere is the *expected* post-merge state and not evidence
+      of anything.  The published report says so in ``not_claimed``.
 
     The authoritative entry point is :func:`load_artifact`, which reaches
     ``LOAD_ARTIFACT_GUARANTEE``. A caller that needs provenance should use it, or branch on the
@@ -3193,9 +3323,7 @@ def validate_report(
         }:
             raise NegotiatedDifferentialError("the B-141 reference baseline binding drifted")
     if verify_live_bindings:
-        return _validate_authoritative_bindings(
-            document, corpus=corpus, allow_absent_source_commit=allow_absent_source_commit
-        )
+        return _validate_authoritative_bindings(document, corpus=corpus)
     return GUARANTEE_OFFLINE if require_semantics else GUARANTEE_SHAPE_ONLY
 
 
@@ -3203,11 +3331,18 @@ def load_artifact(path: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
     """Load a B-141 artifact to ``LOAD_ARTIFACT_GUARANTEE`` -- the authoritative entry point.
 
     This is the call that establishes everything :func:`validate_report` documents as out of its
-    own scope: the recorded revision resolves and supplies the bound runner blob, the evidence date
-    is that revision's own UTC date, the live authorities and corpus manifest are the pinned ones,
-    and the companion commitment's exact measurement pins hold.  The level reached is checked here
-    rather than described, so a future edit that drops the companion binding fails the load instead
-    of quietly weakening what a caller was promised.
+    own scope: every digest in the verified provenance set is the digest of the file this
+    repository holds, the live authorities and corpus manifest are the pinned ones, and the
+    companion commitment's exact measurement pins hold -- including ``artifact_run_id``, which
+    digests the whole document body and so refuses a re-signed ``date_utc`` or ``source_commit``.
+    The level reached is checked here rather than described, so a future edit that drops the
+    companion binding fails the load instead of quietly weakening what a caller was promised.
+
+    What this call does **not** establish, because no repository can: that ``source_commit`` names
+    a revision anything still has.  It is not resolved, its absence is not an error, and a squash
+    merge orphaning it is expected rather than a failure.  A caller that wants the recorded date
+    related to the default branch calls :func:`verify_evidence_date_against_history` separately and
+    reads its three-way answer.
     """
 
     document = _load_object(path, label="B-141")

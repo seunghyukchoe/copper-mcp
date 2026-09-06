@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -37,6 +38,12 @@ def test_scene_action_closure_benchmark_records_the_mcp_oracle(tmp_path: Path) -
     assert completed.returncode == 0, completed.stderr
     result = json.loads(output.read_text(encoding="utf-8"))
     assert result["benchmark"] == "scene-route-referential-closure-v1"
+    assert result["configuration"]["harness_helper"] == {
+        "path": "scripts/offline_mcp_harness.py",
+        "sha256": hashlib.sha256(
+            (ROOT / "scripts/offline_mcp_harness.py").read_bytes()
+        ).hexdigest(),
+    }
     assert all(result["environment"]["dependencies"].values())
     schema = result["schema_evidence"]
     assert schema["candidate_closed"] is True

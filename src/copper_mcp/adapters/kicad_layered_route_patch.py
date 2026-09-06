@@ -1,7 +1,7 @@
 """Disposable KiCad serialization for the bounded layered-route proposal.
 
 This adapter is deliberately narrower than an apply service.  It renders a verified, immutable
-two-signal-layer candidate into new bytes, reparses those bytes through the Board IR adapter, and
+two-through-eight-signal-layer candidate into new bytes, reparses those bytes through Board IR, and
 checks that the only semantic additions are the candidate's segments and through-vias.  It never
 writes a board, calls KiCad, runs DRC, or grants an apply token.
 """
@@ -100,7 +100,7 @@ def _path_edges(paths: tuple[LayeredRoutePath, ...]) -> list[tuple[str, PointNM,
 def _validate_candidate_geometry(
     snapshot: BoardIRSnapshot,
     candidate: LayeredRouteCandidate,
-    layer_ids: tuple[str, str],
+    layer_ids: tuple[str, ...],
 ) -> None:
     """Validate candidate references and endpoint/via topology before rendering."""
 
@@ -142,7 +142,9 @@ def _validate_candidate_geometry(
         for via in candidate.patch.vias
     ):
         raise KiCadLayeredRoutePatchError("candidate via is disconnected from its route geometry")
-    expected_layers = set(layer_ids)
+    # A through via spans the physical outer copper layers even when the route switches
+    # between two inner layers. Intermediate layers must not become a blind-via span.
+    expected_layers = {layer_ids[0], layer_ids[-1]}
     for via in candidate.patch.vias:
         if {via.start_layer_id, via.end_layer_id} != expected_layers:
             raise KiCadLayeredRoutePatchError(
@@ -224,9 +226,13 @@ def render_kicad_layered_candidate_board(
             key=lambda layer: (layer.index, layer.id),
         )
     )
-    if len(signal_layers) != 2:
-        raise KiCadLayeredRoutePatchError("layered serializer requires exactly two signal layers")
-    layer_ids = (signal_layers[0].id, signal_layers[1].id)
+    if not 2 <= len(signal_layers) <= 8 or len(signal_layers) != len(
+        snapshot.content.copper_layers
+    ):
+        raise KiCadLayeredRoutePatchError(
+            "layered serializer requires two through eight signal layers"
+        )
+    layer_ids = tuple(layer.id for layer in signal_layers)
     _validate_candidate_geometry(snapshot, candidate, layer_ids)
     edges = _path_edges(candidate.patch.paths)
     if (
@@ -284,7 +290,7 @@ def render_kicad_layered_candidate_board(
                 center=via.center,
                 diameter_nm=via.diameter_nm,
                 drill_nm=via.drill_nm,
-                layer_names=(signal_layers[0].name, signal_layers[1].name),
+                layer_names=(signal_layers[0].name, signal_layers[-1].name),
                 net_name=net_name,
                 native_uuid=native_uuid,
             )
@@ -297,7 +303,7 @@ def render_kicad_layered_candidate_board(
                 diameter_nm=via.diameter_nm,
                 drill_nm=via.drill_nm,
                 start_layer_id=layer_ids[0],
-                end_layer_id=layer_ids[1],
+                end_layer_id=layer_ids[-1],
                 kind=ViaKind.THROUGH,
             )
         )

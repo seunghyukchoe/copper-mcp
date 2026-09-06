@@ -1,8 +1,8 @@
 {
   "artifact_path": "benchmarks/results/routing/2026-08-30-negotiated-multipin-branch-repair-v1.json",
-  "artifact_run_id": "sha256:237d4ddfd4ce403aa3bb2ea19e4229aa0833f667501127fd5acd223e62173021",
-  "artifact_sha256": "sha256:32ec7b3f489d006940f0ab6b05987b943bf8263f7ded07ef27085b57d7368e7f",
-  "configuration_sha256": "sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3",
+  "artifact_run_id": "sha256:42cd4f172b227e9a26a945f779ad548718eaed3c9f42debe016198b15e123beb",
+  "artifact_sha256": "sha256:7e05d1df34b39c726e944b39e6671dc67d920f53a3732ae6898c5653a3a32e69",
+  "configuration_sha256": "sha256:60ad50ee812875411fd88413182954c56f677ebe0e3300cc5295902d92e8400d",
   "control": {
     "boards_completed": 0,
     "negotiated_nets_completed": 0,
@@ -75,10 +75,10 @@
     "submitted_nets_the_reference_routed": 70
   },
   "repetitions": 2,
-  "run_id": "sha256:6ce94a530ef55ecb1690a0a19eb5b148607e7c30bd80bc0ded87a038b1c74efd",
-  "runner_sha256": "sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1",
+  "run_id": "sha256:d431b607b89ca81582b2da6686a739b9196097a3e752e12fdaf11cba93059757",
+  "runner_sha256": "sha256:33bd81c80bd6c2ad8f970c5477fd236b4c05759c99b50145a66152451672f3bb",
   "schema": "copper-mcp/benchmark-commitment/negotiated-multipin-branch-repair/v1",
-  "source_commit": "86634180e5a3f0956cf2ede4168710f1fce8fbcb",
+  "source_commit": "0202329da16ecae0fbb61e7ed7a0215cfa599585",
   "treatment": {
     "boards_completed": 1,
     "negotiated_nets_completed": 2,

@@ -23,9 +23,9 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-247` | `D-248` |
-| [Risk register](risk-register.md) | `R-` | `R-193` | `R-194` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-176` | `SEC-177` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-260` | `D-261` |
+| [Risk register](risk-register.md) | `R-` | `R-199` | `R-200` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-191` | `SEC-192` |
 | [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-143` | `B-144` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
@@ -51,6 +51,22 @@ allocated `D-236`/`R-186` from the same stale registry, and the second to merge 
 first, so this lane renumbered again — to `D-242`/`R-188`, the registry's next free numbers at
 main's tip, rather than reusing any number below `D-242` under rule 2 or adding a seventh and
 eighth double-named identifier to the list above.
+
+The 2026-09-02 blob-bound-provenance lane (PR
+[#259](https://github.com/seunghyukchoe/copper-mcp/pull/259)) takes
+`D-245`/`R-191`/`SEC-178` under rule 1, re-derived against `main`'s **rows** at `13e2819` rather
+than against the registry line. It originally held `D-242`/`R-188`/`SEC-175`, and the first two
+**had to move**: #242's own re-arbitration landed `D-242`/`R-188` on `main` first, so keeping them
+would have put two unrelated entries on one number. Rather than take the lowest free number in
+each space and race three sibling lanes open on this same base, it steps over all of them —
+[#251](https://github.com/seunghyukchoe/copper-mcp/pull/251) holds `D-243`/`R-189`/`SEC-175`/
+`B-144`/`ADR-0130`, the CI suite-speed lane holds `D-244`/`B-143`, and the checker-population lane
+holds `D-239`/`R-190`. `SEC-175` moved for that reason alone: nothing has landed on it, but #251
+holds it, and a security number two branches both carry is the collision rule 1 exists to avoid.
+This record needed no `B-` number under rule 4 — it re-binds and republishes `B-141`'s existing
+artifact under a new provenance contract and re-measures nothing, so `B-141`'s own amendment row
+carries the outcome. The checker's gap notes for `D-243`, `D-244`, `R-189`, `R-190` and `SEC-175`
+are expected until those lanes land.
 
 1. **Allocate in the pull request that lands the entry, not before.** The "next free" numbers above
    go stale the moment another branch merges. Two concurrent branches that both reserve `D-137`
@@ -303,3 +319,7 @@ Naming the pattern each record follows makes it clear what it does and does not 
 
 Calling these by their standard names is deliberate. It should be obvious which properties are
 claimed, and equally obvious that cryptographic non-repudiation is not among them.
+
+2026-09-05 optimization foundation: D-250/R-195/SEC-177 step over the live
+D-248/D-249/R-194 claims in PRs #265/#266 and main's SEC-176. No benchmark
+ID is spent: all new observations are synthetic contract tests, not corpus evidence.

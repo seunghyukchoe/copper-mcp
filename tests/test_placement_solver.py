@@ -364,3 +364,32 @@ def test_solver_cancellation_callback_failure_is_fail_closed() -> None:
 
     assert result.status == "cancelled"
     assert result.evaluations == 0
+
+
+@pytest.mark.parametrize("failure_at", [1, 2, 3])
+@pytest.mark.parametrize("inner_budget", ["work", "deadline"])
+def test_inner_legalizer_exhaustion_cannot_be_counted_as_completed_work(
+    monkeypatch: pytest.MonkeyPatch, failure_at: int, inner_budget: str
+) -> None:
+    snapshot, view = _board(ROTATION_BOARD)
+    intent = _intent(view, ROTATION_BOARD)
+    source = ROTATION_BOARD.read_bytes()
+    actual = solver_module.evaluate_placement
+    calls = 0
+
+    def exhaust_one_call(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == failure_at:
+            if inner_budget == "work":
+                kwargs["max_checks"] = 1
+            else:
+                kwargs["deadline_seconds"] = 0.0
+        return actual(*args, **kwargs)
+
+    monkeypatch.setattr(solver_module, "evaluate_placement", exhaust_one_call)
+    result = solve_placement(intent, snapshot, view, settings=_settings(max_evaluations=failure_at))
+    assert result.status == "legalizer_exhausted"
+    assert result.evaluations == calls == failure_at
+    assert ROTATION_BOARD.read_bytes() == source
+    assert all(item.candidate.evidence.legality.legal for item in result.ranked)

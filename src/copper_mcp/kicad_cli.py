@@ -33,7 +33,11 @@ from copper_mcp.adapters.kicad_route_patch import (
 )
 from copper_mcp.adapters.kicad_schematic import MAX_RENDERED_SCHEMATIC_BYTES
 from copper_mcp.adapters.sexpr import SExpr, SExprError, atoms, parse_sexpr
-from copper_mcp.attestation import build_candidate_drc_statement, canonical_statement_bytes
+from copper_mcp.attestation import (
+    build_bundle_drc_statement,
+    build_candidate_drc_statement,
+    canonical_statement_bytes,
+)
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
 from copper_mcp.models import DrcSummary, ErcSummary
@@ -1800,6 +1804,37 @@ def _parse_parity_report(
     )
 
 
+def _validate_source_to_board_parity_projection(
+    projection: bytes,
+    *,
+    component_count: int,
+    intent_digest: str,
+    schematic_digest: str,
+    parity_schematic_digest: str,
+) -> None:
+    """Reject malformed parity bindings before a workspace read or subprocess."""
+
+    if type(projection) is not bytes or not projection:
+        raise KiCadCliError("parity projection bytes are malformed")
+    if len(projection) > MAX_RENDERED_SCHEMATIC_BYTES:
+        raise KiCadCliError("parity projection exceeds the rendered byte ceiling")
+    if isinstance(component_count, bool) or not isinstance(component_count, int):
+        raise KiCadCliError("parity component count is malformed")
+    if component_count < 1:
+        raise KiCadCliError("source-to-board parity requires at least one component")
+    for name, digest in (
+        ("intent digest", intent_digest),
+        ("schematic digest", schematic_digest),
+        ("parity schematic digest", parity_schematic_digest),
+    ):
+        if not isinstance(digest, str) or not _SHA256_ID.fullmatch(digest):
+            raise KiCadCliError(f"parity {name} is malformed")
+    if _revision(projection) != parity_schematic_digest:
+        raise KiCadCliError("parity projection digest does not match the projection bytes")
+    if schematic_digest == parity_schematic_digest:
+        raise KiCadCliError("parity projection must differ from the delivered schematic")
+
+
 def run_source_to_board_parity(
     requested_path: str,
     projection: bytes,
@@ -1823,36 +1858,75 @@ def run_source_to_board_parity(
     project would report.
     """
 
-    if type(projection) is not bytes or not projection:
-        raise KiCadCliError("parity projection bytes are malformed")
-    if len(projection) > MAX_RENDERED_SCHEMATIC_BYTES:
-        raise KiCadCliError("parity projection exceeds the rendered byte ceiling")
-    if isinstance(component_count, bool) or not isinstance(component_count, int):
-        raise KiCadCliError("parity component count is malformed")
-    if component_count < 1:
-        raise KiCadCliError("source-to-board parity requires at least one component")
-    for name, digest in (
-        ("intent digest", intent_digest),
-        ("schematic digest", schematic_digest),
-        ("parity schematic digest", parity_schematic_digest),
-    ):
-        if not isinstance(digest, str) or not _SHA256_ID.fullmatch(digest):
-            raise KiCadCliError(f"parity {name} is malformed")
-    if _revision(projection) != parity_schematic_digest:
-        raise KiCadCliError("parity projection digest does not match the projection bytes")
-    if schematic_digest == parity_schematic_digest:
-        raise KiCadCliError("parity projection must differ from the delivered schematic")
-
+    _validate_source_to_board_parity_projection(
+        projection,
+        component_count=component_count,
+        intent_digest=intent_digest,
+        schematic_digest=schematic_digest,
+        parity_schematic_digest=parity_schematic_digest,
+    )
     board = read_workspace_file(
         settings.workspace,
         requested_path,
         allowed_suffixes={".kicad_pcb"},
         max_bytes=settings.max_board_bytes,
     )
-    board_bytes = board.content
-    board_revision = _revision(board_bytes)
+    return _run_captured_source_to_board_parity(
+        board.content,
+        projection,
+        expected_board_revision=_revision(board.content),
+        component_count=component_count,
+        intent_digest=intent_digest,
+        schematic_digest=schematic_digest,
+        parity_schematic_digest=parity_schematic_digest,
+        settings=settings,
+    )
 
-    executable = discover_kicad_cli(settings)
+
+def _run_captured_source_to_board_parity(
+    board_bytes: bytes,
+    projection: bytes,
+    *,
+    expected_board_revision: str,
+    component_count: int,
+    intent_digest: str,
+    schematic_digest: str,
+    parity_schematic_digest: str,
+    settings: Settings,
+    deadline: float | None = None,
+) -> SourceToBoardParityEvidence:
+    """Run parity on caller-captured board bytes through the fixed private snapshot."""
+
+    if deadline is not None:
+        if isinstance(deadline, bool) or not isinstance(deadline, (int, float)):
+            raise KiCadCliError("captured parity deadline is malformed")
+        if isinstance(deadline, float) and not math.isfinite(deadline):
+            raise KiCadCliError("captured parity deadline is malformed")
+        if isinstance(deadline, int) and not -sys.float_info.max <= deadline <= sys.float_info.max:
+            raise KiCadCliError("captured parity deadline is malformed")
+    _candidate_drc_deadline_settings(settings, deadline)
+    if type(board_bytes) is not bytes or not board_bytes:
+        raise KiCadCliError("captured parity board bytes are malformed")
+    if len(board_bytes) > settings.max_board_bytes:
+        raise KiCadCliError("captured parity board exceeds the configured byte ceiling")
+    if not isinstance(expected_board_revision, str) or not _SHA256_ID.fullmatch(
+        expected_board_revision
+    ):
+        raise KiCadCliError("captured parity board revision is malformed")
+    if _revision(board_bytes) != expected_board_revision:
+        raise KiCadCliError("captured parity board revision does not match the board bytes")
+    _candidate_drc_deadline_settings(settings, deadline)
+    _validate_source_to_board_parity_projection(
+        projection,
+        component_count=component_count,
+        intent_digest=intent_digest,
+        schematic_digest=schematic_digest,
+        parity_schematic_digest=parity_schematic_digest,
+    )
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    board_revision = expected_board_revision
+
+    executable = discover_kicad_cli(phase_settings)
     if os.name != "posix":
         raise KiCadCliError("bounded KiCad parity execution is unsupported on this platform")
     python_executable = _validated_executable(Path(sys.executable))
@@ -1860,6 +1934,7 @@ def run_source_to_board_parity(
     if python_executable is None or not bounded_exec.is_file():
         raise KiCadCliError("bounded KiCad parity execution helper is unavailable")
 
+    _candidate_drc_deadline_settings(settings, deadline)
     with tempfile.TemporaryDirectory(prefix="copper-mcp-parity-") as temporary_directory:
         temporary_root = Path(temporary_directory)
         try:
@@ -1871,8 +1946,11 @@ def run_source_to_board_parity(
         schematic_path = snapshot_root / PARITY_SCHEMATIC_SNAPSHOT_NAME
         try:
             snapshot_root.mkdir(mode=0o700)
+            _candidate_drc_deadline_settings(settings, deadline)
             board_path.write_bytes(board_bytes)
+            _candidate_drc_deadline_settings(settings, deadline)
             schematic_path.write_bytes(projection)
+            _candidate_drc_deadline_settings(settings, deadline)
             _make_snapshot_read_only(snapshot_root)
             snapshot_root = snapshot_root.resolve(strict=True)
             board_path = board_path.resolve(strict=True)
@@ -1880,6 +1958,7 @@ def run_source_to_board_parity(
             raise KiCadCliError("private KiCad parity snapshot could not be written") from error
         output_path = temporary_root / "parity.json"
         private_state = temporary_root / "process-state"
+        _candidate_drc_deadline_settings(settings, deadline)
         try:
             child_environment = _private_kicad_environment(private_state)
         except OSError as error:
@@ -1902,10 +1981,11 @@ def run_source_to_board_parity(
             str(python_executable),
             "-I",
             str(bounded_exec),
-            str(settings.max_drc_report_bytes),
+            str(phase_settings.max_drc_report_bytes),
             *kicad_command,
         ]
         try:
+            phase_settings = _candidate_drc_deadline_settings(settings, deadline)
             completed = subprocess.run(  # noqa: S603
                 command,
                 stdin=subprocess.DEVNULL,
@@ -1913,36 +1993,41 @@ def run_source_to_board_parity(
                 stderr=subprocess.DEVNULL,
                 check=False,
                 shell=False,
-                timeout=settings.kicad_timeout_seconds,
+                timeout=phase_settings.kicad_timeout_seconds,
                 env=child_environment,
                 cwd=child_environment["TMPDIR"],
             )
         except subprocess.TimeoutExpired as error:
             raise KiCadCliError("KiCad parity run timed out") from error
-        _validate_private_kicad_state(private_state, settings)
+        phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+        _validate_private_kicad_state(private_state, phase_settings)
+        phase_settings = _candidate_drc_deadline_settings(settings, deadline)
         try:
             _validate_snapshot_tree(
                 snapshot_root,
                 frozenset({PARITY_BOARD_SNAPSHOT_NAME, PARITY_SCHEMATIC_SNAPSHOT_NAME}),
-                settings,
+                phase_settings,
             )
         except KiCadCliError as error:
             raise KiCadCliError("private KiCad parity snapshot changed during the run") from error
         if completed.returncode == -signal.SIGXFSZ:
             raise KiCadCliError("KiCad parity output exceeds the configured limit")
         try:
+            _candidate_drc_deadline_settings(settings, deadline)
             if board_path.read_bytes() != board_bytes:
                 raise KiCadCliError("KiCad parity run modified its own board input")
+            _candidate_drc_deadline_settings(settings, deadline)
             if schematic_path.read_bytes() != projection:
                 raise KiCadCliError("KiCad parity run modified its own projection input")
         except OSError as error:
             raise KiCadCliError("private KiCad parity inputs could not be re-read") from error
+        phase_settings = _candidate_drc_deadline_settings(settings, deadline)
         try:
             report = read_workspace_file(
                 temporary_root,
                 output_path.name,
                 allowed_suffixes={".json"},
-                max_bytes=settings.max_drc_report_bytes,
+                max_bytes=phase_settings.max_drc_report_bytes,
             ).content
         except FileNotFoundError as error:
             raise KiCadCliError("KiCad parity run did not create an output file") from error
@@ -1951,7 +2036,8 @@ def run_source_to_board_parity(
                 raise KiCadCliError("KiCad parity run did not create an output file") from error
             raise KiCadCliError("KiCad parity output exceeds the configured limit") from error
 
-    return _parse_parity_report(
+    _candidate_drc_deadline_settings(settings, deadline)
+    evidence = _parse_parity_report(
         report,
         return_code=completed.returncode,
         component_count=component_count,
@@ -1960,6 +2046,8 @@ def run_source_to_board_parity(
         parity_schematic_digest=parity_schematic_digest,
         board_revision=board_revision,
     )
+    _candidate_drc_deadline_settings(settings, deadline)
+    return evidence
 
 
 def _run_route_candidate_drc(
@@ -2078,6 +2166,190 @@ def run_route_candidate_drc(
         verified_fill=verified_fill,
         render_candidate=render_kicad_candidate_board,
         serialization_failure="route candidate failed replay-verified KiCad serialization",
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class RouteBundleDrcEvidence:
+    """Immutable bindings between one composed route-bundle plan and KiCad DRC evidence.
+
+    One DRC run covers the whole composition: the subject is the bundle, and the composed
+    candidate set rides as a bound byproduct list rather than as N separate statements that
+    could be cherry-picked into a differential.
+    """
+
+    bundle_id: str
+    bundle_base_revision: str
+    candidate_ids: tuple[str, ...]
+    source_revision: str
+    patched_board_revision: str
+    patched_drc_context_revision: str
+    summary: DrcSummary
+
+    def __post_init__(self) -> None:
+        for name in (
+            "bundle_id",
+            "bundle_base_revision",
+            "source_revision",
+            "patched_board_revision",
+            "patched_drc_context_revision",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not _SHA256_ID.fullmatch(value):
+                raise ValueError(f"{name} must be content-addressed with sha256")
+        if (
+            not isinstance(self.candidate_ids, tuple)
+            or not 2 <= len(self.candidate_ids) <= 8
+            or any(
+                not isinstance(item, str) or not _SHA256_ID.fullmatch(item)
+                for item in self.candidate_ids
+            )
+            or len(set(self.candidate_ids)) != len(self.candidate_ids)
+        ):
+            raise ValueError("bundle candidate ids must be two to eight distinct digests")
+        if not isinstance(self.summary, DrcSummary):
+            raise ValueError("summary must be strict KiCad DRC evidence")
+        if self.summary.base_revision != self.patched_board_revision:
+            raise ValueError("DRC summary is not bound to the patched board revision")
+        if self.summary.drc_context_revision != self.patched_drc_context_revision:
+            raise ValueError("DRC summary is not bound to the patched context revision")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "bundle_id": self.bundle_id,
+            "bundle_base_revision": self.bundle_base_revision,
+            "candidate_ids": list(self.candidate_ids),
+            "source_revision": self.source_revision,
+            "patched_board_revision": self.patched_board_revision,
+            "patched_drc_context_revision": self.patched_drc_context_revision,
+            "summary": self.summary.to_dict(),
+            "statement": self.to_statement(),
+        }
+
+    def to_statement(self) -> dict[str, Any]:
+        """Return the redacted unsigned in-toto Statement payload."""
+
+        return build_bundle_drc_statement(
+            bundle_id=self.bundle_id,
+            bundle_base_revision=self.bundle_base_revision,
+            candidate_ids=self.candidate_ids,
+            source_revision=self.source_revision,
+            patched_board_revision=self.patched_board_revision,
+            patched_drc_context_revision=self.patched_drc_context_revision,
+            summary=self.summary,
+        )
+
+    def canonical_statement_bytes(self) -> bytes:
+        """Return deterministic Statement JSON bytes; no signature is included."""
+
+        return canonical_statement_bytes(self.to_statement())
+
+
+def run_route_bundle_drc(
+    requested_path: str,
+    plan: object,
+    profile: KiCadConstraintProfile,
+    settings: Settings,
+    *,
+    deadline: float | None = None,
+) -> RouteBundleDrcEvidence:
+    """Bind one exact composed route-bundle plan to authoritative KiCad DRC.
+
+    The plan is replayed against the original snapshot and all patches are spliced onto
+    one private disposable board with a combined round-trip proof before KiCad starts, so
+    structural problems refuse without executing a subprocess. Imports are deferred
+    because the bundle adapter reaches this module through the preview path.
+    """
+
+    from copper_mcp.adapters.kicad_route_bundle_patch import render_kicad_route_bundle_board
+    from copper_mcp.route_bundle import RouteBundlePlan
+
+    if type(plan) is not RouteBundlePlan:
+        raise KiCadCliError("route bundle plan is malformed")
+    if not isinstance(profile, KiCadConstraintProfile):
+        raise KiCadCliError("KiCad constraint profile is malformed")
+    candidates = plan.candidates
+    if (
+        not isinstance(candidates, tuple)
+        or not all(isinstance(item, RouteCandidate) for item in candidates)
+        or any(item.base_revision != plan.base_revision for item in candidates)
+    ):
+        raise KiCadCliError("route bundle candidates are inconsistent with the plan")
+
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    board = read_workspace_file(
+        phase_settings.workspace,
+        requested_path,
+        allowed_suffixes={".kicad_pcb"},
+        max_bytes=phase_settings.max_board_bytes,
+    )
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    board_path = board.path
+    captured_context = _drc_context(board_path, phase_settings, board)
+    board_relative = board_path.relative_to(
+        phase_settings.workspace.resolve(strict=True)
+    ).as_posix()
+    original_context_revision = _context_revision(captured_context)
+    source = captured_context[board_relative]
+    source_revision = _revision(source)
+
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    parse_limits = parse_limits_for(phase_settings)
+    conversion = parse_kicad_bytes(source, profile, parse_limits)
+    if conversion.snapshot is None or conversion.diagnostics:
+        raise KiCadCliError("captured KiCad board cannot be represented by the supported Board IR")
+    snapshot = conversion.snapshot
+    if snapshot.content.source.revision != source_revision:
+        raise KiCadCliError("captured KiCad source revision is inconsistent")
+    if plan.base_revision != snapshot.snapshot_digest:
+        raise KiCadCliError("route bundle plan is stale for the captured Board IR snapshot")
+    try:
+        patched_board = render_kicad_route_bundle_board(
+            source,
+            snapshot,
+            plan,
+            profile,
+            limits=parse_limits,
+        )
+    except KiCadRoutePatchError as error:
+        raise KiCadCliError("route bundle failed composed KiCad serialization") from error
+
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    patched_context = _candidate_drc_context(
+        captured_context,
+        board_relative=board_relative,
+        patched_board=patched_board,
+        settings=phase_settings,
+    )
+    patched_board_revision = _revision(patched_board)
+    patched_drc_context_revision = _context_revision(patched_context)
+    del captured_context, conversion, patched_board, snapshot, source
+
+    summary = _run_captured_drc(
+        patched_context,
+        board_relative=board_relative,
+        settings=_candidate_drc_deadline_settings(settings, deadline),
+        deadline=deadline,
+    )
+    if (
+        summary.base_revision != patched_board_revision
+        or summary.drc_context_revision != patched_drc_context_revision
+    ):
+        raise KiCadCliError("KiCad DRC summary revision binding is inconsistent")
+    phase_settings = _candidate_drc_deadline_settings(settings, deadline)
+    if _context_revision(_drc_context(board_path, phase_settings)) != original_context_revision:
+        raise KiCadCliError(
+            "board or DRC rules changed while bundle DRC was running; result discarded"
+        )
+    _candidate_drc_deadline_settings(settings, deadline)
+    return RouteBundleDrcEvidence(
+        bundle_id=plan.bundle_id,
+        bundle_base_revision=plan.base_revision,
+        candidate_ids=tuple(item.candidate_id for item in candidates),
+        source_revision=source_revision,
+        patched_board_revision=patched_board_revision,
+        patched_drc_context_revision=patched_drc_context_revision,
+        summary=summary,
     )
 
 

@@ -303,3 +303,133 @@ feature-branch commit. Outside that explicitly configured environment the reposi
 assertion skips rather than trusting a possibly stale local `main` or inheriting an `origin` naming
 requirement. A future runner change must therefore land before a later evidence-only publication
 can bind its default-branch commit.
+
+## Amendment, 2026-09-02 (second) — verified provenance is content, not revision
+
+This is the structural successor the amendment above asks for, and it supersedes that amendment's
+*binding* while leaving its record intact. The two relate as follows, and neither edits the other:
+the first amendment (and `D-241`) rebound B-141 to squash commit
+`86634180e5a3f0956cf2ede4168710f1fce8fbcb` as a one-time unblock, correctly, under a contract that
+required a recorded revision to resolve. This amendment (`D-245`) removes that requirement, so the
+field the first amendment repaired is no longer load-bearing: `source_commit` is informational at
+every guarantee level and no validation path resolves it. The rebinding was not wasted — it kept
+`main` green while this change was built — but it was a repair of one instance of a class, and the
+class recurs on its own terms.
+
+**The recurrence is measurable, not predicted.** A `--depth=1` clone of `main` at
+`f8b4daa7b8d8f4567d445574754a02aa2a609518` runs `main`'s own code against `main`'s own artifact and
+refuses:
+
+```
+recorded source_commit : 86634180e5a3f0956cf2ede4168710f1fce8fbcb
+resolves here          : None
+load_artifact          : REFUSED -- the B-141 recorded source commit is not present in this
+                         repository, so its provenance could not be consulted
+```
+
+The rebinding is therefore durable only while a consumer's clone is deep enough to reach the squash
+commit, and it must be repeated on every runner change. Depth, fetch policy and fork boundaries are
+properties of the *consumer's* checkout, and an evidence contract that varies with them is not an
+evidence contract.
+
+### The verified provenance set
+
+`_bound_input_paths()` is the single source of truth, and it is now the only producer of published
+file digests: `_configuration()` derives all six by digesting exactly those paths, so a digest
+cannot be published without also being verified. `_assert_bound_inputs_cover_published_digests()`
+closes the other direction against the closed configuration key set, so a future field that binds a
+new input cannot be published unverified.
+
+| Field | Bound to | Guarantee level | Mechanism |
+|---|---|---|---|
+| `configuration.runner_sha256` | this runner | `repository_bound` | re-digest the live file |
+| `configuration.b140_runner_sha256` | the B-140 runner | `repository_bound` | re-digest the live file |
+| `configuration.b140_artifact_sha256` | the B-140 artifact | `repository_bound` | re-digest the live file |
+| `configuration.reference_runner_sha256` | the B-088 runner | `repository_bound` | re-digest the live file |
+| `configuration.reference_adapter_sha256` | the B-088 adapter | `repository_bound` | re-digest the live file |
+| `configuration.reference_artifact_sha256` | the B-088 artifact | `repository_bound` | re-digest the live file |
+| `population_binding.corpus_manifest_sha256` | the corpus manifest bytes | `repository_bound` | recomputed while loading the exact corpus |
+| `configuration.configuration_sha256` | the configuration object | `offline` | nested self-digest |
+| `run_id` | the whole document body | `offline` | self-digest |
+| every metric, arm pin and differential | the companion commitment | `companion_bound` | exact measurement and arm pins |
+| `date_utc` | nothing in the repository | informational; pinned *as a document field* at `companion_bound` by `artifact_run_id` | opt-in `verify_evidence_date_against_history` relates it to history |
+| `source_commit` | nothing | informational at every level; never resolved | published in `not_claimed` |
+
+`GUARANTEE_LEVELS` is deliberately unchanged. Content binding either holds or refuses, so no new
+distinction exists that the four existing levels cannot express, and `load_artifact` still reaches
+`companion_bound` and still checks the level it reached.
+
+**The one honest movement, disclosed rather than buried.** A re-signed `date_utc` or `source_commit`
+used to be refused at `repository_bound`, by Git. It is now refused at `companion_bound`, by
+`artifact_run_id`, which digests the whole body. No guarantee is lost at `load_artifact`, which
+always reaches `companion_bound`; what is lost is that a caller stopping at `repository_bound`
+accepts a document naming any revision it likes. That cost is accepted because the check it replaces
+could not survive a squash merge — it refused valid artifacts on `main` while remaining bypassable
+by anyone able to re-sign both files anyway — and because the same re-signing still cannot change a
+single bound byte.
+
+### The evidence date is a tri-state report, not a verdict
+
+`verify_evidence_date_against_history(document, *, ref="HEAD")` returns one of `agrees`,
+`disagrees`, `undeterminable`, and **returns rather than raises on all three**. It derives the
+default branch's answer from `git log --first-parent` over the runner path, bounded to 200 commits,
+and takes the *oldest* first-parent commit whose runner blob equals the bound `runner_sha256` — the
+commit that introduced the content, not a later one that reinstated it.
+
+`disagrees` is the ordinary outcome whenever review takes more than a day, and `undeterminable`
+covers a branch not yet merged, a history too shallow, and no Git at all. Reporting either as a
+verdict would repeat exactly the absent-versus-disagreeing conflation that turned `main` red in
+#250. Nothing in `validate_report` or `load_artifact` calls it, and it is never written into the
+artifact, so it is not part of the self-digest — it cannot be, which is the reason it lives outside
+the contract rather than inside it.
+
+### `source_commit` is demoted, and the report says so
+
+It is not resolved by any validation path and its absence is not an error. It is still *derived* at
+publication, because the evidence date is read from it and a hand-written date can name a day the
+run did not happen on. Publication happens inside the repository that owns the revision and may
+demand it; validation happens anywhere and may not. The demotion is published in `not_claimed` as a
+seventh entry, so a consumer reading the JSON alone learns it without reading this ADR.
+
+### What this removes
+
+`test_published_artifact_records_a_default_branch_ancestor`, the `COPPER_MCP_DEFAULT_BRANCH_REF`
+injection in the CI workflow, and the workflow test pinning it are all removed. They mechanize the
+rule this amendment retires: under the new design every republication necessarily records a branch
+commit the pull-request base does not carry, so the guard would refuse this very change. The
+archived `b7c71d4d` bytes are untouched and remain byte-identical; because `not_claimed` gained an
+entry and claim lists are validated exactly, the archived document no longer validates against the
+current contract, which is the correct reading of an append-only archive.
+
+### Evidence
+
+The republication is a re-binding, not a re-measurement: the whole-metrics digest reproduced
+`sha256:f7e38d6744feed63b852e10811f34205bb822a1e2e7ca9759a8cea80a326d4b2` exactly, so every
+published count, breakdown and differential is unchanged. Descriptive mean wall times were
+**47.348s** control and **51.310s** treatment on a contended machine and carry no claim. The new
+pins are source `0202329da16ecae0fbb61e7ed7a0215cfa599585` (informational), runner
+`sha256:33bd81c80bd6c2ad8f970c5477fd236b4c05759c99b50145a66152451672f3bb`, configuration
+`sha256:60ad50ee812875411fd88413182954c56f677ebe0e3300cc5295902d92e8400d`, report run
+`sha256:42cd4f172b227e9a26a945f779ad548718eaed3c9f42debe016198b15e123beb`, report raw
+`sha256:7e05d1df34b39c726e944b39e6671dc67d920f53a3732ae6898c5653a3a32e69`, commitment run
+`sha256:d431b607b89ca81582b2da6686a739b9196097a3e752e12fdaf11cba93059757`, and commitment raw
+`sha256:bcf33431581494650c1bbc4c17cc4eb340af327ba564e6c5aa9cd5e385c8ba21`.
+
+The load-bearing proof is the simulated squash: a `--depth=50` clone of `main` carrying this
+branch's file content but none of its commits — which is exactly what a squash merge produces —
+resolves the recorded revision to `None`, re-digests all six bound inputs as matching, and
+**accepts at `companion_bound`**, while reporting the evidence date as `undeterminable` rather than
+as a disagreement. The same clone with the branch fetched accepts at `companion_bound` with the
+date `agrees`. The control above is the same condition on `main` today, which refuses.
+
+Focused evidence validation is **200/200 tests**, and the committed mutation spec
+`sha256:22cbf4a4787b1a67afc9add8ca1c21914a5bec2dfef2551101d1933f1573bf51` kills **79/79** mutants
+with zero survivors, zero stale anchors, zero control failures, zero invalid runs and zero
+`not_run` — distinct from #238's **35/35** capability mutants, which are not added to this count.
+The set moved from 78 to 79: seven anchors went stale against the edited source, five mutants whose
+code this amendment deletes were retired rather than silently dropped (they are named in `D-245`),
+two were re-anchored onto successor code whose names remain exactly true, and six new mutants pin
+the new guards. One survived the first run, and it was a real coverage gap rather than a mapping
+typo: nothing exercised the whole-configuration comparison, so `seed`, the router version, the
+envelope budgets and every declared ceiling — configuration facts no file digest can witness —
+were unpinned against a re-signed document. A new test closes it.

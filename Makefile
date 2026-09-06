@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: install install-dev test lint format typecheck security build pcm check \
+.PHONY: install install-dev test test-fast test-full test-compat test-evidence lint format typecheck security build pcm check \
 	check-audio-benchmarks check-circuit-intents benchmark-audio benchmark-routing \
 	benchmark-external-corpus benchmark-cross-router evaluate-excessive-agency clean
 
@@ -12,6 +12,21 @@ install-dev:
 
 test:
 	PYTHONPATH=src $(PYTHON) -m pytest
+
+test-fast:
+	PYTHONPATH=src $(PYTHON) -m pytest -n 4 --dist loadfile --no-cov -m "not slow_evidence and not external_router and not networked_provider"
+
+test-full:
+	PYTHONPATH=src $(PYTHON) -m pytest
+
+TEST_MARKER ?= not slow_evidence
+COVERAGE_ARGS ?= --no-cov
+PYTEST_TIMING_ARGS ?=
+test-compat:
+	PYTHONPATH=src $(PYTHON) -m pytest -n 4 --dist loadfile -m "$(TEST_MARKER)" $(COVERAGE_ARGS) $(PYTEST_TIMING_ARGS)
+
+test-evidence:
+	$(PYTHON) -I -c 'import subprocess, sys; subprocess.run([sys.executable, "-I", "scripts/replay_source_binding.py"], check=True, timeout=3600)'
 
 lint:
 	$(PYTHON) -m ruff check .

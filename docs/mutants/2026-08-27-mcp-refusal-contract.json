@@ -28,8 +28,8 @@
     {
       "id": "RC03-value-error-family-caught-instead-of-audited-types",
       "file": "src/copper_mcp/mcp_server.py",
-      "anchor": "        except _ANTICIPATED_REFUSALS as error:\n",
-      "replacement": "        except ValueError as error:\n",
+      "anchor": "            return function(*args, **kwargs)\n        except _ANTICIPATED_REFUSALS as error:\n",
+      "replacement": "            return function(*args, **kwargs)\n        except ValueError as error:\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_mcp_refusal_contract.py::test_a_crash_is_never_dressed_as_a_refusal[ValueError]",

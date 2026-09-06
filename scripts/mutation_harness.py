@@ -77,6 +77,10 @@ EXPECTATION_EQUIVALENT = "equivalent"
 # Directories never scanned for `__pycache__`: not project code, or not this checkout's code.
 _PURGE_SKIP_DIRS = frozenset({".git", ".venv", ".claude", "node_modules"})
 
+# Nested runs are evidence for the exact nodeids supplied by the committed spec.  Their worker
+# mode must not vary with the pytest invocation that happens to own the harness.
+_NESTED_PYTEST_SUFFIX = ("-o", "addopts=", "-n0")
+
 
 class SpecError(ValueError):
     """A mutant spec that cannot be trusted enough to run."""
@@ -246,7 +250,12 @@ def _run_tests(
     environment = dict(os.environ)
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONPATH"] = f"src{os.pathsep}."
-    argv = [sys.executable, "-m", "pytest", *pytest_args, *tests]
+    # PYTEST_ADDOPTS is appended by pytest itself, so deleting it is required rather than merely
+    # placing fixed flags before the nodeids.  In particular, inherited -n/-k/-m/selection flags
+    # can turn an exact named-test run into a worker or collection run that proves nothing.  The
+    # spec's explicit args remain authoritative; -o addopts= only clears ambient ini addopts.
+    environment.pop("PYTEST_ADDOPTS", None)
+    argv = [sys.executable, "-m", "pytest", *pytest_args, *_NESTED_PYTEST_SUFFIX, *tests]
     return subprocess.run(  # noqa: S603 - fixed interpreter, argv from the committed spec
         argv,
         cwd=root,

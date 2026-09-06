@@ -6,7 +6,7 @@
     "b140_artifact_sha256": "sha256:585ea5b6bb178761294596b09795110d63075a898133e7ca890e0e5b1a028673",
     "b140_runner_sha256": "sha256:eb4339e5e2264c62a1971958af6a6d5d037d5e5703a3609561c7f5f607279774",
     "b140_source_commit": "30692df496e0dc250d3b09bae5ad9b7b11a3d827",
-    "configuration_sha256": "sha256:17966b8f508143cf3f54f797ea9a02d6fd66cbfe0621e830950f050f0f1868a3",
+    "configuration_sha256": "sha256:60ad50ee812875411fd88413182954c56f677ebe0e3300cc5295902d92e8400d",
     "control": {
       "repair_settings": null
     },
@@ -61,7 +61,7 @@
       "completed_without_repair",
       "completed_with_repair"
     ],
-    "runner_sha256": "sha256:5f5e8b8685bf178ef7064ce2690afb789678c2af9c727d40b18847e0738e23a1",
+    "runner_sha256": "sha256:33bd81c80bd6c2ad8f970c5477fd236b4c05759c99b50145a66152451672f3bb",
     "seed": 0,
     "selected_layer_pad_count": {
       "maximum": 32,
@@ -121,7 +121,7 @@
       }
     }
   },
-  "date_utc": "2026-09-01",
+  "date_utc": "2026-09-02",
   "differential_definition": "Treatment minus control over the same immutable B-140 snapshots and request tuples. A positive completion delta is a measured differential only; it is not a routing-quality, electrical, DRC, fabrication, or generalisation claim.",
   "environment": {
     "architecture": "arm64",
@@ -308,7 +308,8 @@
     "that control and treatment answer a like-for-like quality question against B-088's independent per-net routes",
     "KiCad DRC, electrical correctness, signal integrity, thermal behaviour, DFM, fabrication, apply, editor, hardware, or network behaviour",
     "any board, net, revision, candidate, path, geometry, or private corpus identity",
-    "generalisation beyond the exact committed 20-board B-088 subset"
+    "generalisation beyond the exact committed 20-board B-088 subset",
+    "that source_commit names a revision any repository still has, since this project's linear-history merge policy discards every commit a pull request creates; the verified provenance is the content digests in configuration, not that revision"
   ],
   "population_binding": {
     "admission_partition": {
@@ -325,13 +326,13 @@
     "nets_submitted": 70
   },
   "repair_work_definition": "Inherited search and proximity fields are read from a published repaired candidate's unchanged candidate metrics and cost. Local expansions, Board-IR projection checks, validator checks, and repair responsibility/final physical work are separate. Refused transactions publish no repair evidence; their consumed physical work remains in total_physical_checks and is not fabricated into success-only fields.",
-  "run_id": "sha256:237d4ddfd4ce403aa3bb2ea19e4229aa0833f667501127fd5acd223e62173021",
+  "run_id": "sha256:42cd4f172b227e9a26a945f779ad548718eaed3c9f42debe016198b15e123beb",
   "schema": "copper-mcp/benchmark/negotiated-multipin-branch-repair-differential/v1",
-  "source_commit": "86634180e5a3f0956cf2ede4168710f1fce8fbcb",
+  "source_commit": "0202329da16ecae0fbb61e7ed7a0215cfa599585",
   "timing": {
     "mean_wall_seconds": {
-      "control": 39.224,
-      "treatment": 40.042
+      "control": 47.348,
+      "treatment": 51.31
     },
     "repetitions": 2
   }

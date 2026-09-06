@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -38,8 +40,32 @@ def _solved(*, aware: bool = True) -> tuple[Any, Any, Any]:
     return snapshot, view, result
 
 
-def test_original_audio_fixture_route_aware_selection_meets_predeclared_criterion() -> None:
-    metrics = benchmark.run_benchmark(3)
+@pytest.fixture(scope="module")
+def _fresh_metrics_json() -> str:
+    """One fresh three-replay run, never a loaded historical benchmark artifact."""
+
+    return json.dumps(benchmark.run_benchmark(3), allow_nan=False)
+
+
+@pytest.fixture
+def fresh_metrics(_fresh_metrics_json: str) -> dict[str, Any]:
+    """Decode separately so no consumer can mutate another test's evidence."""
+
+    return json.loads(_fresh_metrics_json)
+
+
+def test_shared_replay_consumers_receive_independent_nested_metrics(
+    fresh_metrics: dict[str, Any], _fresh_metrics_json: str
+) -> None:
+    assert fresh_metrics["repetitions"] == 3
+    fresh_metrics["criterion"]["minimum_improvement_percent"] = -1
+    assert json.loads(_fresh_metrics_json)["criterion"]["minimum_improvement_percent"] == 10
+
+
+def test_original_audio_fixture_route_aware_selection_meets_predeclared_criterion(
+    fresh_metrics: dict[str, Any],
+) -> None:
+    metrics = fresh_metrics
     search = metrics["search_comparison"]
 
     assert metrics["all_retained_candidates_legal"] is True
@@ -52,7 +78,50 @@ def test_original_audio_fixture_route_aware_selection_meets_predeclared_criterio
     assert metrics["criterion"]["passed"] is True
 
 
-def test_the_two_ranked_policies_run_different_searches_not_one_shared_candidate_set() -> None:
+@pytest.mark.parametrize(
+    ("status", "evaluations"),
+    (("deadline_exhausted", 127), ("work_exhausted", 127), ("legalizer_exhausted", 128)),
+)
+def test_incomplete_search_never_becomes_successful_replay_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+    evaluations: int,
+) -> None:
+    before = (benchmark.FIXTURE.read_bytes(), benchmark.FIXTURE.stat().st_mtime_ns)
+    interrupted = SimpleNamespace(status=status, evaluations=evaluations, ranked=(object(),))
+    monkeypatch.setattr(benchmark, "solve_placement", lambda *_args, **_kwargs: interrupted)
+
+    with pytest.raises(
+        benchmark.RouteAwarePlacementBenchmarkError,
+        match="did not reach its deterministic work ceiling",
+    ):
+        benchmark.run_benchmark(3)
+
+    assert (benchmark.FIXTURE.read_bytes(), benchmark.FIXTURE.stat().st_mtime_ns) == before
+
+
+def test_nested_deadline_on_last_evaluation_cannot_certify_replay(monkeypatch):
+    from copper_mcp.placement import solver as solver_module
+
+    actual = solver_module.evaluate_placement
+    calls = 0
+
+    def exhaust_last_evaluation(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == benchmark.SEARCH_SETTINGS["max_evaluations"]:
+            kwargs["deadline_seconds"] = 0.0
+        return actual(*args, **kwargs)
+
+    monkeypatch.setattr(solver_module, "evaluate_placement", exhaust_last_evaluation)
+    with pytest.raises(benchmark.RouteAwarePlacementBenchmarkError, match="legalizer_exhausted"):
+        benchmark.run_benchmark(3)
+    assert calls == benchmark.SEARCH_SETTINGS["max_evaluations"]
+
+
+def test_the_two_ranked_policies_run_different_searches_not_one_shared_candidate_set(
+    fresh_metrics: dict[str, Any],
+) -> None:
     """F1: the score orders the beam, so the policies do not share a candidate set.
 
     The recorded improvement is a different-search-trajectory result.  Measured here: at the
@@ -60,7 +129,7 @@ def test_the_two_ranked_policies_run_different_searches_not_one_shared_candidate
     that, and must carry the separate re-ranking measurement rather than implying it.
     """
 
-    metrics = benchmark.run_benchmark(3)
+    metrics = fresh_metrics
     search = metrics["search_comparison"]
     rerank = metrics["rerank_comparison"]
 
@@ -75,10 +144,12 @@ def test_the_two_ranked_policies_run_different_searches_not_one_shared_candidate
     assert rerank["route_aware_route_wire_length_nm"] < rerank["manhattan_route_wire_length_nm"]
 
 
-def test_the_report_records_the_honest_all_probeable_net_observation() -> None:
+def test_the_report_records_the_honest_all_probeable_net_observation(
+    fresh_metrics: dict[str, Any],
+) -> None:
     """F4: "zero unrouted probes" was a one-net statement; record the whole-fixture one."""
 
-    observation = benchmark.run_benchmark(3)["multi_probe_observation"]
+    observation = fresh_metrics["multi_probe_observation"]
     baseline = observation["baseline_choice"]
     aware = observation["route_aware_choice"]
 
@@ -111,6 +182,8 @@ def test_the_report_binds_its_probe_configuration_into_its_run_id(
     configuration = benchmark._configuration()
 
     assert configuration["estimator_id"] == route_scoring.ROUTE_AWARE_ESTIMATOR_ID
+    assert configuration["search_settings"]["max_evaluations"] == 128
+    assert configuration["search_settings"]["deadline_seconds"] == 60.0
     assert configuration["ranking_max_probes"] == 1
     assert (
         configuration["ranking_probe_settings_digest"]

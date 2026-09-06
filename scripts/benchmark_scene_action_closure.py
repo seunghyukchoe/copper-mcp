@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
-import importlib
 import json
 import os
 import platform
@@ -27,14 +26,12 @@ from check_audio_benchmarks import DEFAULT_CATALOG, ROOT, load_and_validate_cata
 from copper_mcp.adapters import net_id_for_name
 from copper_mcp.config import Settings
 
-# MCP server construction reads its default workspace at import time. This benchmark replaces the
-# settings for every call, so remove unrelated caller configuration and pin the otherwise-unused
-# default to the repository rather than inherit stale, private, or invalid process settings.
-for environment_name in tuple(os.environ):
-    if environment_name.startswith("COPPER_MCP_"):
-        del os.environ[environment_name]
-os.environ["COPPER_MCP_WORKSPACE"] = str(ROOT)
-mcp_server = importlib.import_module("copper_mcp.mcp_server")
+if __package__:
+    from .offline_mcp_harness import load_offline_mcp_server
+else:
+    from offline_mcp_harness import load_offline_mcp_server
+
+mcp_server = load_offline_mcp_server()
 
 BENCHMARK_NAME = "scene-route-referential-closure-v1"
 FIXTURE_ID = "rc-low-pass-routing-v1"
@@ -497,6 +494,12 @@ async def _run(
         },
         "configuration": {
             "script_sha256": hashlib.sha256(script_bytes).hexdigest(),
+            "harness_helper": {
+                "path": "scripts/offline_mcp_harness.py",
+                "sha256": hashlib.sha256(
+                    (ROOT / "scripts/offline_mcp_harness.py").read_bytes()
+                ).hexdigest(),
+            },
             "repetitions": repetitions,
             "warmups": warmups,
             "seed": route_specs[0]["seed"],

@@ -109,13 +109,36 @@ def test_agency_evaluation_cli_ignores_inherited_copper_configuration(tmp_path: 
     assert CANARY not in output.read_text(encoding="utf-8")
 
 
-def test_committed_agency_artifact_replays_from_its_recorded_harness() -> None:
-    artifact = json.loads(ARTIFACT.read_text(encoding="utf-8"))
-    harness_commit = artifact["evidence_harness_commit"]
-    assert isinstance(harness_commit, str)
-    script_sha256 = hashlib.sha256(evaluation.SCRIPT_FILE.read_bytes()).hexdigest()
-    assert artifact["script_sha256"] == script_sha256
-    assert artifact == evaluation.build_report(evidence_harness_commit=harness_commit)
+def test_historical_artifact_is_unchanged_and_current_harness_reproduces_outcomes() -> None:
+    historical_bytes = ARTIFACT.read_bytes()
+    # Preserve the original record, including its provenance; do not re-sign it after a fix.
+    assert hashlib.sha256(historical_bytes).hexdigest() == (
+        "8c7cfb7c6e63be5a52f5e2c70c8fb3d99cd86bc798aaf8b8e1887df901706672"
+    )
+    artifact = json.loads(historical_bytes)
+    current = evaluation.build_report(evidence_harness_commit=TEST_HARNESS_COMMIT)
+    assert (
+        current["script_sha256"] == hashlib.sha256(evaluation.SCRIPT_FILE.read_bytes()).hexdigest()
+    )
+    assert current["evidence_harness_command"] == artifact["evidence_harness_command"].replace(
+        artifact["evidence_harness_commit"], TEST_HARNESS_COMMIT
+    )
+    assert current["harness_helper"] == {
+        "path": "scripts/offline_mcp_harness.py",
+        "sha256": hashlib.sha256(
+            (ROOT / "scripts/offline_mcp_harness.py").read_bytes()
+        ).hexdigest(),
+    }
+    provenance = {
+        "evidence_harness_commit",
+        "evidence_harness_command",
+        "script_sha256",
+        "run_id",
+        "harness_helper",
+    }
+    assert {key: value for key, value in artifact.items() if key not in provenance} == {
+        key: value for key, value in current.items() if key not in provenance
+    }
     assert CANARY not in ARTIFACT.read_text(encoding="utf-8")
 
 
