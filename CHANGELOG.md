@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private project ERC report observations use exact sheet UUID coverage and optional executed-rule
+  severity floors, with full-finding digest binding. Legacy Circuit Intent ERC results retain
+  their existing identities and behavior; parsing a report grants no engineering authority.
 - Private schematic-project capture verifies the declared root, project settings and child files
   under one byte/time budget, derives hierarchy from captured bytes and rechecks the complete set.
   JSON deadline checks and fixed error handling preserve privacy. This does not execute ERC,
