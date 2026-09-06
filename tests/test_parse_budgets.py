@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import os
 import tempfile
-import tracemalloc
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -29,7 +28,7 @@ from unittest.mock import patch
 import pytest
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
-from copper_mcp.adapters.sexpr import SExprError, parse_sexpr
+from copper_mcp.adapters.sexpr import parse_sexpr
 from copper_mcp.board_ir import BUDGET_EXCEEDED_PREFIX, NetClass, ParseBudget, ParseLimits
 from copper_mcp.config import ConfigurationError, Settings
 from copper_mcp.parse_budgets import parse_limits_for
@@ -410,91 +409,3 @@ def test_a_budget_refusal_names_only_configuration_and_never_board_content() -> 
     # content, and the message names the budget only.
     assert conversion.diagnostics[0].message == "node budget exceeded"
     assert conversion.diagnostics[0].source_locator.startswith("byte:")
-
-
-# --------------------------------------------------------------------------------------------
-# 5. Adversarial input stays bounded at the shipped defaults
-# --------------------------------------------------------------------------------------------
-
-
-def _adversarial_wide(byte_ceiling: int) -> bytes:
-    """One list far wider than any real board's: binds ``max_children_per_list``."""
-
-    atoms = (byte_ceiling - 24) // 2
-    return ("(kicad_pcb(gr_poly" + " a" * atoms + "))").encode()
-
-
-def _adversarial_tree(byte_ceiling: int) -> bytes:
-    """Maximal node count with every list narrow and shallow: binds ``max_nodes``."""
-
-    chunk = "(g" + " a" * 1000 + ")"
-    group = "(p" + chunk * 100 + ")"
-    return ("(kicad_pcb" + group * ((byte_ceiling - 64) // len(group)) + ")").encode()
-
-
-def _adversarial_deep(byte_ceiling: int) -> bytes:
-    """Repeated maximal-depth nesting: the worst case for retained parser memory."""
-
-    unit = "(" * 126 + "a" + ")" * 126
-    return ("(kicad_pcb" + unit * max(1, (byte_ceiling - 16) // len(unit)) + ")").encode()
-
-
-@pytest.mark.parametrize(
-    ("shape", "expected_code", "peak_ceiling_bytes"),
-    [
-        (_adversarial_wide, "budget.exceeded.children_per_list", 48 * MIB),
-        (_adversarial_tree, "budget.exceeded.nodes", 96 * MIB),
-    ],
-)
-def test_adversarial_input_refuses_within_a_bounded_arena_at_the_shipped_defaults(
-    shape: object, expected_code: str, peak_ceiling_bytes: int
-) -> None:
-    """Raising the defaults must not have removed the ceiling, only moved it.
-
-    Each payload fills the parser's whole byte ceiling with the shape that maximises the budget
-    under test, and is parsed at the *shipped* defaults. The assertion is not "it is fast" — it
-    is that the refusal is typed, names the budget that stopped it, and that the allocation
-    charged along the way stayed inside a stated bound.
-    """
-
-    limits = ParseLimits()
-    payload = shape(limits.max_input_bytes)  # type: ignore[operator]
-    assert len(payload) <= limits.max_input_bytes
-
-    tracemalloc.start()
-    try:
-        with pytest.raises(SExprError) as caught:
-            parse_sexpr(payload, limits)
-        _, peak = tracemalloc.get_traced_memory()
-    finally:
-        tracemalloc.stop()
-
-    assert caught.value.code == expected_code
-    assert peak < peak_ceiling_bytes
-
-
-def test_retained_parser_memory_stays_linear_in_the_token_budget() -> None:
-    """Pin the law that makes the recorded worst case checkable rather than merely asserted.
-
-    Maximal nesting is the memory worst case: each level costs two tokens and one retained list
-    object. Peak parse-arena residency measured ~61 bytes per admitted token across two orders of
-    magnitude, which is what puts the shipped 4,000,000-token default at the ~244 MiB recorded in
-    B-090. Measuring 244 MiB in CI would be wasteful, so the *law* is measured at a tightened
-    budget and the recorded figure follows from it.
-    """
-
-    tightened = replace(ParseLimits(), max_tokens=200_000)
-    payload = _adversarial_deep(tightened.max_input_bytes)
-
-    tracemalloc.start()
-    try:
-        with pytest.raises(SExprError) as caught:
-            parse_sexpr(payload, tightened)
-        _, peak = tracemalloc.get_traced_memory()
-    finally:
-        tracemalloc.stop()
-
-    assert caught.value.code == "budget.exceeded.tokens"
-    assert peak < 200 * tightened.max_tokens
-    # And the shipped default is the same law with a bigger constant, not a different regime.
-    assert ParseLimits().max_tokens * 200 < 1024 * MIB

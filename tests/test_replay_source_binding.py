@@ -170,6 +170,9 @@ def test_census_executes_current_source_despite_timestamp_valid_stale_bytecode(i
         ("--census=1",),
         ("--census", "extra"),
         ("--census", "--census"),
+        ("--parse-memory=1",),
+        ("--parse-memory", "extra"),
+        ("--parse-memory", "--parse-memory"),
     ],
 )
 def test_replay_rejects_every_unknown_argument_form_with_one_error(
