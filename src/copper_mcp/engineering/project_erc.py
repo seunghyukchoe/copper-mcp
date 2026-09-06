@@ -481,7 +481,9 @@ def _authenticate_backend(
     its complete enclosing vendor-sealed bundle with the fixed operating-system verifier.
     This is not a sandbox against privileged concurrent modification of the operator's host.
     """
-    if sys.platform != "darwin" or len(executable.parents) < 3:
+    # A runtime alias keeps mypy checking the verifier body on non-macOS hosts too.
+    runtime_platform = sys.platform
+    if runtime_platform != "darwin" or len(executable.parents) < 3:
         raise ProjectErcError("project ERC has no authenticated backend profile for this platform")
     bundle = executable.parents[2]
     if (
