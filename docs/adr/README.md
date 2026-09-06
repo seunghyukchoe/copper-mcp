@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0136**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0138**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -212,6 +212,8 @@ never silently widens it.
 | [0133](0133-native-optimization-execution-and-host-confirmation.md) | Native optimization execution and host confirmation | Proposed |
 | [0134](0134-freeze-readiness-requirements-before-measuring-progress.md) | Freeze readiness requirements before measuring progress | Proposed |
 | [0135](0135-inner-placement-exhaustion-is-not-completed-search-work.md) | Inner placement exhaustion is not completed search work | Proposed |
+| [0136](0136-electrical-artifact-capture-is-not-engineering-authority.md) | Electrical artifact capture is not engineering authority | Proposed |
+| [0137](0137-isolate-census-recomputation-without-dropping-compatibility.md) | Isolate census recomputation without dropping compatibility checks | Proposed |
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read

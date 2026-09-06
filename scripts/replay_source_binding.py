@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Bind a fresh B-141 recomputation to its complete local Python source inventory.
+"""Bind fresh B-140 or B-141 recomputation to the local Python source inventory.
 
 Historical artifact loading authenticates the published companion and its declared inputs.
 It does not demonstrate that today's production code still reproduces the measurement. This
 separate fresh-process command records that stronger, current-source claim without rewriting
-the historical report. Only aggregate digests and counts leave the process.
+the historical report. Only bounded aggregate evidence leaves the process.
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ from pathlib import Path
 from types import CodeType, ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
+_ARGUMENT_ERROR = "replay arguments must be empty or exactly --census"
+_MAX_OUTPUT_BYTES = 1024 * 1024
 _ROOTS = ("src/copper_mcp", "scripts", "benchmarks/corpora/tscircuit-benchmark")
 _ARTIFACTS = (
     "benchmarks/results/routing/2026-08-06-simple-route-json-corpus-v1.json",
@@ -149,16 +151,14 @@ def verify_source_binding(binding: SourceBinding, root: Path = ROOT) -> None:
         raise ReplayBindingError("replay sources or inputs changed during measurement")
 
 
-def main() -> int:
-    # Invoke with `python -I`: production modules are imported only after the before-inventory.
-    if not sys.flags.isolated:
-        raise ReplayBindingError("replay requires an isolated interpreter (-I)")
-    if any(name.split(".", 1)[0] in {"copper_mcp", "scripts"} for name in sys.modules):
-        raise ReplayBindingError("replay requires fresh project imports")
-    before = capture_source_binding()
-    sys.path[:0] = [str(ROOT / "src"), str(ROOT)]
-    sys.meta_path.insert(0, _InventoriedImports(before, ROOT))
-    sys.dont_write_bytecode = True
+def _render_bounded(document: dict[str, object]) -> bytes:
+    rendered = json.dumps(document, sort_keys=True, allow_nan=False).encode() + b"\n"
+    if len(rendered) > _MAX_OUTPUT_BYTES:
+        raise ReplayBindingError("replay output exceeds its byte budget")
+    return rendered
+
+
+def _b141_receipt(before: SourceBinding) -> dict[str, object]:
     from scripts import benchmark_negotiated_multipin_branch_repair as benchmark
 
     published = benchmark.load_artifact()
@@ -166,7 +166,7 @@ def main() -> int:
     if any(measured[key] != published[key] for key in ("metrics", "configuration")):
         raise ReplayBindingError("current implementation does not reproduce published evidence")
     verify_source_binding(before)
-    receipt = {
+    return {
         "schema": "copper-mcp/current-evidence-replay/v1",
         "source_inventory_digest": before.digest,
         "source_inventory_files": len(before.entries),
@@ -177,7 +177,39 @@ def main() -> int:
         "repetitions": 2,
         "status": "reproduced",
     }
-    print(json.dumps({**receipt, "receipt_digest": _digest(receipt)}, sort_keys=True))
+
+
+def _census_receipt(before: SourceBinding) -> dict[str, object]:
+    from scripts import benchmark_negotiated_corpus_census as census
+
+    report = census.build_report(repetitions=1)
+    verify_source_binding(before)
+    return {
+        "schema": "copper-mcp/current-census-replay/v1",
+        "source_inventory_digest": before.digest,
+        "source_inventory_files": len(before.entries),
+        "python_version": platform.python_version(),
+        "repetitions": 1,
+        "status": "measured",
+        "report": report,
+    }
+
+
+def main() -> int:
+    # Invoke with `python -I`: production modules are imported only after the before-inventory.
+    if not sys.flags.isolated:
+        raise ReplayBindingError("replay requires an isolated interpreter (-I)")
+    if any(name.split(".", 1)[0] in {"copper_mcp", "scripts"} for name in sys.modules):
+        raise ReplayBindingError("replay requires fresh project imports")
+    arguments = tuple(sys.argv[1:])
+    if arguments not in {(), ("--census",)}:
+        raise ReplayBindingError(_ARGUMENT_ERROR)
+    before = capture_source_binding()
+    sys.path[:0] = [str(ROOT / "src"), str(ROOT)]
+    sys.meta_path.insert(0, _InventoriedImports(before, ROOT))
+    sys.dont_write_bytecode = True
+    receipt = _census_receipt(before) if arguments else _b141_receipt(before)
+    sys.stdout.buffer.write(_render_bounded({**receipt, "receipt_digest": _digest(receipt)}))
     return 0
 
 

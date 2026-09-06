@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private electrical artifact capture verifies every declared file through bounded, descriptor-
+  confined reads and a complete second sweep. Portable path aliases, control characters, stale
+  bytes and invalid or changing limits refuse. Its redacted projection explicitly grants no
+  project-completeness, model-validity, simulation, readiness or apply authority.
 - A private candidate-byte KiCad connectivity-parity runner checks the exact supplied board
   revision against the bounded Circuit Intent projection, without reopening a workspace board.
   Fixed default severities, oracle-liveness checks and deadlines remain mandatory. This is not
@@ -38,6 +42,10 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Full B-140 census recomputation now runs once per compatibility leg in a fixed source-bound
+  subprocess without inherited coverage tracing. Every current-report assertion remains; the
+  historical runner/artifacts and default B-141 replay are unchanged. Hosted compatibility jobs
+  print per-test durations; the first 32m12s hosted run remains a missed speed target.
 - Development, CI and commit hooks now use the same pinned Ruff 0.16.6. An explicit version
   requirement and regression test prevent a locally passing check from using different rules
   at commit time. The hook revision is pinned to its upstream commit.

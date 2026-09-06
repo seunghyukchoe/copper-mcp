@@ -26,6 +26,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import platform
+import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -48,6 +51,12 @@ from copper_mcp.routing.physical_clearance import PhysicalClearanceFailure
 from scripts import benchmark_negotiated_congestion as crossing
 from scripts import benchmark_negotiated_corpus_census as census
 from scripts import benchmark_simple_route_json_corpus as reference
+from scripts.replay_source_binding import (
+    _MAX_OUTPUT_BYTES,
+    SourceBinding,
+    capture_source_binding,
+    verify_source_binding,
+)
 from tests.test_routing_congestion import _multipin_requests, _multipin_shifted_snapshot
 
 LEGACY_ARTIFACT = census.LEGACY_ARTIFACT
@@ -56,6 +65,19 @@ SUCCESSOR_SOURCE_COMMIT = "30692df496e0dc250d3b09bae5ad9b7b11a3d827"
 SUCCESSOR_RUN_ID = "sha256:ef3724e6a58ba94df8a7e392a4e407029fb2720844fc5adcc4654cac8bbc3a31"
 SUCCESSOR_RUNNER_SHA256 = "sha256:eb4339e5e2264c62a1971958af6a6d5d037d5e5703a3609561c7f5f607279774"
 REFERENCE_RUNNER_SHA256 = "sha256:8fb5d05fb60a75b66e4720b3aa3ba9e0b28dbd8c3377ac159a239adbc4795fed"
+CURRENT_CENSUS_SCHEMA = "copper-mcp/current-census-replay/v1"
+CURRENT_CENSUS_KEYS = frozenset(
+    {
+        "python_version",
+        "receipt_digest",
+        "repetitions",
+        "report",
+        "schema",
+        "source_inventory_digest",
+        "source_inventory_files",
+        "status",
+    }
+)
 FORBIDDEN_PUBLIC_KEYS = frozenset(
     {
         "_negotiated_result",
@@ -103,11 +125,206 @@ def _nested_keys(value: Any) -> set[str]:
     return set()
 
 
+def _canonical_digest(value: object) -> str:
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+def _render_test_envelope(binding: SourceBinding, report: object) -> bytes:
+    receipt = {
+        "schema": CURRENT_CENSUS_SCHEMA,
+        "source_inventory_digest": binding.digest,
+        "source_inventory_files": len(binding.entries),
+        "python_version": platform.python_version(),
+        "repetitions": 1,
+        "status": "measured",
+        "report": report,
+    }
+    return json.dumps(
+        {**receipt, "receipt_digest": _canonical_digest(receipt)}, sort_keys=True
+    ).encode()
+
+
+def _closed_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON member")
+        result[key] = value
+    return result
+
+
+def _reject_nonfinite_json_number(value: str) -> Any:
+    raise ValueError(f"non-finite JSON number: {value}")
+
+
+def _validate_census_envelope(payload: bytes, binding: SourceBinding) -> dict[str, Any]:
+    if len(payload) > _MAX_OUTPUT_BYTES:
+        raise AssertionError("current census replay output exceeds its byte budget")
+    try:
+        envelope = json.loads(
+            payload,
+            object_pairs_hook=_closed_json_object,
+            parse_constant=_reject_nonfinite_json_number,
+        )
+    except (UnicodeDecodeError, ValueError) as error:
+        raise AssertionError("current census replay output is not one JSON document") from error
+    if not isinstance(envelope, dict) or set(envelope) != CURRENT_CENSUS_KEYS:
+        raise AssertionError("current census replay envelope is not closed")
+    body = {key: value for key, value in envelope.items() if key != "receipt_digest"}
+    if envelope["receipt_digest"] != _canonical_digest(body):
+        raise AssertionError("current census replay self-digest does not match")
+    if envelope["schema"] != CURRENT_CENSUS_SCHEMA or envelope["status"] != "measured":
+        raise AssertionError("current census replay identity does not match")
+    if (
+        type(envelope["repetitions"]) is not int
+        or envelope["repetitions"] != 1
+        or envelope["python_version"] != platform.python_version()
+    ):
+        raise AssertionError("current census replay execution does not match")
+    if (
+        envelope["source_inventory_digest"] != binding.digest
+        or type(envelope["source_inventory_files"]) is not int
+        or envelope["source_inventory_files"] != len(binding.entries)
+    ):
+        raise AssertionError("current census replay source binding does not match")
+    report = envelope["report"]
+    if not isinstance(report, dict):
+        raise AssertionError("current census replay report is not an object")
+    return report
+
+
+def _current_census_report() -> dict[str, Any]:
+    before = capture_source_binding()
+    script = census.ROOT / "scripts" / "replay_source_binding.py"
+    environment = {"PATH": os.environ.get("PATH", os.defpath), "LANG": "C.UTF-8"}
+    completed = subprocess.run(  # noqa: S603 - fixed interpreter and repository-owned script
+        [sys.executable, "-I", str(script), "--census"],
+        check=True,
+        capture_output=True,
+        timeout=3_600,
+        env=environment,
+    )
+    verify_source_binding(before)
+    return _validate_census_envelope(completed.stdout, before)
+
+
 @pytest.fixture(scope="module")
 def successor_report() -> dict[str, Any]:
-    """Measure once in memory; every current-contract assertion reuses this exact report."""
+    """Measure once in an isolated process; every current-contract assertion reuses it."""
 
-    return census.build_report(repetitions=1)
+    return _current_census_report()
+
+
+def test_current_census_subprocess_is_fixed_isolated_and_has_a_minimal_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binding = capture_source_binding()
+    payload = _render_test_envelope(binding, {"fresh": True})
+    captured: dict[str, Any] = {}
+
+    def completed(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, stdout=payload, stderr=b"")
+
+    monkeypatch.setenv("COV_CORE_SOURCE", "must-not-reach-child")
+    monkeypatch.setenv("PYTEST_ADDOPTS", "must-not-reach-child")
+    monkeypatch.setenv("COPPER_MCP_ALLOW_APPLY", "must-not-reach-child")
+    monkeypatch.setattr(subprocess, "run", completed)
+
+    assert _current_census_report() == {"fresh": True}
+    assert captured["command"] == [
+        sys.executable,
+        "-I",
+        str(census.ROOT / "scripts" / "replay_source_binding.py"),
+        "--census",
+    ]
+    assert captured["kwargs"] == {
+        "check": True,
+        "capture_output": True,
+        "timeout": 3_600,
+        "env": {"PATH": os.environ.get("PATH", os.defpath), "LANG": "C.UTF-8"},
+    }
+
+
+def test_parent_refuses_malformed_oversized_tampered_or_unbound_census_envelopes() -> None:
+    binding = capture_source_binding()
+    valid = _render_test_envelope(binding, {"fresh": True})
+
+    with pytest.raises(AssertionError, match="not one JSON document"):
+        _validate_census_envelope(b"not-json", binding)
+    with pytest.raises(AssertionError, match="exceeds its byte budget"):
+        _validate_census_envelope(b"x" * (_MAX_OUTPUT_BYTES + 1), binding)
+
+    tampered = json.loads(valid)
+    tampered["report"]["fresh"] = False
+    with pytest.raises(AssertionError, match="self-digest"):
+        _validate_census_envelope(json.dumps(tampered).encode(), binding)
+
+    unbound = json.loads(valid)
+    unbound["source_inventory_digest"] = "sha256:" + "0" * 64
+    unbound_body = {key: value for key, value in unbound.items() if key != "receipt_digest"}
+    unbound["receipt_digest"] = _canonical_digest(unbound_body)
+    with pytest.raises(AssertionError, match="source binding"):
+        _validate_census_envelope(json.dumps(unbound).encode(), binding)
+
+    open_envelope = json.loads(valid)
+    open_envelope["unexpected"] = True
+    with pytest.raises(AssertionError, match="not closed"):
+        _validate_census_envelope(json.dumps(open_envelope).encode(), binding)
+
+    wrong_report = json.loads(valid)
+    wrong_report["report"] = []
+    wrong_body = {key: value for key, value in wrong_report.items() if key != "receipt_digest"}
+    wrong_report["receipt_digest"] = _canonical_digest(wrong_body)
+    with pytest.raises(AssertionError, match="report is not an object"):
+        _validate_census_envelope(json.dumps(wrong_report).encode(), binding)
+
+
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("repetitions", "execution does not match"),
+        ("source_inventory_files", "source binding does not match"),
+    ],
+)
+def test_parent_refuses_resigned_booleans_for_exact_integer_fields(
+    field: str, message: str
+) -> None:
+    binding = SourceBinding((("synthetic.py", "0" * 64),))
+    envelope = json.loads(_render_test_envelope(binding, {"fresh": True}))
+    envelope[field] = True
+    body = {key: value for key, value in envelope.items() if key != "receipt_digest"}
+    envelope["receipt_digest"] = _canonical_digest(body)
+
+    with pytest.raises(AssertionError, match=message):
+        _validate_census_envelope(json.dumps(envelope).encode(), binding)
+
+
+def test_parent_refuses_duplicate_json_members_before_digest_validation() -> None:
+    binding = capture_source_binding()
+    valid = _render_test_envelope(binding, {"fresh": True})
+    duplicated = valid.replace(
+        b'"status": "measured"',
+        b'"status": "measured", "status": "measured"',
+        1,
+    )
+    assert duplicated != valid
+
+    with pytest.raises(AssertionError, match="not one JSON document"):
+        _validate_census_envelope(duplicated, binding)
+
+
+@pytest.mark.parametrize("constant", [b"NaN", b"Infinity", b"-Infinity"])
+def test_parent_refuses_nonfinite_json_numbers_before_digest_validation(constant: bytes) -> None:
+    binding = capture_source_binding()
+    valid = _render_test_envelope(binding, {"fresh": True})
+    nonfinite = valid.replace(b'"fresh": true', b'"fresh": ' + constant, 1)
+    assert nonfinite != valid
+
+    with pytest.raises(AssertionError, match="not one JSON document"):
+        _validate_census_envelope(nonfinite, binding)
 
 
 def _observation(
@@ -309,9 +526,13 @@ def test_successor_artifact_has_exact_reconciled_redacted_measurement() -> None:
 def test_successor_artifact_metrics_match_one_fresh_report(
     successor_report: dict[str, Any],
 ) -> None:
-    # Timing and the self-digest are run-specific. The closed deterministic metrics are the
-    # compatibility surface, and the module-scoped fixture ensures this comparison routes once.
-    assert _successor_artifact()["metrics"] == successor_report["metrics"]
+    # The isolated child returns the complete freshly built B-140 report. Timing, environment,
+    # source commit, and the outer self-digest are run-specific; deterministic metrics are the
+    # historical compatibility surface.
+    artifact = _successor_artifact()
+
+    assert set(successor_report) == set(artifact)
+    assert artifact["metrics"] == successor_report["metrics"]
 
 
 def test_current_admission_vocabulary_pins_2_and_32_without_a_shared_origin() -> None:

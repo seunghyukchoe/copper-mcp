@@ -17,6 +17,10 @@ python -m pip install -e ".[dev,security]"
 pre-commit install --install-hooks
 ```
 
+Ruff is pinned to 0.16.6 in the development extra, the required-version setting and the
+commit-pinned pre-commit hook. Update those surfaces and their regression together; do not bypass
+an old hook or suppress findings to compensate for a different local formatter version.
+
 ## Validation levels
 
 | Command | Purpose |
@@ -92,6 +96,15 @@ supported versions; main, daily nightly and release retain the full evidence pol
 The release workflow requires `check_ci_budgets.py --require-calibrated`; normal CI reports
 provisional budgets distinctly. The under-20-minute PR and 3x local speed targets need successful
 measurements and cannot be inferred from the workflow diff.
+
+The first reshaped hosted draft run passed in 32m12s and missed the speed target. Compatibility
+jobs now request per-test duration output. B-140's once-per-module current corpus recomputation
+uses the fixed isolated `replay_source_binding.py --census` path with source checks on both sides;
+all existing compatibility assertions still consume its fresh report. The child does not inherit
+coverage/pytest settings. This avoids tracing every node in a full corpus measurement without
+turning a cached historical report into current evidence. Default B-141 replay is unchanged.
+See [ADR-0137](adr/0137-isolate-census-recomputation-without-dropping-compatibility.md). PR timings
+remain observations, not the successful-main calibration required for release.
 
 Tests should not require network access or proprietary boards. GPU and KiCad integration tests must
 be separately marked and have deterministic CPU or fixture-based coverage where practical.

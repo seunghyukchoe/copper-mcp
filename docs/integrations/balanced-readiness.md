@@ -50,6 +50,21 @@ slice does not add a physics executor, relax the optimization/v1 judge, register
 grant application authority or implement strict live mutation. Actual project capture, backend
 execution, model calibration and independent evidence review remain required.
 
+## Verified artifact bytes
+
+The private `engineering.capture.capture_electrical_artifacts()` adapter verifies the actual
+bytes behind every declared artifact. It takes declaration JSON and a separate bounded
+`electrical-artifact-paths/v1` document, reads only confined allowlisted file types, and completes
+a second sweep before returning an immutable private capture. All limits are copied and validated
+at entry; the caller cannot extend them during capture. Case-folded/NFC path collisions are
+conservatively refused even on case-sensitive filesystems.
+
+Only `capture.redacted_projection` is safe to disclose. It carries digests/counts and explicit
+`project_capture_complete: false`, `semantic_validation: not_run`, `model_execution: not_run`
+and `apply_authority: none`. A model library remains untrusted data even after its hash matches.
+Dependency/hierarchy discovery, format validation, project parity and evidence authentication
+remain separate work. See [ADR-0136](../adr/0136-electrical-artifact-capture-is-not-engineering-authority.md).
+
 ## Captured candidate connectivity parity
 
 The private `kicad_cli._run_captured_source_to_board_parity()` adapter can check an immutable

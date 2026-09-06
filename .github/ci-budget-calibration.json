@@ -1,14 +1,14 @@
 {
   "schema": "ci-budget-calibration/1",
   "repository": "seunghyukchoe/copper-mcp",
-  "recorded": "2026-09-05",
-  "why": "The CI graph was reshaped into quality, compatibility, evidence, and package jobs. Their 120-minute timeouts are provisional, not measurements. Successful hosted observations must replace each pending entry before a release.",
+  "recorded": "2026-09-06",
+  "why": "The reshaped CI graph passed draft PR run 34009062108, but that run is not main calibration and its 32m12s path missed the PR-speed target. The 120-minute timeouts remain provisional. Successful main observations must replace each pending entry before a release.",
   "half_rule": "A measured budget must be at least twice the longest successful hosted job duration.",
   "jobs": [
-    {"workflow": ".github/workflows/ci.yml", "job": "quality", "status": "pending", "release_blocking": true, "reason": "new job shape has no successful hosted observation"},
-    {"workflow": ".github/workflows/ci.yml", "job": "compatibility", "status": "pending", "release_blocking": true, "reason": "new xdist compatibility matrix has no successful hosted observation"},
-    {"workflow": ".github/workflows/ci.yml", "job": "evidence", "status": "pending", "release_blocking": true, "reason": "new dynamic evidence matrix has no successful hosted observation"},
-    {"workflow": ".github/workflows/ci.yml", "job": "package", "status": "pending", "release_blocking": true, "reason": "new artifact-reuse gate has no successful hosted observation"},
+    {"workflow": ".github/workflows/ci.yml", "job": "quality", "status": "pending", "release_blocking": true, "reason": "new job shape still requires successful main calibration; draft PR observation is recorded separately"},
+    {"workflow": ".github/workflows/ci.yml", "job": "compatibility", "status": "pending", "release_blocking": true, "reason": "new xdist compatibility matrix still requires successful main calibration; draft PR observation is recorded separately"},
+    {"workflow": ".github/workflows/ci.yml", "job": "evidence", "status": "pending", "release_blocking": true, "reason": "new dynamic evidence matrix still requires successful main calibration; draft PR observation is recorded separately"},
+    {"workflow": ".github/workflows/ci.yml", "job": "package", "status": "pending", "release_blocking": true, "reason": "new artifact-reuse gate still requires successful main calibration; draft PR observation is recorded separately"},
     {"workflow": ".github/workflows/release.yml", "job": "verify", "observations": [{"run_id": 33162621059, "job_id": 98820457912, "conclusion": "success", "seconds": 2325}]},
     {"workflow": ".github/workflows/release.yml", "job": "publish", "observations": [{"run_id": 33162621059, "job_id": 98828444636, "conclusion": "success", "seconds": 12}]}
   ]

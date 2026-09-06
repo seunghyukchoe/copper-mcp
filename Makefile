@@ -21,8 +21,9 @@ test-full:
 
 TEST_MARKER ?= not slow_evidence
 COVERAGE_ARGS ?= --no-cov
+PYTEST_TIMING_ARGS ?=
 test-compat:
-	PYTHONPATH=src $(PYTHON) -m pytest -n 4 --dist loadfile -m "$(TEST_MARKER)" $(COVERAGE_ARGS)
+	PYTHONPATH=src $(PYTHON) -m pytest -n 4 --dist loadfile -m "$(TEST_MARKER)" $(COVERAGE_ARGS) $(PYTEST_TIMING_ARGS)
 
 test-evidence:
 	PYTHONPATH=src $(PYTHON) -m pytest --no-cov tests/test_benchmark_negotiated_multipin_branch_repair.py::test_published_artifact_matches_one_current_source_bound_b141_recomputation

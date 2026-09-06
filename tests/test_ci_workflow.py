@@ -140,6 +140,8 @@ def test_compatibility_and_evidence_keep_deterministic_hypothesis_and_correct_co
     for job in (compatibility, evidence):
         assert job["env"] == {"HYPOTHESIS_PROFILE": "deterministic-ci"}
     assert "matrix.python-version == '3.12'" in _runs(compatibility)
+    assert "PYTEST_TIMING_ARGS=--durations=20" in _runs(compatibility)
+    assert "$(PYTEST_TIMING_ARGS)" in MAKEFILE
     assert "--no-cov" in _runs(compatibility)
     assert "make test-evidence" in _runs(evidence)
     assert "needs" not in compatibility
