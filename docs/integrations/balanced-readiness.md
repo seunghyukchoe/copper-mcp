@@ -178,3 +178,17 @@ parity retains its component-accounting liveness rule and accepted set.
 Native ordinary-project execution and independent liveness proof remain a separate increment.
 An empty parity array alone does not prove KiCad ran the check. See
 [ADR-0143](../adr/0143-project-parity-uses-native-liveness-and-immutable-candidates.md).
+
+## Private ordinary project-to-candidate parity
+
+`engineering.project_board_parity.run_project_board_parity()` compares a captured project to
+exact candidate board bytes, not a workspace board or a substituted Circuit Intent. It shares
+the fixed source-loading/backend checks with ERC and stages a separate same-stem parity copy.
+Both runs must supply a complete, count-matched native liveness transcript and bound full-finding
+observations. All seven parity finding categories decide the new verdict; legacy v1 meanings stay
+unchanged. Sources are rechecked before execution and delivery, and candidate bytes stay immutable.
+
+The parity-specific project derivative does not establish full DRC. DRC is inconclusive, simulation
+and fabrication are not run, and application authority is none. General model/BOM, versioned job
+integration, held-out quality and real editor/human/physics gates remain open. See
+[ADR-0143](../adr/0143-project-parity-uses-native-liveness-and-immutable-candidates.md).

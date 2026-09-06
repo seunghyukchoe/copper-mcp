@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private ordinary-project parity executes real KiCad against immutable candidate board bytes,
+  with fixed parity rules, native liveness checks and repeated finding identities. Full DRC remains
+  inconclusive and no physics, fabrication, save or apply authority is granted.
 - Private identity-neutral parity observations bind full report details and explicit enabled-check
   expectations without borrowing Circuit Intent identities. Existing parity evidence retains its
   liveness invariant and accepted set; the parser alone does not establish native execution.
