@@ -131,3 +131,16 @@ Existing Circuit Intent summaries preserve their public shape and interpretation
 This is report validation, not evidence authentication or complete source-load proof. The separate
 project executor, project parity and model authorities must still earn their own acceptance.
 See [ADR-0140](../adr/0140-project-erc-observations-do-not-invent-intent-identities.md).
+
+## Private project ERC preparation
+
+`engineering.project_erc_inputs.prepare_project_erc()` prepares an explicit project-rule and
+symbol-library derivative from captured bytes. Source files remain unchanged. The initial
+KiCad 10.0.5 connectivity profile preserves stronger in-profile rules, records waiver removal
+and disabled outside-profile checks, and requires exact flat cached/supplied symbol equivalence.
+Prepared files and library contents are private; execution and profile digests bind the derivative.
+
+Preparation does not run ERC or establish source-load completeness, complete library/model
+support, parity, physics, fabrication or application authority. Inherited used symbols and
+cached-name overrides remain unsupported. See
+[ADR-0141](../adr/0141-project-erc-prepares-an-explicit-rule-and-library-derivative.md).

@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private project ERC preparation binds captured source, an explicit local symbol-library set
+  and a disclosed connectivity-rule derivative without changing source files or executing ERC.
+  The initial KiCad 10.0.5 profile requires exact flat symbol equivalence; outside-profile checks
+  remain unassessed, and no engineering or application authority is granted.
 - Private project ERC report observations use exact sheet UUID coverage and optional executed-rule
   severity floors, with full-finding digest binding. Legacy Circuit Intent ERC results retain
   their existing identities and behavior; parsing a report grants no engineering authority.
