@@ -4,7 +4,8 @@ This program continues the [verified local checkpoint](balanced-readiness-checkp
 and the [original v0.13 acceptance](v0.13-supervised-optimization.md). It does not replace either
 with a foundation-only release. The first reviewed integration is published as
 [draft PR #268](https://github.com/seunghyukchoe/copper-mcp/pull/268), initially at `1cf2fea`.
-Publication was explicitly authorized; merging and releasing were not.
+Publication was explicitly authorized at that checkpoint. The later milestone-merge authorization
+is recorded below; public releases remain separately gated.
 
 The initial [hosted run](https://github.com/seunghyukchoe/copper-mcp/actions/runs/34009062108)
 passed all CI, security and CodeQL gates. Its CI critical path was 32m12s, so the under-twenty-minute
@@ -31,7 +32,7 @@ the four reshaped job budgets remain provisional and release-blocking.
 ## Ordered increments
 
 1. **Auditable baseline.** Publish the reviewed draft, repair hosted failures, then obtain separately
-   authorized baseline integration. Add authenticated evidence intake without changing preliminary
+   validated baseline integration. Add authenticated evidence intake without changing preliminary
    submissions into audited scores. Freeze corpus splits, metrics and development budget profiles.
 2. **Real inputs and native prototype.** Capture immutable electrical project files and dependencies;
    verify BOM/model bindings, hierarchy and candidate parity before project-context ERC. Develop a
@@ -121,6 +122,28 @@ mandatory. The PR path must be measured below twenty minutes, and local fast fee
 three times faster than a matched serial baseline.
 
 The four-to-six-week window is staged delivery, not a promise to finish every area at ninety.
-Merge, release, modified-application installation, paid laboratory work, hardware purchases and
+Public release, modified-application installation, paid laboratory work, hardware purchases and
 genuine human/specialist validation remain explicit gates. AI clicking approval is not evidence
 of genuine human consent. No board saving or general engineering certification is introduced.
+
+## Active goal and M0 integrated review
+
+The user approved this program as an active goal and chose small independently useful slices.
+Commit and push each reviewed milestone, then squash-merge through the existing protected PR
+workflow after exact-head validation and green checks. No direct/force push, protection bypass or
+release is authorized. Verify the resulting main run before another integration. Preserve the
+original dirty checkout and use ponytail complexity audits separately from correctness/security
+reviews; the unchanged foundation's structural audit found no justified cuts.
+
+The third hosted PR run, [34014192165](https://github.com/seunghyukchoe/copper-mcp/actions/runs/34014192165),
+passed at 5c1d5b8 in **22m51s**. The speed requirement remains open; require three consecutive
+qualifying PR paths below twenty minutes. A fresh local exact-head make check passed 4,650 tests,
+two skips, 779 subtests and 89% coverage in 419.60 seconds of pytest / 435.00 seconds overall.
+Its source/input fingerprint remained `sha256:989bd1cbe8baa3741c1d915fb67cf652f32613e53d52affbaeb375b0952cff8d`.
+
+Integrated review nevertheless found a CI classification blocker: changes to conftest hooks were
+not sensitive. The fix classifies root/nested hooks and root test configuration as sensitive and
+runs mandatory source-bound evidence outside pytest, retaining the 3600-second ceiling. This
+avoids a hook silently replacing required execution with a skip. Existing full/compatibility
+assertions remain, including the source-bound recomputation test. Review and validation of this
+fix must complete before merging; the preceding green baseline does not waive the new gate.

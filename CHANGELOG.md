@@ -42,6 +42,9 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Global/nested pytest hooks and test configuration changes require all-interpreter evidence.
+  The mandatory evidence target runs the fixed isolated replay outside pytest, preserving its
+  one-hour ceiling and propagating failures so a pytest skip hook cannot replace execution.
 - Placement benchmark contract assertions share one fresh three-replay result with independent
   per-test copies; negative, interruption and independent determinism runs remain separate.
   Matched local serial/fast feedback measured 9.65x faster on the recorded host. The latest

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -80,6 +83,38 @@ def test_make_targets_preserve_fast_full_compat_and_evidence_contracts() -> None
     assert "test:\n\tPYTHONPATH=src $(PYTHON) -m pytest" in MAKEFILE
     assert "COVERAGE_ARGS ?= --no-cov" in MAKEFILE
     assert "test-evidence:" in MAKEFILE and "--no-cov" in MAKEFILE
+
+
+@pytest.mark.parametrize("exit_code", (0, 7))
+def test_required_evidence_runs_outside_pytest_hooks(tmp_path: Path, exit_code: int) -> None:
+    make = shutil.which("make")
+    assert make is not None, "the repository validation requires make"
+    (tmp_path / "Makefile").write_text(MAKEFILE, encoding="utf-8")
+    (tmp_path / "conftest.py").write_text(
+        'raise AssertionError("required replay must not load pytest hooks")\n', encoding="utf-8"
+    )
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "replay_source_binding.py").write_text(
+        "import sys\nfrom pathlib import Path\n"
+        "assert sys.flags.isolated\n"
+        "Path('invoked').write_text('replay executed')\n"
+        f"raise SystemExit({exit_code})\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(  # noqa: S603 - fixed Makefile and owned temporary replay stub
+        [make, "test-evidence", f"PYTHON={sys.executable}"],
+        cwd=tmp_path,
+        capture_output=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert (tmp_path / "invoked").read_text() == "replay executed"
+    assert (result.returncode == 0) == (exit_code == 0)
+    recipe = MAKEFILE.split("test-evidence:\n", 1)[1].split("\n\n", 1)[0]
+    assert "timeout=3600" in recipe
 
 
 def test_quality_runs_every_make_lint_checker_and_commit_range_gate() -> None:

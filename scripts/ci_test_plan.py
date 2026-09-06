@@ -23,6 +23,13 @@ SENSITIVE_FILES = {
     "scripts/offline_mcp_harness.py",
     "scripts/mutation_harness.py",
     "scripts/replay_source_binding.py",
+    "pytest.ini",
+    ".pytest.ini",
+    "pytest.toml",
+    ".pytest.toml",
+    "tox.ini",
+    "setup.cfg",
+    ".coveragerc",
 }
 SENSITIVE_PREFIXES = (
     "src/",
@@ -49,6 +56,8 @@ class TestPlan:
 def _is_sensitive(changed_files: tuple[str, ...]) -> bool:
     return any(
         path in SENSITIVE_FILES
+        # Conftest hooks can alter collection/execution, including in nested evidence suites.
+        or path.rsplit("/", 1)[-1] == "conftest.py"
         or path in LOCKFILE_NAMES
         or path.endswith(".lock")
         or path.startswith(SENSITIVE_PREFIXES)
@@ -88,6 +97,7 @@ def changed_files(*, base_sha: str, head_sha: str) -> tuple[str, ...] | None:
                 "diff",
                 "--no-renames",
                 "--name-only",
+                "-z",
                 "--diff-filter=ACMRD",
                 f"{base_sha}..{head_sha}",
             ],
@@ -99,7 +109,7 @@ def changed_files(*, base_sha: str, head_sha: str) -> tuple[str, ...] | None:
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
-    return tuple(path for path in result.stdout.splitlines() if path)
+    return tuple(path for path in result.stdout.split("\0") if path)
 
 
 def _write_github_output(path: Path, plan: TestPlan) -> None:

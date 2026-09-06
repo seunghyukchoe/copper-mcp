@@ -26,7 +26,7 @@ test-compat:
 	PYTHONPATH=src $(PYTHON) -m pytest -n 4 --dist loadfile -m "$(TEST_MARKER)" $(COVERAGE_ARGS) $(PYTEST_TIMING_ARGS)
 
 test-evidence:
-	PYTHONPATH=src $(PYTHON) -m pytest --no-cov tests/test_benchmark_negotiated_multipin_branch_repair.py::test_published_artifact_matches_one_current_source_bound_b141_recomputation
+	$(PYTHON) -I -c 'import subprocess, sys; subprocess.run([sys.executable, "-I", "scripts/replay_source_binding.py"], check=True, timeout=3600)'
 
 lint:
 	$(PYTHON) -m ruff check .
