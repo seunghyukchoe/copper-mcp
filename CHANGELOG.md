@@ -42,6 +42,10 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- Full-size parser memory checks run in a fresh source-bound process without inherited coverage
+  tracing, on every supported interpreter. Exact workload hashes, original memory ceilings,
+  active-tracer checks and strict receipts prevent smaller inputs or missing measurements from
+  earning a pass. Ordinary parser coverage and B-140/B-141 replay semantics remain unchanged.
 - Global/nested pytest hooks and test configuration changes require all-interpreter evidence.
   The mandatory evidence target runs the fixed isolated replay outside pytest, preserving its
   one-hour ceiling and propagating failures so a pytest skip hook cannot replace execution.

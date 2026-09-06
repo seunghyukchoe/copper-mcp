@@ -23,6 +23,8 @@ SENSITIVE_FILES = {
     "scripts/offline_mcp_harness.py",
     "scripts/mutation_harness.py",
     "scripts/replay_source_binding.py",
+    "scripts/measure_parse_memory.py",
+    "tests/test_parse_memory_measurement.py",
     "pytest.ini",
     ".pytest.ini",
     "pytest.toml",

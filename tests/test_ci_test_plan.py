@@ -33,6 +33,8 @@ def test_sensitive_paths_and_deletions_fan_out_pull_request_evidence() -> None:
         "scripts/ci_test_plan.py",
         "scripts/offline_mcp_harness.py",
         "scripts/mutation_harness.py",
+        "scripts/measure_parse_memory.py",
+        "tests/test_parse_memory_measurement.py",
         "scripts/evaluate_excessive_agency.py",
         "scripts/evaluate_mcp_agency_safety.py",
         "tests/test_benchmark_routing_policy_order.py",

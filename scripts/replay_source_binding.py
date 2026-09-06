@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bind fresh B-140 or B-141 recomputation to the local Python source inventory.
+"""Bind fresh benchmarks or parser allocation measurements to local Python sources.
 
 Historical artifact loading authenticates the published companion and its declared inputs.
 It does not demonstrate that today's production code still reproduces the measurement. This
@@ -23,7 +23,7 @@ from pathlib import Path
 from types import CodeType, ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
-_ARGUMENT_ERROR = "replay arguments must be empty or exactly --census"
+_ARGUMENT_ERROR = "replay arguments must be empty, exactly --census, or exactly --parse-memory"
 _MAX_OUTPUT_BYTES = 1024 * 1024
 _ROOTS = ("src/copper_mcp", "scripts", "benchmarks/corpora/tscircuit-benchmark")
 _ARTIFACTS = (
@@ -195,6 +195,21 @@ def _census_receipt(before: SourceBinding) -> dict[str, object]:
     }
 
 
+def _parse_memory_receipt(before: SourceBinding) -> dict[str, object]:
+    from scripts import measure_parse_memory
+
+    report = measure_parse_memory.measure_all()
+    verify_source_binding(before)
+    return {
+        "schema": "copper-mcp/parse-memory-replay/v1",
+        "source_inventory_digest": before.digest,
+        "source_inventory_files": len(before.entries),
+        "python_version": platform.python_version(),
+        "status": "measured",
+        "report": report,
+    }
+
+
 def main() -> int:
     # Invoke with `python -I`: production modules are imported only after the before-inventory.
     if not sys.flags.isolated:
@@ -202,13 +217,18 @@ def main() -> int:
     if any(name.split(".", 1)[0] in {"copper_mcp", "scripts"} for name in sys.modules):
         raise ReplayBindingError("replay requires fresh project imports")
     arguments = tuple(sys.argv[1:])
-    if arguments not in {(), ("--census",)}:
+    if arguments not in {(), ("--census",), ("--parse-memory",)}:
         raise ReplayBindingError(_ARGUMENT_ERROR)
     before = capture_source_binding()
     sys.path[:0] = [str(ROOT / "src"), str(ROOT)]
     sys.meta_path.insert(0, _InventoriedImports(before, ROOT))
     sys.dont_write_bytecode = True
-    receipt = _census_receipt(before) if arguments else _b141_receipt(before)
+    if not arguments:
+        receipt = _b141_receipt(before)
+    elif arguments == ("--census",):
+        receipt = _census_receipt(before)
+    else:
+        receipt = _parse_memory_receipt(before)
     sys.stdout.buffer.write(_render_bounded({**receipt, "receipt_digest": _digest(receipt)}))
     return 0
 

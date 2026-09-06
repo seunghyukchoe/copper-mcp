@@ -103,6 +103,18 @@ uses the fixed isolated `replay_source_binding.py --census` path with source che
 all existing compatibility assertions still consume its fresh report. The child does not inherit
 coverage/pytest settings. This avoids tracing every node in a full corpus measurement without
 turning a cached historical report into current evidence. Default B-141 replay is unchanged.
+
+Full-scale parser allocation tests use the same entrypoint's fixed `--parse-memory` mode once
+per test module/interpreter. They remain in fast and compatibility runs. A fresh isolated child
+measures the original wide/tree/deep synthetic payloads with `tracemalloc`; the parent checks
+source/interpreter bindings, self-digest, exact workload hashes and all original limits. The
+test supervisor retains a twenty-minute guard and the encoded receipt is capped at one MiB.
+Wide/tree peaks must remain below 48/96 MiB; the deep case keeps its 200,000-token limit and
+`peak < 200 * max_tokens` law, including the shipped-default extrapolation below one GiB.
+Stopped/preexisting tracing or nonpositive peaks refuse rather than yield successful evidence.
+Allocation peaks are host/interpreter observations, not portable deterministic quality metrics.
+The parent coverage tracer intentionally does not measure child execution; focused parser and
+refusal tests remain covered. No permanent payload/report cache or private-board artifact is added.
 See [ADR-0137](adr/0137-isolate-census-recomputation-without-dropping-compatibility.md). PR timings
 remain observations, not the successful-main calibration required for release.
 
