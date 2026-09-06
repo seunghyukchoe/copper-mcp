@@ -43,9 +43,7 @@ _VARIABLE_NAME = re.compile(r"[A-Za-z0-9_:]+")
 _MAX_PROJECT_VARIABLES = 128
 _MAX_PROJECT_VARIABLE_KEY_CHARS = 128
 _MAX_PROJECT_VARIABLE_VALUE_CHARS = 4096
-_MAX_VARIABLE_EXPANSION_STEPS = 8
 _MAX_EXPANDED_REFERENCE_CHARS = 4096
-_MAX_VARIABLE_EXPANSION_WORK = 65_536
 _REFUSED_VARIABLES = {
     "CURRENT_DATE",
     "CURRENT_TIME_HH_MM_SS",
@@ -335,49 +333,40 @@ def _copy_project_variables(project_variables: object) -> dict[str, str]:
 def _expand_reference(
     raw_reference: str, project_variables: dict[str, str], project_name: str, deadline: float
 ) -> str:
-    remaining_work = _MAX_VARIABLE_EXPANSION_WORK
-
-    def resolve(value: str, chain: tuple[str, ...]) -> str:
-        nonlocal remaining_work
+    # loadHierarchy calls ExpandTextVars once. Values returned by the project resolver
+    # are appended literally, not recursively expanded. Refuse unresolved output.
+    if "@{" in raw_reference:
+        _fail("schematic hierarchy reference is malformed")
+    result: list[str] = []
+    output_size = 0
+    index = 0
+    while index < len(raw_reference):
         _check_deadline(deadline)
-        remaining_work -= len(value) + 1
-        if remaining_work < 0:
-            _fail("schematic hierarchy variable expansion work budget exceeded")
-        result: list[str] = []
-        index = 0
-        while index < len(value):
-            character = value[index]
-            if character != "$":
-                result.append(character)
-                index += 1
-                continue
-            if index + 2 >= len(value) or value[index + 1] != "{":
+        replacement = raw_reference[index]
+        if replacement == "$":
+            if index + 2 >= len(raw_reference) or raw_reference[index + 1] != "{":
                 _fail("schematic hierarchy reference is malformed")
-            close = value.find("}", index + 2)
+            close = raw_reference.find("}", index + 2)
             if close < 0:
                 _fail("schematic hierarchy reference is malformed")
-            name = value[index + 2 : close]
+            name = raw_reference[index + 2 : close]
             if not _VARIABLE_NAME.fullmatch(name) or name in _REFUSED_VARIABLES:
                 _fail("schematic hierarchy reference is malformed")
             if name == "PROJECTNAME":
                 replacement = project_name
             else:
-                if name not in project_variables or name in chain:
+                if name not in project_variables:
                     _fail("schematic hierarchy reference is malformed")
-                if len(chain) >= _MAX_VARIABLE_EXPANSION_STEPS:
-                    _fail("schematic hierarchy reference is malformed")
-                replacement = resolve(project_variables[name], (*chain, name))
-            result.append(replacement)
-            if sum(map(len, result)) > _MAX_EXPANDED_REFERENCE_CHARS:
-                _fail("schematic hierarchy reference is malformed")
+                replacement = project_variables[name]
             index = close + 1
-        expanded = "".join(result)
-        if len(expanded) > _MAX_EXPANDED_REFERENCE_CHARS:
+        else:
+            index += 1
+        output_size += len(replacement)
+        if output_size > _MAX_EXPANDED_REFERENCE_CHARS or "$" in replacement or "@{" in replacement:
             _fail("schematic hierarchy reference is malformed")
-        _check_deadline(deadline)
-        return expanded
-
-    return resolve(raw_reference, ())
+        result.append(replacement)
+    _check_deadline(deadline)
+    return "".join(result)
 
 
 def _field_numbers(values: tuple[str | SExpr, ...], count: int, *, integer: bool = False) -> None:

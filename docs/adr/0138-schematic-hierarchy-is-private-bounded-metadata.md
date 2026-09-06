@@ -39,13 +39,14 @@ Resolve child paths relative to their containing schematic, following the pinned
 source. Support a copied map of at most 128 project variables, keys of at most 128 characters
 using the declared ASCII identifier subset and values of at most 4096 characters. `PROJECTNAME`
 is the root schematic stem. Do not consult process environment variables: `KIPRJMOD` in a sheet
-filename is supported only when explicitly declared in the project map. Unknown, cyclic, clock
-and version-control-dependent references refuse. Limit recursion to eight variable levels,
-expanded output to 4096 characters and cumulative expansion work to 65,536 units per reference;
-each recursive invocation charges its input characters plus one, including empty replacements.
-This independent work ceiling prevents short or empty expansion results hiding exponential work.
-Check the same deadline inside expansion. These conservative limits are a published subset, not
-a promise to interpret every native project-variable spelling or nesting pattern.
+filename is supported only when explicitly declared in the project map. Substitute variable
+values once, as native `loadHierarchy` does; values containing another variable remain unresolved
+and are refused. Unknown, clock and version-control-dependent references also refuse. Bound both
+input and expanded output to 4096 characters, check before appending each replacement and check
+the same deadline inside the single pass. There is no recursive amplification or repeated scan of
+substituted values. Nested variable names, math expressions and escaped-variable syntax remain
+unsupported. These conservative limits are a published subset, not a promise to interpret every
+native project-variable spelling or nesting pattern.
 
 Raw source paths, sheet names and content stay private and repr-redacted. Errors use fixed
 messages. This does not defend against privileged same-process inspection of traceback locals.
@@ -56,7 +57,7 @@ wall-clock boundary still need a supervising process.
 
 Tests cover nested/shared sheets, exact target spelling, UUID uniqueness, real supported field
 syntax, cycles, unreachable files, source/edge/instance/depth bounds, deadline expiry, variable
-recursion and empty-result amplification, deterministic output and immutability. Synthetic
+single-pass resolution and nested/empty-result amplification refusals, deterministic output and immutability. Synthetic
 hierarchy tests earn no real-engine, physical-calibration or held-out quality credit.
 
 Source references: [schematic format](https://dev-docs.kicad.org/en/file-formats/sexpr-schematic/),

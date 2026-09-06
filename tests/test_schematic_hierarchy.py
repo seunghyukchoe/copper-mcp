@@ -527,6 +527,8 @@ def test_projectname_is_builtin_and_overrides_a_declared_value() -> None:
         ({}, "${VCSHASH}.kicad_sch"),
         ({}, "$HOME/child.kicad_sch"),
         ({}, "${MISSING}.kicad_sch"),
+        ({}, "@{1}.kicad_sch"),
+        ({"A": "@{1}"}, "${A}.kicad_sch"),
     ],
 )
 def test_refuses_cyclic_limited_builtin_and_unsupported_variable_references(
@@ -807,9 +809,19 @@ def test_shared_dag_amplification_refuses_without_oversized_instance_materializa
     assert instance_calls <= 512
 
 
-def test_empty_variable_expansion_cannot_hide_exponential_work() -> None:
+def test_nested_variable_values_are_not_recursively_expanded() -> None:
+    root = _source(ROOT_UUID, _sheet(SHEET_A_UUID, "${A}.kicad_sch"))
+    with pytest.raises(SchematicHierarchyError, match="reference"):
+        derive_schematic_hierarchy(
+            "root.kicad_sch",
+            (_item("root.kicad_sch", root), _item("child.kicad_sch", _source(CHILD_ROOT_UUID))),
+            project_variables={"A": "${B}", "B": "child"},
+        )
+
+
+def test_empty_nested_variable_expansion_is_refused_without_amplification() -> None:
     root = _source(ROOT_UUID, _sheet(SHEET_A_UUID, "${A}child.kicad_sch"))
-    with pytest.raises(SchematicHierarchyError, match="expansion work budget"):
+    with pytest.raises(SchematicHierarchyError, match="reference"):
         derive_schematic_hierarchy(
             "root.kicad_sch",
             (_item("root.kicad_sch", root), _item("child.kicad_sch", _source(CHILD_ROOT_UUID))),
@@ -817,15 +829,13 @@ def test_empty_variable_expansion_cannot_hide_exponential_work() -> None:
         )
 
 
-def test_variable_expansion_work_bound_is_inclusive(monkeypatch) -> None:
+def test_variable_expansion_output_bound_is_inclusive() -> None:
     from copper_mcp.engineering import schematic_hierarchy as hierarchy
 
-    # Four characters plus one invocation for ${A}, then one plus one for x.
-    monkeypatch.setattr(hierarchy, "_MAX_VARIABLE_EXPANSION_WORK", 7)
-    assert hierarchy._expand_reference("${A}", {"A": "x"}, "root", float("inf")) == "x"
-    monkeypatch.setattr(hierarchy, "_MAX_VARIABLE_EXPANSION_WORK", 6)
-    with pytest.raises(SchematicHierarchyError, match="expansion work budget"):
-        hierarchy._expand_reference("${A}", {"A": "x"}, "root", float("inf"))
+    exact = "x" * 4096
+    assert hierarchy._expand_reference("${A}", {"A": exact}, "root", float("inf")) == exact
+    with pytest.raises(SchematicHierarchyError, match="reference"):
+        hierarchy._expand_reference("${A}x", {"A": exact}, "root", float("inf"))
 
 
 def test_variable_expansion_obeys_shared_deadline(monkeypatch) -> None:

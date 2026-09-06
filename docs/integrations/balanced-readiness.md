@@ -100,8 +100,9 @@ See [ADR-0134](../adr/0134-freeze-readiness-requirements-before-measuring-progre
 and UUID instance paths from immutable supplied schematic bytes, including multiple instances of
 one child file. It performs no filesystem reads or library lookup. Exact reference bindings,
 canonical paths, source/edge/instance/depth ceilings, copied byte/time limits and a separate
-variable-expansion work meter are mandatory. Native project-variable resolution is a bounded
-subset; process environment variables do not supply sheet filenames.
+single-pass variable expansion with pre-append size checks are mandatory. Native project-variable
+resolution is a bounded subset; unresolved substituted values refuse, and process environment
+variables do not supply sheet filenames.
 
 This metadata is private, not a project-completeness or ERC report. Filesystem capture, project
 settings and library closure, actual ERC/parity, BOM/models and all physical judgement still need
