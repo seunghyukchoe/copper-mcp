@@ -643,14 +643,16 @@ def _candidate_drc_context(
     return patched_context
 
 
-def _preflight_drc_json(text: str) -> None:
+def _preflight_drc_json(text: str, *, check_deadline: Callable[[], None] | None = None) -> None:
     """Bound JSON depth and approximate value count before recursive decoding."""
 
     depth = 0
     values = 0
     in_string = False
     escaped = False
-    for character in text:
+    for index, character in enumerate(text):
+        if check_deadline is not None and index % 4096 == 0:
+            check_deadline()
         if in_string:
             if escaped:
                 escaped = False
@@ -676,6 +678,8 @@ def _preflight_drc_json(text: str) -> None:
             raise ValueError("DRC report JSON exceeds the value budget")
     if in_string or depth != 0:
         raise ValueError("DRC report JSON is incomplete")
+    if check_deadline is not None:
+        check_deadline()
 
 
 def _drc_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -699,10 +703,14 @@ def _finite_json_float(value: str) -> float:
     return decoded
 
 
-def _validate_drc_json_tree(value: Any) -> None:
+def _validate_drc_json_tree(
+    value: Any, *, check_deadline: Callable[[], None] | None = None
+) -> None:
     pending: list[tuple[Any, int]] = [(value, 1)]
     visited = 0
     while pending:
+        if check_deadline is not None and visited % 4096 == 0:
+            check_deadline()
         item, depth = pending.pop()
         visited += 1
         if visited > _MAX_DRC_JSON_VALUES or depth > _MAX_DRC_JSON_DEPTH:
@@ -713,6 +721,8 @@ def _validate_drc_json_tree(value: Any) -> None:
             pending.extend((child, depth + 1) for child in item)
         elif not isinstance(item, str | int | float | bool | None):
             raise ValueError("DRC report JSON contains an unsupported value")
+    if check_deadline is not None:
+        check_deadline()
 
 
 def _parse_drc_report(

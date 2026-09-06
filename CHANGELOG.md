@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private schematic-project capture verifies the declared root, project settings and child files
+  under one byte/time budget, derives hierarchy from captured bytes and rechecks the complete set.
+  JSON deadline checks and fixed error handling preserve privacy. This does not execute ERC,
+  certify complete electrical inputs or authorize board mutation.
 - Private schematic hierarchy derivation handles nested/shared sheet instances from captured
   bytes with exact confined references, bounded project-variable expansion and immutable UUID
   metadata. It performs no file reads, ERC, completeness certification or board mutation.
