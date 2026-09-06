@@ -11,7 +11,7 @@ The initial [hosted run](https://github.com/seunghyukchoe/copper-mcp/actions/run
 passed all CI, security and CodeQL gates. Its CI critical path was 32m12s, so the under-twenty-minute
 target remains unmet. The canonical coverage step reported 4,496 passed and ninety environment/
 fixture skips in 1,889.45 seconds. PR observations do not replace successful main calibration;
-the four reshaped job budgets remain provisional and release-blocking.
+at that checkpoint the four reshaped job budgets remained provisional and release-blocking.
 
 ## Locked decisions
 
@@ -147,3 +147,23 @@ runs mandatory source-bound evidence outside pytest, retaining the 3600-second c
 avoids a hook silently replacing required execution with a skip. Existing full/compatibility
 assertions remain, including the source-bound recomputation test. Review and validation of this
 fix must complete before merging; the preceding green baseline does not waive the new gate.
+
+## Verified main milestones and first qualifying PR path
+
+PR 268 landed as `a0a572b` after the reviewed CI repair. Its main run 34019964835 passed all
+roles in 22m03s. PR 269's parser-allocation isolation then passed hosted validation in **11m34s**
+and landed as `5fbada0`; its main run 34021596538 passed in 20m26s. Both squash merge trees matched
+their exact validated PR trees. The original dirty checkout remains untouched, and the source
+branches removed by GitHub's automatic cleanup were restored to preserve integration history.
+
+Two successful main runs now replace the four provisional calibration entries; all sixteen
+job observations are retained and the 120-minute ceilings are unchanged. The old release-job
+observations remain binding too. This closes the pending CI-calibration entry, not all release
+acceptance: the PR-speed streak is **one of three**, and full v0.13 and five-area readiness remain
+unproven. SEC-193 records the final exact-source checks and the real-engine skip resolution.
+
+The next functional work is ordinary hierarchical schematic project capture and project-context
+ERC, followed by general schematic/PCB parity and actual BOM/model reconciliation. The existing
+Circuit Intent ERC/parity paths remain unchanged; they cannot be relabelled ordinary project
+authorities. Private hierarchy metadata is being implemented separately and earns no complete
+electrical-input, physics or application credit by itself.

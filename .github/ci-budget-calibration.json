@@ -2,14 +2,174 @@
   "schema": "ci-budget-calibration/1",
   "repository": "seunghyukchoe/copper-mcp",
   "recorded": "2026-09-06",
-  "why": "The reshaped CI graph passed draft PR run 34009062108, but that run is not main calibration and its 32m12s path missed the PR-speed target. The 120-minute timeouts remain provisional. Successful main observations must replace each pending entry before a release.",
+  "why": "Two successful main runs calibrate all four reshaped jobs, including every supported compatibility and evidence interpreter. Retain all successful observations and the unchanged 120-minute ceilings; no PR timing substitutes for main calibration. Other v0.13/readiness release gates remain open.",
   "half_rule": "A measured budget must be at least twice the longest successful hosted job duration.",
   "jobs": [
-    {"workflow": ".github/workflows/ci.yml", "job": "quality", "status": "pending", "release_blocking": true, "reason": "new job shape still requires successful main calibration; draft PR observation is recorded separately"},
-    {"workflow": ".github/workflows/ci.yml", "job": "compatibility", "status": "pending", "release_blocking": true, "reason": "new xdist compatibility matrix still requires successful main calibration; draft PR observation is recorded separately"},
-    {"workflow": ".github/workflows/ci.yml", "job": "evidence", "status": "pending", "release_blocking": true, "reason": "new dynamic evidence matrix still requires successful main calibration; draft PR observation is recorded separately"},
-    {"workflow": ".github/workflows/ci.yml", "job": "package", "status": "pending", "release_blocking": true, "reason": "new artifact-reuse gate still requires successful main calibration; draft PR observation is recorded separately"},
-    {"workflow": ".github/workflows/release.yml", "job": "verify", "observations": [{"run_id": 33162621059, "job_id": 98820457912, "conclusion": "success", "seconds": 2325}]},
-    {"workflow": ".github/workflows/release.yml", "job": "publish", "observations": [{"run_id": 33162621059, "job_id": 98828444636, "conclusion": "success", "seconds": 12}]}
+    {
+      "workflow": ".github/workflows/ci.yml",
+      "job": "quality",
+      "status": "measured",
+      "observations": [
+        {
+          "run_id": 34019964835,
+          "job_id": 101450604349,
+          "conclusion": "success",
+          "seconds": 59
+        },
+        {
+          "run_id": 34021596538,
+          "job_id": 101455077704,
+          "conclusion": "success",
+          "seconds": 51
+        }
+      ]
+    },
+    {
+      "workflow": ".github/workflows/ci.yml",
+      "job": "compatibility",
+      "status": "measured",
+      "observations": [
+        {
+          "run_id": 34019964835,
+          "job_id": 101450604441,
+          "conclusion": "success",
+          "seconds": 507
+        },
+        {
+          "run_id": 34019964835,
+          "job_id": 101450604455,
+          "conclusion": "success",
+          "seconds": 1308
+        },
+        {
+          "run_id": 34019964835,
+          "job_id": 101450604468,
+          "conclusion": "success",
+          "seconds": 538
+        },
+        {
+          "run_id": 34021596538,
+          "job_id": 101455077860,
+          "conclusion": "success",
+          "seconds": 1213
+        },
+        {
+          "run_id": 34021596538,
+          "job_id": 101455077896,
+          "conclusion": "success",
+          "seconds": 297
+        },
+        {
+          "run_id": 34021596538,
+          "job_id": 101455077909,
+          "conclusion": "success",
+          "seconds": 533
+        }
+      ]
+    },
+    {
+      "workflow": ".github/workflows/ci.yml",
+      "job": "evidence",
+      "status": "measured",
+      "observations": [
+        {
+          "run_id": 34019964835,
+          "job_id": 101450728974,
+          "conclusion": "success",
+          "seconds": 465
+        },
+        {
+          "run_id": 34019964835,
+          "job_id": 101450728980,
+          "conclusion": "success",
+          "seconds": 325
+        },
+        {
+          "run_id": 34019964835,
+          "job_id": 101450728998,
+          "conclusion": "success",
+          "seconds": 478
+        },
+        {
+          "run_id": 34021596538,
+          "job_id": 101455189568,
+          "conclusion": "success",
+          "seconds": 482
+        },
+        {
+          "run_id": 34021596538,
+          "job_id": 101455189572,
+          "conclusion": "success",
+          "seconds": 422
+        },
+        {
+          "run_id": 34021596538,
+          "job_id": 101455189603,
+          "conclusion": "success",
+          "seconds": 402
+        }
+      ]
+    },
+    {
+      "workflow": ".github/workflows/ci.yml",
+      "job": "package",
+      "status": "measured",
+      "observations": [
+        {
+          "run_id": 34019964835,
+          "job_id": 101453288870,
+          "conclusion": "success",
+          "seconds": 9
+        },
+        {
+          "run_id": 34021596538,
+          "job_id": 101457632550,
+          "conclusion": "success",
+          "seconds": 6
+        }
+      ]
+    },
+    {
+      "workflow": ".github/workflows/release.yml",
+      "job": "verify",
+      "observations": [
+        {
+          "run_id": 33162621059,
+          "job_id": 98820457912,
+          "conclusion": "success",
+          "seconds": 2325
+        }
+      ]
+    },
+    {
+      "workflow": ".github/workflows/release.yml",
+      "job": "publish",
+      "observations": [
+        {
+          "run_id": 33162621059,
+          "job_id": 98828444636,
+          "conclusion": "success",
+          "seconds": 12
+        }
+      ]
+    }
+  ],
+  "main_runs": [
+    {
+      "run_id": 34019964835,
+      "head_sha": "a0a572b3c80050485d4a4a76be1724f3f0bc17b6",
+      "branch": "main",
+      "event": "push",
+      "conclusion": "success",
+      "required_path_seconds": 1323
+    },
+    {
+      "run_id": 34021596538,
+      "head_sha": "5fbada04f6571f714f9bfbba5859dd7be110ecf4",
+      "branch": "main",
+      "event": "push",
+      "conclusion": "success",
+      "required_path_seconds": 1226
+    }
   ]
 }

@@ -42,6 +42,9 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- CI budget calibration now records two successful main runs for all four reshaped jobs and
+  every supported interpreter. All 120-minute ceilings and historical release observations are
+  retained. The parser milestone produced one 11m34s PR path; the three-run speed gate remains open.
 - Full-size parser memory checks run in a fresh source-bound process without inherited coverage
   tracing, on every supported interpreter. Exact workload hashes, original memory ceilings,
   active-tracer checks and strict receipts prevent smaller inputs or missing measurements from
