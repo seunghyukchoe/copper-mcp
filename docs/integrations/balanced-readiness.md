@@ -107,3 +107,16 @@ variables do not supply sheet filenames.
 This metadata is private, not a project-completeness or ERC report. Filesystem capture, project
 settings and library closure, actual ERC/parity, BOM/models and all physical judgement still need
 separate evidence. See [ADR-0138](../adr/0138-schematic-hierarchy-is-private-bounded-metadata.md).
+
+## Declared schematic-project bytes
+
+`engineering.schematic_project_capture.capture_schematic_project()` now bridges confined file
+reads to the private hierarchy adapter. Supply exact SHA-256 bindings for the root schematic,
+same-stem project file and all reachable child schematics. The entire set is validated before
+reading; retained bytes, project JSON parsing, hierarchy derivation and the complete second sweep
+share copied limits and one cooperative deadline.
+
+The frozen private result contains verified bytes and a bound hierarchy, not a public completeness
+or ERC claim. Other project settings, library/model dependencies, BOM and candidate parity still
+need their own validation. No board write, approval or new MCP tool is added. See
+[ADR-0139](../adr/0139-captured-project-bytes-precede-electrical-execution.md).
