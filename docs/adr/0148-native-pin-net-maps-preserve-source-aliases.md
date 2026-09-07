@@ -1,6 +1,6 @@
 # ADR-0148: Native pin-net maps preserve source aliases
 
-- Status: Proposed; XML-mapping publication under review
+- Status: Proposed; native-executor publication under review
 - Date: 2026-09-07
 - Owners: CopperMCP maintainers
 - Related: [ADR-0144](0144-native-component-inventory-precedes-bom-reconciliation.md),
@@ -9,16 +9,15 @@
 
 ## Publication scope
 
-The source-admission slice is followed by the complete bounded XML join and immutable map identity.
-This second slice checks supplied format-E observations against complete census alias groups,
-preserves explicit no-connect metadata, and refuses missing, extra, duplicate, empty or conflicting
-native records. It directly re-exports the canonical alias/error types; it introduces no wrapper
-authority or changes to component-inventory v1. Parsing does not authenticate captured bytes or
-execute KiCad, validate models, or grant application authority.
+This final publication stage adds authenticated read-only execution above the unchanged source
+admission and XML mapper. It derives its own census, verifies the prepared input identity, performs
+two fixed native exports, checks complete observation equality, and validates source freshness
+after the final report hash. All 14 executor controls, including four real KiCad cases, are retained.
 
-The authenticated native executor and all real controls remain the mandatory final publication
-stage, already implemented in the preserved complete development baseline. Preserve all baseline
-guards, assertions and digest bytes; the XML map is not a substitute for that executor.
+The returned map binds native observations to captured inputs; it is not a model, circuit-function,
+ERC/DRC, physics, approval or application verdict. Component-inventory v1 remains unchanged. This
+completes the three mapper publication stages only after its own review and validation gates pass;
+complete model-terminal/NC binding and confined calibrated simulation remain subsequent work.
 
 ## Complete mapping decision
 
@@ -44,10 +43,10 @@ nodes, singleton nets or names beginning with `unconnected`. Empty native net re
 
 ## Evidence and non-authority
 
-The complete development implementation has owned real controls for shared aliases, conflicting
-nets and explicit NC. KiCad 10.0.5 deduplicates aliases within a net record, not across nets. Those
-controls remain with the native-executor stage; they do not turn this supplied-XML parser into
-native execution or an independent per-node source UUID authority.
+The executor includes owned real controls for shared aliases, conflicting nets and explicit NC.
+KiCad 10.0.5 deduplicates aliases within a net record, not across nets. These fixed controls verify
+their stated observations; they do not establish arbitrary per-node source UUID authority or
+physical validity beyond the captured-source and supported native-profile checks.
 
 Records are immutable and repr-redacted; temporary grouping dictionaries remain private working
 data, not immutable evidence. Refusals are fixed and context-free. Keep cumulative bounds and the

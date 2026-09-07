@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Read-only project pin-net execution derives the source census internally and binds two complete
+  authenticated KiCad exports with final source-freshness checks. Shared source aliases and explicit
+  no-connect observations are preserved; model/engineering validation and apply authority stay absent.
 - Private XML pin-net mapping joins complete source alias groups with bounded native-format data,
   preserves explicit no-connect observations and self-binding identity, and rejects missing or
   conflicting records. Authenticated execution remains separate; no model, physics or apply pass.
