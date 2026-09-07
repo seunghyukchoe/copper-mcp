@@ -1,6 +1,6 @@
 # ADR-0150: Confined SPICE source preserves declared settings
 
-- Status: Proposed; private edit-kernel publication under review
+- Status: Proposed; complete source-preparation publication under review
 - Date: 2026-09-08
 - Owners: CopperMCP maintainers
 - Related: [ADR-0149](0149-project-terminal-joins-consume-native-evidence.md)
@@ -30,6 +30,12 @@ primitives require the later preparer's admitted inputs; direct parser/CST refus
 their native types, while the preparer supplies the fixed public refusal boundary. The kernel
 has no facade/coordinator dependency or execution authority. Public preparation and every original
 end-to-end test remain in the complete implementation and are not replaced by kernel smoke tests.
+
+The third publication connects complete project/model/alias admission to that kernel and returns
+the immutable source derivative. It retains all original end-to-end preparer tests and the
+canonical-object identity control. Original bytes, selected models, paths, budgets and projected
+outputs are checked; the preparer neither reads arbitrary files nor executes tools or authenticates
+caller-created receipts. The whole native export operation remains the mandatory following stage.
 
 Preserve the complete implemented source preparer and native coordinator with all regression and
 real controls in the integration worktree. Publish their model/source admission and bounded edits,
