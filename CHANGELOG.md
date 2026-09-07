@@ -11,6 +11,8 @@ All notable changes are documented here. The format follows
 - Private native-format BOM CSV reading validates bounded references, quantities and DNP markers,
   retains extra columns, and remains deterministic under restrictive integer-conversion settings.
   Parsed rows do not establish BOM agreement, model validity or application authority.
+- Documentation of verified local KiCad observation/refusal/recovery tests, with source identities
+  and explicit limits; no installed application or strict live-apply capability is changed.
 - Private native component inventory runs the sealed KiCad exporter twice over captured project
   bytes and checks source freshness, diagnostics and repeated metadata. Resolved references and
   selected fields remain private; BOM/model reconciliation and engineering/application authority
