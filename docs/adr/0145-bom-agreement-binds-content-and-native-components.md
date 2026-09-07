@@ -37,7 +37,10 @@ snapshot and project-context digests are not reinterpreted as schematic-capture 
 new binding digests identify the two input families without asserting complete electrical inputs.
 
 Native inventory, artifact reads, parsing, comparison, hashing and final source/artifact freshness
-checks share a bounded deadline. Changed bytes, malformed inputs and unavailable execution refuse;
+checks share a bounded deadline. Carry it into the complete native receipt's component digest and
+the final report's association conversion and streaming JSON/hash work, preserving canonical bytes.
+Checks are cooperative over bounded primitives, not hard real-time interruption guarantees.
+Changed bytes, malformed inputs and unavailable execution refuse;
 well-formed disagreements return fixed mismatch counts and take precedence over missing scope.
 Empty BOM-eligible component scope without disagreement is inconclusive, never a successful coverage result.
 Final checks follow report hashing and precede successful delivery; they are not atomic

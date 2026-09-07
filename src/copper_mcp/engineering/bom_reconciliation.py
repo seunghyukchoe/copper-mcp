@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import time
 import unicodedata
@@ -34,7 +36,6 @@ from copper_mcp.optimization.contracts import (
     Digest,
     OptimizationError,
     bounded_json,
-    digest_document,
 )
 
 _MISMATCH_NAMES = tuple(
@@ -132,37 +133,51 @@ class BomReconciliationReport:
 
     @property
     def digest(self) -> str:
-        return digest_document(
-            "copper-mcp/bom-reconciliation/v1",
-            {
-                "project_capture_digest": self.project_capture_digest,
-                "native_inventory_digest": self.native_inventory_digest,
-                "declaration_digest": self.declaration_digest,
-                "electrical_artifact_capture_digest": self.electrical_artifact_capture_digest,
-                "binding_document_digest": self.binding_document_digest,
-                "metadata_agreement": self.metadata_agreement,
-                "mismatch_counts": dict(self.mismatch_counts),
-                "reasons": self.reasons,
-                "associations": [
-                    {
-                        "item_id": association.item_id,
-                        "artifact_id": association.artifact_id,
-                        "references": association.references,
-                        "declared_model_ids": association.declared_model_ids,
-                    }
-                    for association in self.associations
-                ],
-                "native_component_count": self.native_component_count,
-                "bom_row_count": self.bom_row_count,
-                "bom_reference_count": self.bom_reference_count,
-                "unvalidated_extra_field_count": self.unvalidated_extra_field_count,
-                "coverage_fields": _COVERAGE_FIELDS,
-                "model_definition_validation": "not_run",
-                "ratings_validation": "not_run",
-                "engineering_verdict": "not_run",
-                "apply_authority": "none",
-            },
+        return self._digest(math.inf)
+
+    def _digest(self, deadline: float) -> str:
+        _check_deadline(deadline)
+        associations = []
+        for association in self.associations:
+            _check_deadline(deadline)
+            associations.append(
+                {
+                    "item_id": association.item_id,
+                    "artifact_id": association.artifact_id,
+                    "references": association.references,
+                    "declared_model_ids": association.declared_model_ids,
+                }
+            )
+        document = {
+            "project_capture_digest": self.project_capture_digest,
+            "native_inventory_digest": self.native_inventory_digest,
+            "declaration_digest": self.declaration_digest,
+            "electrical_artifact_capture_digest": self.electrical_artifact_capture_digest,
+            "binding_document_digest": self.binding_document_digest,
+            "metadata_agreement": self.metadata_agreement,
+            "mismatch_counts": dict(self.mismatch_counts),
+            "reasons": self.reasons,
+            "associations": associations,
+            "native_component_count": self.native_component_count,
+            "bom_row_count": self.bom_row_count,
+            "bom_reference_count": self.bom_reference_count,
+            "unvalidated_extra_field_count": self.unvalidated_extra_field_count,
+            "coverage_fields": _COVERAGE_FIELDS,
+            "model_definition_validation": "not_run",
+            "ratings_validation": "not_run",
+            "engineering_verdict": "not_run",
+            "apply_authority": "none",
+        }
+        _check_deadline(deadline)
+        encoder = json.JSONEncoder(
+            sort_keys=True, ensure_ascii=True, allow_nan=False, separators=(",", ":")
         )
+        digest = hashlib.sha256(b"copper-mcp/bom-reconciliation/v1\x00")
+        for token in encoder.iterencode(document):
+            _check_deadline(deadline)
+            digest.update(token.encode("ascii"))
+        _check_deadline(deadline)
+        return "sha256:" + digest.hexdigest()
 
     def document(self) -> dict[str, object]:
         return {
@@ -448,8 +463,14 @@ def run_bom_reconciliation(
     native_by_reference = {component.reference: component for component in inventory.components}
     if len(native_by_reference) != len(inventory.components):
         _fail("BOM reconciliation native inventory failed")
-    native_inventory_digest = inventory.digest
+    native_inventory_digest = None
+    try:
+        native_inventory_digest = inventory._digest(active_deadline)
+    except ValueError:
+        pass
     _check_deadline(active_deadline)
+    if native_inventory_digest is None:
+        _fail("BOM reconciliation native inventory failed")
     expected = {
         reference: component
         for reference, component in native_by_reference.items()
@@ -556,7 +577,7 @@ def run_bom_reconciliation(
         len(bom_references),
         unvalidated_extra_field_count,
     )
-    _ = report.digest
+    _ = report._digest(active_deadline)
     _check_deadline(active_deadline)
 
     recaptured = _capture(

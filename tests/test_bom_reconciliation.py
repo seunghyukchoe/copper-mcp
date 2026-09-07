@@ -22,6 +22,7 @@ from copper_mcp.engineering.bom_reconciliation import (
 from copper_mcp.engineering.component_netlist import NativeComponent
 from copper_mcp.engineering.inputs import parse_electrical_inputs
 from copper_mcp.engineering.project_components import ProjectComponentInventory
+from copper_mcp.optimization.contracts import digest_document
 
 
 def _sha(payload: bytes) -> str:
@@ -260,6 +261,59 @@ def test_full_native_execution_identity_changes_report_identity(tmp_path, monkey
 
     assert first.native_inventory_digest != second.native_inventory_digest
     assert first.digest != second.digest
+
+
+def test_streamed_receipt_hashes_preserve_canonical_identities(tmp_path, monkeypatch):
+    report, capture, *_ = _case(tmp_path, monkeypatch)
+    document = dataclasses.asdict(report)
+    document["mismatch_counts"] = dict(report.mismatch_counts)
+    document.update(
+        coverage_fields=("reference", "value", "footprint", "quantity", "dnp"),
+        model_definition_validation="not_run",
+        ratings_validation="not_run",
+        engineering_verdict="not_run",
+        apply_authority="none",
+    )
+    assert (
+        report.digest
+        == report._digest(time.monotonic() + 60)
+        == digest_document("copper-mcp/bom-reconciliation/v1", document)
+    )
+    inventory = _inventory(capture.digest, (_component("R1", "한글 Ω"),))
+    native_document = dataclasses.asdict(inventory)
+    del native_document["components"], native_document["sheet_paths"]
+    native_document["native_inventory_digest"] = inventory.inventory_digest
+    assert (
+        inventory.digest
+        == inventory._digest(time.monotonic() + 60)
+        == digest_document("copper-mcp/project-component-inventory/v1", native_document)
+    )
+
+
+@pytest.mark.parametrize("stage", ("native", "report"))
+def test_hashing_stops_at_the_shared_deadline(tmp_path, monkeypatch, stage):
+    original_clock = time.monotonic
+    original_encode = json.JSONEncoder.iterencode
+    expired = False
+
+    def expire_after_token(encoder, document, *args, **kwargs):
+        nonlocal expired
+        selected = isinstance(document, dict) and (
+            (stage == "native" and "components" in document and "backend_version" in document)
+            or (stage == "report" and "associations" in document)
+        )
+        for token in original_encode(encoder, document, *args, **kwargs):
+            if selected:
+                expired = True
+            yield token
+            if selected:
+                pytest.fail("hashing continued beyond the shared BOM deadline")
+
+    monkeypatch.setattr(json.JSONEncoder, "iterencode", expire_after_token)
+    monkeypatch.setattr(time, "monotonic", lambda: original_clock() + (3601 if expired else 0))
+    with pytest.raises(BomReconciliationError, match="deadline expired") as caught:
+        _case(tmp_path, monkeypatch)
+    assert caught.value.__cause__ is None and caught.value.__context__ is None
 
 
 @pytest.mark.parametrize(
@@ -629,14 +683,13 @@ def test_source_change_while_hashing_report_is_caught(tmp_path, monkeypatch):
             capture.digest, (_component("C1", "100n"), _component("R1", "1k"))
         ),
     )
-    original_digest = BomReconciliationReport.digest.fget
-    assert original_digest is not None
+    original_digest = BomReconciliationReport._digest
 
-    def drifting_digest(report: BomReconciliationReport) -> str:
+    def drifting_digest(report: BomReconciliationReport, deadline: float) -> str:
         (tmp_path / capture.root_path).write_bytes(context[capture.root_path] + b"\n")
-        return original_digest(report)
+        return original_digest(report, deadline)
 
-    monkeypatch.setattr(BomReconciliationReport, "digest", property(drifting_digest))
+    monkeypatch.setattr(BomReconciliationReport, "_digest", drifting_digest)
     with pytest.raises(BomReconciliationError, match="freshness"):
         run_bom_reconciliation(
             capture, libraries, declaration, paths, bindings, Settings(workspace=tmp_path)

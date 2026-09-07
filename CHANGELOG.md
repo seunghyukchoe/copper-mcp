@@ -10,7 +10,8 @@ All notable changes are documented here. The format follows
 
 - Private BOM reconciliation compares captured CSV rows and explicit item bindings against a fresh
   native component inventory. Complete scope, cumulative budgets, exact metadata and final freshness
-  are checked; model definitions, ratings, physics and application authority remain unassessed.
+  are checked; native receipt and final report hashing share the active deadline. Model definitions,
+  ratings, physics and application authority remain unassessed.
 - Private native component inventory runs the sealed KiCad exporter twice over captured project
   bytes and checks source freshness, diagnostics and repeated metadata. Resolved references and
   selected fields remain private; BOM/model reconciliation and engineering/application authority
