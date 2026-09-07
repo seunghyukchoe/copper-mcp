@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import json
 import os
 import re
 import time
@@ -181,6 +182,56 @@ def test_bad_deadline_refuses_before_execution(tmp_path, monkeypatch):
         components.run_project_component_inventory(
             capture, libraries, Settings(workspace=tmp_path), deadline=time.monotonic() - 1
         )
+
+
+def test_final_inventory_conversion_stops_at_expiry(tmp_path, monkeypatch):
+    original_inventory = _inventory()
+    expanded = dataclasses.replace(
+        original_inventory,
+        components=tuple(
+            dataclasses.replace(original_inventory.components[0], reference=f"R{index}")
+            for index in range(3)
+        ),
+    )
+    monkeypatch.setattr(f"{__name__}._inventory", lambda: expanded)
+    original_clock = time.monotonic
+    original_asdict = netlist.asdict
+    converted = []
+
+    def expire_after_record(record):
+        converted.append(record)
+        return original_asdict(record)
+
+    monkeypatch.setattr(netlist, "asdict", expire_after_record)
+    monkeypatch.setattr(time, "monotonic", lambda: original_clock() + (3601 if converted else 0))
+    with pytest.raises(components.ProjectComponentInventoryError):
+        _run(tmp_path, monkeypatch)
+    assert len(converted) == 1
+
+
+def test_final_inventory_encoding_stops_at_expiry(tmp_path, monkeypatch):
+    original_clock = time.monotonic
+    original_encode = json.JSONEncoder.iterencode
+    expired = False
+
+    def expire_after_token(encoder, document, *args, **kwargs):
+        nonlocal expired
+        is_inventory = (
+            isinstance(document, dict)
+            and "components" in document
+            and "backend_version" in document
+        )
+        for token in original_encode(encoder, document, *args, **kwargs):
+            if is_inventory:
+                expired = True
+            yield token
+            if is_inventory:
+                pytest.fail("encoding continued after the inventory deadline")
+
+    monkeypatch.setattr(json.JSONEncoder, "iterencode", expire_after_token)
+    monkeypatch.setattr(time, "monotonic", lambda: original_clock() + (3601 if expired else 0))
+    with pytest.raises(components.ProjectComponentInventoryError):
+        _run(tmp_path, monkeypatch)
 
 
 _CONFIGURED_CLI = os.environ.get("COPPER_MCP_TEST_PROJECT_ERC_CLI")
