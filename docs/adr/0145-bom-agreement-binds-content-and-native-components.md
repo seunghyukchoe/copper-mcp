@@ -23,6 +23,15 @@ limit or change global interpreter/Decimal settings. Arithmetic remains integral
 The reader also accepts lower remaining row/reference budgets. Reconciliation passes its shared
 remaining ceilings across artifacts, so another file cannot reset either budget.
 
+The stdlib CSV engine's field limit must not inherit unrelated process-global settings. Initialize
+a fresh private multi-phase `_csv` module per call from the already imported standard-library spec;
+never replace `sys.modules`, reload the shared module or temporarily modify its limit/registry.
+Require a distinct module and exception identity before configuring the private state. Set the
+complete CSV dialect explicitly and retain the fixed 128-Ki-character parsing ceiling, with the
+existing 4,096-byte field validation remaining authoritative. This preserves prior default-runtime
+refusal classification as well as valid input acceptance. Initialization and parsing share the
+caller deadline. Unsupported initialization produces a fixed, context-free unavailable-backend
+refusal. Isolation is verified on CPython 3.11, 3.12 and 3.13; no model/plugin path is selected.
 ## Reconciliation boundary
 
 The subsequent private operation executes the existing native inventory internally and captures
