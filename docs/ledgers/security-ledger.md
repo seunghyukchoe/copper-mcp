@@ -547,3 +547,57 @@ sha256:cae8e6fe03df7117523d67c6665ffd3ba75d2bc0f6ca0551a444e6fc445e1f16.
 The 103-case real native family and independent integration review also passed. This replaces
 the superseded pre-correction full reuse for current-source validation. Parent-main verification
 and protected publication remain required; native export is not simulation or physics authority.
+
+| SEC-208 | 2026-09-08 | Private operating-point output boundary | Owned pinned ngspice 45.2 raw-output probe establishes the one-point format; implementation tests and independent review remain pending. | Treat all supplied bytes, counts, vector identities and numbers as untrusted. Enforce structural/time bounds and exact expected output; do not infer execution, convergence, calibration or apply authority from parsing. | [ADR-0151](../adr/0151-operating-point-numbers-are-not-physics-authority.md) |
+
+2026-09-08 SEC-208 validation: primary review caught and corrected a test fixture that did
+not match actual native formatting; the retained fixture now matches pinned 45.2 output.
+All 22 controls passed Python 3.11, 3.12 and 3.13. Two fresh owned native runs were parsed
+directly, with clean diagnostics, confirmed cleanup and identical semantic digest
+sha256:7e93a52d7b9eaf0614b868d2dc6f81fd149041d5de20fe260e34899231b153da.
+Independent correctness/security review accepted the scoped interpreter; separate Ponytail
+review found no justified cuts. Fresh make check passed 5,624 tests, one intentional skip,
+90% code coverage and all format/lint/type/security/build gates in 624.49 seconds of pytest
+with three workers and configured real parent backends. Tested staged tree
+12c0fcb396f57d5e8baff99b7dbbd64c815fdd29; source/input fingerprint
+sha256:d23a140a31e4a1b400973c110335810392f196a09c0af86d462803e95103d7d1.
+This verifies supplied-output interpretation only. Production execution, convergence,
+case/net binding, calibration, physics, human approval and apply remain separate gates.
+
+2026-09-08 SEC-208 corrected-parent integration: preserve the unchanged operating-point
+interpreter and all 22 controls while carrying the corrected preparer/native-export parent.
+Retain its complete ledger prefix. Earlier full validation describes the pre-correction source;
+fresh composed validation and independent integration review are required before publication.
+
+2026-09-08 SEC-208 integration review accepted unchanged raw parser/test bytes from2cac36d,
+exact corrected parent source/native controls from1fda2c0 and its complete ledger prefix.
+The 120 non-native family controls passed on Python3.12 (2.21s),3.11 (1.58s) and3.13 (1.66s),
+with five real cases explicitly deselected. The parent separately passed103 cases with real
+KiCad. Format/lint/type checks passed. A fresh full composed run remains required.
+
+2026-09-08 SEC-208 corrected composed full validation: fresh make check onac1be5c passed
+5,636 tests, one intentional skip, 90% code coverage and all format/lint/type/security/build
+gates, with 624.64 seconds of pytest using three workers and configured real parent backends.
+Tested treea403267c00e9f8af86522144a500964da9183d24; source/input fingerprint
+sha256:f4caabf85a31e22f465ad052a1d9aa15b559132592a8e080073c4506dfb8029b.
+The independent integration review and 120-case compatibility family passed. This replaces
+pre-correction full evidence for the current source. Parent-main verification and protected
+publication remain required; simulated numbers still grant no convergence/physics/apply authority.
+
+2026-09-08 SEC-208 hosted review reopened PR297 despite green CI: record ADR0151 in the
+canonical decision ledger, reject non-byte payloads before length callbacks, and preserve
+finite subnormal values instead of applying an absolute exponent cutoff. D276 now records
+the decision. The parser fixes and regressions retain all original controls; 25 focused tests
+pass Python3.11,3.12 and3.13 with format/lint/type checks. Independent review and a fresh
+full run must precede updated publication; earlier full evidence does not cover this correction.
+
+2026-09-08 SEC-208 corrected parser validation: independent review accepted exact-byte
+admission before callbacks, finite subnormal preservation, and D276's canonical ADR link.
+Separate Ponytail review accepted removal of the redundant exponent cutoff. Fresh make check
+passed 5,639 tests, one intentional skip, 90% code coverage and every format/lint/type/security/
+build gate, with 817.79 seconds of pytest on three workers. Tested staged tree
+57becfecb500b10226175bd0b24d25d48fe39c9b; source/input fingerprint
+sha256:0b4cdddebeec7e14073ef28536aaf9c6a10f5f8b12d20cb0bf1c7aab6952e220.
+All25 focused tests passed Python3.11,3.12 and3.13. This supersedes the pre-correction full
+result for publication; exact-head hosted checks and main verification remain required.
+No execution, convergence, calibration, physics or apply authority follows from parsing.
