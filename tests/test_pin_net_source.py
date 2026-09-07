@@ -175,3 +175,31 @@ def test_source_admission_preserves_complete_alias_group_and_virtual_count() -> 
     assert components == {("U1", "Test:Part")} and virtual_count == 1
     assert digest == census.digest
     assert all(repr(alias) == "<SourcePinAlias redacted>" for alias in group.aliases)
+
+
+@pytest.mark.parametrize("reference", ("U1", "#PWR01"))
+def test_duplicate_pin_number_within_one_occurrence_refuses_before_hash(monkeypatch, reference):
+    first = _pin(reference, "1", "a")
+    second = dataclasses.replace(
+        _pin(reference, "1", "b"), source_symbol_uuid=first.source_symbol_uuid
+    )
+    assert first.source_pin_uuid != second.source_pin_uuid
+    census = _census(first, second)
+    monkeypatch.setattr(ProjectPinCensus, "_digest", lambda *_: pytest.fail("must not hash"))
+    with pytest.raises(NativePinNetMapError) as error:
+        source._validate_census(census, time.monotonic() + 30)
+    assert error.value.__context__ is error.value.__cause__ is None
+
+
+def test_different_pin_numbers_in_one_occurrence_remain_supported():
+    first = _pin("U1", "1", "a")
+    second = dataclasses.replace(_pin("U1", "2", "b"), source_symbol_uuid=first.source_symbol_uuid)
+    groups, _, _, _ = source._validate_census(_census(first, second), time.monotonic() + 30)
+    assert set(groups) == {("U1", "1"), ("U1", "2")}
+
+
+def test_source_working_record_representations_do_not_expose_private_fields():
+    group = source._SourcePinGroup((), "PrivateLibrary:PrivatePart", "PrivateSignal", "passive")
+    context = source._SourceSymbolContext("PrivateReference", "PrivateLibrary:PrivatePart", 1, 1)
+    assert repr(group) == "<SourcePinGroup redacted>"
+    assert repr(context) == "<SourceSymbolContext redacted>"
