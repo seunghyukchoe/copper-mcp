@@ -465,3 +465,19 @@ Tested treebfbd453f1042731d579459298a486b1ffc8acdeb; source/input fingerprint
 sha256:85ca8259777ce5d6b36de8503bd93603c1700f1969805a630045bccc5f9c45b0.
 Protected parent/hosted validation and the complete native export operation remain required.
 No model accuracy, simulator, physics, human approval or apply authority follows from preparation.
+
+2026-09-08 SEC-207 whole-export publication preparation: restore the unchanged coordinator,
+all 12 coordinator cases and the original native preparation/export control above the accepted
+parser/kernel/preparer. The source/input fingerprint matches the complete extracted validation;
+all source/tests/config/scripts must remain identical for evidence reuse. Fresh metadata/build
+checks, targeted real controls and independent integration review remain required. No simulator,
+physics, human approval or application authority is asserted by native export agreement.
+
+2026-09-08 SEC-207 whole-export validation reuse: independent review confirmed all tracked
+non-documentation files are identical to cdbadb5 and the complete preparer ledger prefix is
+preserved. Source/input fingerprint remains
+sha256:43fe479e47cb5edd8e910298c97dcc487cb11b1c2e26e926526416aa83e140d7,
+matching the 5,602-test complete extracted run. Fresh format/lint/type/security/build checks passed,
+and all 91 focused cases passed with configured real KiCad in 118.12 seconds. Reusing that full
+result is justified for identical source; no new full run is claimed. Protected parent/hosted
+gates and later simulator/physics work remain required before broader capability claims.
