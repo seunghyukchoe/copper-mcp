@@ -218,3 +218,18 @@ returned component data. Its repr is redacted; `document()` exposes counts/diges
 not-run BOM/model/engineering validation and no apply authority. Shared child symbols can retain
 the same leaf UUID while resolving to different sheet paths and references. This is not a complete
 placed-unit census, a BOM content check, model calibration or a new v1 approval interpretation.
+
+## Private native-format BOM rows
+
+`engineering.bom_csv.parse_bom_csv()` reads captured CSV bytes with the fixed KiCad columns
+Refs, Value, Footprint, Qty and DNP. It preserves extra columns as unvalidated data and canonicalizes
+reference and column order. Exact known reference tokens take precedence over range expansion.
+Rows, fields, expansion and time are bounded; malformed data produces context-free errors.
+Callers can pass lower remaining row/reference budgets for multi-artifact operations; zero
+remaining rows accepts header-only input, and extra row work or expansion refuses before allocation.
+
+Conversions use exact standard-library Decimal construction only to avoid dependence on Python's
+configurable integer-string limit; arithmetic remains integral and global settings are unchanged.
+The result is immutable and repr-redacted, with no agreement, model or engineering verdict.
+Actual artifact/native comparison is separate; see
+[ADR-0145](../adr/0145-bom-agreement-binds-content-and-native-components.md).
