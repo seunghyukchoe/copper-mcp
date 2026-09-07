@@ -9,6 +9,7 @@ import dataclasses
 import hashlib
 import json
 import math
+import re
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from typing import cast
 
 from copper_mcp.adapters.cst import CstError
 from copper_mcp.adapters.sexpr import SExprError
+from copper_mcp.engineering import _pin_census_source as _census_source
 from copper_mcp.engineering._pin_net_source import SourcePinAlias
 from copper_mcp.engineering._project_spice_source_edits import (
     _MODEL_DIRECTORY,
@@ -46,11 +48,16 @@ from copper_mcp.engineering.capture import (
     _CapturedArtifact,
     _parse_paths,
 )
+from copper_mcp.engineering.native_pin_net_map import NativePinNet
 from copper_mcp.engineering.project_erc_inputs import (
     PreparedProjectErc,
     ProjectErcInputError,
     SymbolLibraryInput,
     prepare_project_erc,
+)
+from copper_mcp.engineering.project_pin_census import (
+    PlacedSymbolOccurrence,
+    derive_project_pin_census,
 )
 from copper_mcp.engineering.project_spice_model_binding import (
     ProjectSpiceModelBinding,
@@ -68,6 +75,13 @@ _MAX_PINS = 16_384
 _MAX_ALIASES = 16_384
 _MAX_MODEL_BYTES = 16 * 1024 * 1024
 _HASH_CHUNK_BYTES = 64 * 1024
+_MAX_TEXT_BYTES = 4096
+_MAX_DEFINITION_BYTES = 1024 * 1024
+_MAX_DEPENDENCIES = 4096
+_IDENTIFIER = re.compile(r"[a-z][a-z0-9_-]{0,31}\Z")
+_SPICE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
+_SPICE_PORT = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_]{0,63}|[0-9]{1,64})\Z")
+_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -123,6 +137,133 @@ def _portable(value: str) -> str:
     return unicodedata.normalize("NFC", value.casefold())
 
 
+def _bounded_text(value: object, *, allow_empty: bool = False) -> str:
+    if type(value) is not str or (not value and not allow_empty) or len(value) > _MAX_TEXT_BYTES:
+        _fail()
+    text = value
+    if len(text.encode("utf-8")) > _MAX_TEXT_BYTES or any(
+        unicodedata.category(character) in {"Cc", "Cs"} for character in text
+    ):
+        _fail()
+    return text
+
+
+def _identifier(value: object) -> str:
+    if type(value) is not str or not 1 <= len(value) <= 32 or _IDENTIFIER.fullmatch(value) is None:
+        _fail()
+    return value
+
+
+def _admit_binding(binding: ProjectSpiceModelBinding, deadline: float) -> None:
+    if type(binding) is not ProjectSpiceModelBinding:
+        _fail()
+    for digest in (
+        binding.project_capture_digest,
+        binding.declaration_digest,
+        binding.electrical_artifact_capture_digest,
+        binding.bom_report_digest,
+        binding.pin_map_digest,
+        binding.binding_document_digest,
+    ):
+        _check(deadline)
+        if type(digest) is not str or len(digest) != 71 or _DIGEST.fullmatch(digest) is None:
+            _fail()
+    if type(binding.references) is not tuple or not 1 <= len(binding.references) <= _MAX_REFERENCES:
+        _fail()
+    pin_count = 0
+    alias_count = 0
+    for reference in binding.references:
+        _check(deadline)
+        if type(reference) is not BoundSpiceReference:
+            _fail()
+        _identifier(reference.model_id)
+        _identifier(reference.artifact_id)
+        _bounded_text(reference.reference)
+        definition: object = reference.definition
+        if type(definition) is not SpiceDefinition:
+            _fail()
+        definition_name: object = getattr(definition, "name", None)
+        definition_kind: object = getattr(definition, "kind", None)
+        definition_ports: object = getattr(definition, "ports", None)
+        definition_source: object = getattr(definition, "source", None)
+        definition_dependencies: object = getattr(definition, "dependencies", None)
+        if (
+            type(definition_name) is not str
+            or not 1 <= len(definition_name) <= 64
+            or _SPICE_NAME.fullmatch(definition_name) is None
+            or type(definition_kind) is not str
+            or definition_kind not in ("diode", "subcircuit")
+            or type(definition_ports) is not tuple
+            or not 1 <= len(definition_ports) <= 64
+            or type(definition_source) is not bytes
+            or not definition_source
+            or len(definition_source) > _MAX_DEFINITION_BYTES
+            or type(definition_dependencies) is not tuple
+            or len(definition_dependencies) > _MAX_DEPENDENCIES
+        ):
+            _fail()
+        for port in definition_ports:
+            _check(deadline)
+            if (
+                type(port) is not str
+                or not 1 <= len(port) <= 64
+                or _SPICE_PORT.fullmatch(port) is None
+            ):
+                _fail()
+        for dependency in definition_dependencies:
+            _check(deadline)
+            if (
+                type(dependency) is not str
+                or not 1 <= len(dependency) <= 64
+                or _SPICE_NAME.fullmatch(dependency) is None
+            ):
+                _fail()
+        if type(reference.pins) is not tuple or not 1 <= len(reference.pins) <= 64:
+            _fail()
+        pin_count += len(reference.pins)
+        if pin_count > _MAX_PINS:
+            _fail()
+        for pin in reference.pins:
+            _check(deadline)
+            if type(pin) is not BoundSpicePin or type(pin.node) is not NativePinNet:
+                _fail()
+            if pin.port is not None and (
+                type(pin.port) is not str
+                or not 1 <= len(pin.port) <= 64
+                or _SPICE_PORT.fullmatch(pin.port) is None
+            ):
+                _fail()
+            node = pin.node
+            if type(node.no_connect) is not bool or type(node.aliases) is not tuple:
+                _fail()
+            _bounded_text(node.reference)
+            number = _bounded_text(node.pin_number)
+            if any(character.isspace() or character == "=" for character in number):
+                _fail()
+            _bounded_text(node.library_id)
+            _bounded_text(node.net_code)
+            _bounded_text(node.net_name, allow_empty=True)
+            _bounded_text(node.net_class, allow_empty=True)
+            if node.pinfunction is not None:
+                _bounded_text(node.pinfunction)
+            _bounded_text(node.electrical_type)
+            if not node.aliases:
+                _fail()
+            alias_count += len(node.aliases)
+            if alias_count > _MAX_ALIASES:
+                _fail()
+            for alias in node.aliases:
+                _check(deadline)
+                if type(alias) is not SourcePinAlias:
+                    _fail()
+                sheet_path = _bounded_text(alias.sheet_uuid_path)
+                symbol_uuid = _bounded_text(alias.source_symbol_uuid)
+                pin_uuid = _bounded_text(alias.source_pin_uuid)
+                _census_source._canonical_sheet_path(sheet_path)
+                _census_source._canonical_uuid(symbol_uuid)
+                _census_source._canonical_uuid(pin_uuid)
+
+
 def _capture_artifacts(
     capture: ElectricalArtifactCapture,
     artifact_paths_json: bytes,
@@ -149,12 +290,19 @@ def _capture_artifacts(
     rows = []
     for artifact in capture._artifacts:
         _check(deadline)
+        if type(artifact) is not _CapturedArtifact:
+            _fail()
+        _identifier(artifact.artifact_id)
         if (
-            type(artifact) is not _CapturedArtifact
-            or artifact.artifact_id in artifacts
+            artifact.artifact_id in artifacts
             or type(artifact.content) is not bytes
             or not artifact.content
+            or type(artifact.role) is not str
+            or not 1 <= len(artifact.role) <= 13
             or artifact.role not in {"bom", "schematic", "netlist", "model-library"}
+            or type(artifact.digest) is not str
+            or len(artifact.digest) != 71
+            or _DIGEST.fullmatch(artifact.digest) is None
             or len(artifact.content) > limits.max_file_bytes
         ):
             _fail()
@@ -289,6 +437,7 @@ def _desired_edits(
     definitions: dict[str, tuple[SpiceDefinition, ...]],
     captured_paths: dict[str, str],
     model_paths: tuple[tuple[str, str], ...],
+    source_references: dict[tuple[str, str], str],
     deadline: float,
 ) -> dict[tuple[str, str], _DesiredFields]:
     if type(binding.references) is not tuple or not 1 <= len(binding.references) <= _MAX_REFERENCES:
@@ -340,6 +489,11 @@ def _desired_edits(
                 alias_count += 1
                 if alias_count > _MAX_ALIASES or type(alias) is not SourcePinAlias:
                     _fail()
+                if (
+                    source_references.get((alias.sheet_uuid_path, alias.source_symbol_uuid))
+                    != reference.reference
+                ):
+                    _fail()
                 source_path = instances.get(alias.sheet_uuid_path)
                 if source_path is None:
                     _fail()
@@ -374,9 +528,24 @@ def _prepare_project_spice_source(
         or binding.declaration_digest != artifacts.declaration_digest
     ):
         _fail()
+    _admit_binding(binding, active_deadline)
     prepared = prepare_project_erc(
         capture, libraries, limits=active_limits, deadline=active_deadline
     )
+    census = derive_project_pin_census(
+        capture, libraries, limits=active_limits, deadline=active_deadline
+    )
+    if census.capture_digest != capture.digest or type(census.symbols) is not tuple:
+        _fail()
+    source_references: dict[tuple[str, str], str] = {}
+    for symbol in census.symbols:
+        _check(active_deadline)
+        if type(symbol) is not PlacedSymbolOccurrence:
+            _fail()
+        identity = symbol.sheet_uuid_path, symbol.source_symbol_uuid
+        if identity in source_references:
+            _fail()
+        source_references[identity] = symbol.effective_reference
     captured_artifacts, artifact_paths = _capture_artifacts(
         artifacts, artifact_paths_json, active_limits, active_deadline
     )
@@ -388,15 +557,16 @@ def _prepare_project_spice_source(
         parent,
         active_deadline,
     )
-    binding_digest = binding._digest(active_deadline)
     edits = _desired_edits(
         capture,
         binding,
         definitions,
         captured_paths,
         model_paths,
+        source_references,
         active_deadline,
     )
+    binding_digest = binding._digest(active_deadline)
     context = dict(prepared.files)
     model_directory = (parent / _MODEL_DIRECTORY).as_posix()
     model_directory_alias = _portable(model_directory)

@@ -55,7 +55,7 @@ def _inputs(tmp_path, monkeypatch):
             if len(item.items) >= 3
         }
         uuid = children(symbol, "uuid")[0].items[1]
-        placed[properties["Reference"]] = uuid
+        placed[properties["Reference"]] = str(uuid)
     references = []
     for reference in report.references:
         pins = tuple(
@@ -287,6 +287,153 @@ def test_shared_source_aliases_require_identical_desired_edits(tmp_path, monkeyp
     )
     with pytest.raises(ProjectSpiceSourceError):
         _prepare(case, report, artifacts)
+
+
+def test_swapped_source_symbol_aliases_cannot_retarget_absent_fields(tmp_path, monkeypatch):
+    case, report, artifacts = _inputs(tmp_path, monkeypatch)
+    source_uuids = tuple(
+        reference.pins[0].node.aliases[0].source_symbol_uuid for reference in report.references
+    )
+    swapped = []
+    for reference, source_uuid in zip(report.references, reversed(source_uuids), strict=True):
+        pins = tuple(
+            dataclasses.replace(
+                pin,
+                node=dataclasses.replace(
+                    pin.node,
+                    aliases=tuple(
+                        dataclasses.replace(alias, source_symbol_uuid=source_uuid)
+                        for alias in pin.node.aliases
+                    ),
+                ),
+            )
+            for pin in reference.pins
+        )
+        swapped.append(dataclasses.replace(reference, pins=pins))
+    report = dataclasses.replace(report, references=tuple(swapped))
+    with pytest.raises(ProjectSpiceSourceError) as error:
+        _prepare(case, report, artifacts)
+    assert error.value.__context__ is None
+
+
+def test_instance_reference_not_raw_reference_binds_source_alias(tmp_path, monkeypatch):
+    case, report, artifacts = _inputs(tmp_path, monkeypatch)
+    original = b'(property "Reference" "C1"'
+    changed = b'(property "Reference" "SOURCE-STALE"'
+    source = case[-1][case[0].root_path]
+    assert source.count(original) == 1
+    capture, report, context = _recapture(tmp_path, case, report, source.replace(original, changed))
+    result = _prepare((capture, *case[1:-1], context), report, artifacts)
+    prepared_source = _files(result)[capture.root_path]
+    assert changed in prepared_source
+    assert b'(property "Sim.Name" "CAP"' in prepared_source
+
+
+def test_nested_artifact_identifier_refuses_before_hash_sort_or_binding_digest(
+    tmp_path, monkeypatch
+):
+    case, report, artifacts = _inputs(tmp_path, monkeypatch)
+    operations = []
+
+    class HostileIdentifier(str):
+        def __hash__(self):
+            operations.append("hash")
+            return super().__hash__()
+
+        def __lt__(self, other):
+            operations.append("sort")
+            return super().__lt__(other)
+
+    changed = dataclasses.replace(
+        report.references[0], artifact_id=HostileIdentifier("models-main")
+    )
+    report = dataclasses.replace(report, references=(changed, *report.references[1:]))
+    monkeypatch.setattr(
+        type(report),
+        "_digest",
+        lambda *_args: pytest.fail("binding digest must follow nested admission"),
+    )
+    with pytest.raises(ProjectSpiceSourceError) as error:
+        _prepare(case, report, artifacts)
+    assert error.value.__context__ is None
+    assert operations == []
+
+
+@pytest.mark.parametrize("field", ("artifact_id", "role", "digest"))
+def test_captured_artifact_fields_refuse_before_callbacks(tmp_path, monkeypatch, field):
+    case, report, artifacts = _inputs(tmp_path, monkeypatch)
+    operations = []
+
+    class HostileIdentifier(str):
+        def __hash__(self):
+            operations.append("hash")
+            return super().__hash__()
+
+        def __eq__(self, other):
+            operations.append("equal")
+            return super().__eq__(other)
+
+    first = artifacts._artifacts[0]
+    changed = dataclasses.replace(first, **{field: HostileIdentifier(getattr(first, field))})
+    artifacts = dataclasses.replace(artifacts, _artifacts=(changed, *artifacts._artifacts[1:]))
+    with pytest.raises(ProjectSpiceSourceError) as error:
+        _prepare(case, report, artifacts)
+    assert error.value.__context__ is None
+    assert operations == []
+
+
+def test_spoofed_definition_class_cannot_execute_attributes(tmp_path, monkeypatch):
+    case, report, artifacts = _inputs(tmp_path, monkeypatch)
+    operations = []
+    actual = report.references[0].definition
+
+    class ForgedDefinition:
+        @property
+        def __class__(self):
+            operations.append("class")
+            return type(actual)
+
+        def __getattr__(self, name):
+            operations.append(name)
+            return getattr(actual, name)
+
+    reference = dataclasses.replace(report.references[0], definition=ForgedDefinition())
+    report = dataclasses.replace(report, references=(reference, *report.references[1:]))
+    with pytest.raises(ProjectSpiceSourceError) as error:
+        _prepare(case, report, artifacts)
+    assert error.value.__context__ is None
+    assert operations == []
+
+
+@pytest.mark.parametrize("field", ("artifact", "reference", "model", "port", "alias"))
+def test_oversized_nested_text_refuses_before_model_selection(tmp_path, monkeypatch, field):
+    case, report, artifacts = _inputs(tmp_path, monkeypatch)
+    reference = report.references[0]
+    if field == "artifact":
+        reference = dataclasses.replace(reference, artifact_id="a" * 33)
+    elif field == "reference":
+        reference = dataclasses.replace(reference, reference="R" * 4097)
+    elif field == "model":
+        reference = dataclasses.replace(reference, model_id="m" * 33)
+    elif field == "port":
+        pin = dataclasses.replace(reference.pins[0], port="P" * 65)
+        reference = dataclasses.replace(reference, pins=(pin, *reference.pins[1:]))
+    else:
+        pin = reference.pins[0]
+        alias = dataclasses.replace(pin.node.aliases[0], source_symbol_uuid="a" * 4097)
+        node = dataclasses.replace(pin.node, aliases=(alias, *pin.node.aliases[1:]))
+        reference = dataclasses.replace(
+            reference, pins=(dataclasses.replace(pin, node=node), *reference.pins[1:])
+        )
+    report = dataclasses.replace(report, references=(reference, *report.references[1:]))
+    monkeypatch.setattr(
+        source_preparation,
+        "_selected_models",
+        lambda *_args: pytest.fail("model selection must follow nested admission"),
+    )
+    with pytest.raises(ProjectSpiceSourceError) as error:
+        _prepare(case, report, artifacts)
+    assert error.value.__context__ is None
 
 
 @pytest.mark.parametrize(

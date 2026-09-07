@@ -37,6 +37,11 @@ canonical-object identity control. Original bytes, selected models, paths, budge
 outputs are checked; the preparer neither reads arbitrary files nor executes tools or authenticates
 caller-created receipts. The whole native export operation remains the mandatory following stage.
 
+Source aliases must resolve to the declared logical reference in the captured instance census;
+raw Reference properties do not substitute for instance overrides. Admit bounded nested record
+types, identifiers, text and counts before model selection, sorting or binding hashing. Supplied
+records remain untrusted even when they were constructed through Python dataclasses.
+
 The final publication supplies that whole operation with all original coordinator and native
 controls. It derives binding, capture and preparation internally, requires two clean byte-equal
 and structurally matching authenticated exports, hashes the bound result, then recaptures model
