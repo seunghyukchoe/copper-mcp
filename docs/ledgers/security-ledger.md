@@ -344,3 +344,39 @@ files, persistent multi-user jobs, or candidate application.
 2026-09-07 SEC-205 executor-slice preparation: add the unchanged reviewed executor and all 14 executor tests above the isolated source/XML parents. The operation derives the census internally, uses fixed authenticated native context/commands, checks two complete observations, hashes the final immutable report and rechecks live source bytes before delivery. The redundant earlier report hash remains removed per Ponytail review. Isolation, native/cross-version/full validation, independent integration review and protected hosted gates remain required. No circuit-function, model, physics, approval or application authority is added.
 
 2026-09-07 SEC-205 corrected executor validation: independent integration review accepted the unchanged executor/tests, corrected source guards and complete parent ledger history. All 124 corrected source/XML/executor cases passed on Python 3.12 (34.96 seconds), 3.11 (37.36 seconds) and 3.13 (38.50 seconds), including real KiCad alias/conflict/no-connect observations. Fresh full make check on 47bd6ca passed 5,459 tests, one intentional skip, 90% code coverage and all lint/type/security/build gates in 567.03 seconds of pytest. Source/input fingerprint: sha256:eef9c93b019926e5d00c354ede02a445fc4f33a3ac8829fd47c52b26c81e94a1. The pre-correction executor run remains historical. Final protected publication gates still apply; the map observes captured native pin/net relationships and grants no model, physics or application authority.
+
+| SEC-206 | 2026-09-07 | Pure SPICE terminal-join publication | Closed bounded declaration, actual model-byte parsing, complete sets and retained aliases; numeric ports preserve source spelling and selected-definition hashing uses the caller deadline. | Independent safety and separate Ponytail review accepted the corrected logic in the complete implementation. Isolated/composed validation and later internally derived native evidence remain required. No source-settings, simulator, physics or apply authority. | D-274, R-211; [ADR-0149](../adr/0149-project-terminal-joins-consume-native-evidence.md) |
+
+2026-09-07 SEC-206 isolation review accepted the exact corrected helper/tests, all 25 core cases,
+absent future runner/imports and complete parent ledger prefixes. The core cases passed on Python
+3.12 with the future runner import actively blocked (0.26s), 3.11 (0.35s) and 3.13 (0.37s).
+The preserved complete composition passed 5,500 tests; fresh isolated full validation remains
+required for this smaller source population. No native collection or physical authority is implied.
+
+2026-09-07 SEC-206 isolated pure-join validation: fresh make check passed 5,484 tests, one
+intentional skip, 90% code coverage and all format/lint/type/security/build gates, with 629.22
+seconds of pytest using three workers and configured real parent backends. Tested staged tree
+5bcd0b381e3bccebf839ff9da6164a1f1863340f; source/input fingerprint
+sha256:9863b0cd0fd963601d2d74277a7b1b6289aa61d9659820dd83a2f4ce301de109.
+Independent isolation review and all 25 core cases on Python 3.11–3.13 passed. Protected hosted
+gates and the complete internal-capture/native-runner slice remain required; no physics or apply pass.
+
+2026-09-08 SEC-206 PR291 inventory-link correction: hosted review identified cross-inventory
+mixing despite matching project IDs and references. A red control reproduced acceptance after
+changing only the pin map's component identity. Retain the exact inventory from the existing BOM
+call after its final checks; preserve the report-only public API and recorded v1 digest bytes.
+The join verifies both full-receipt and normalized component links under the active deadline,
+plus common capture/execution/syntax/executable/authentication context. Direct comparison of
+the two differently namespaced digests would reject valid inputs and is not used.
+Golden-digest and one-native-call controls pass. The adapted full family passed 92 cases including
+real KiCad observations; independent correctness/security review accepted the bridge and found
+no justified Ponytail cuts. Fresh full and exact-head hosted validation remain required; earlier
+full results are pre-correction evidence, not proof for this change.
+
+2026-09-08 SEC-206 corrected PR291 full validation: make check passed 5,495 tests, one
+intentional skip, 90% code coverage and all format/lint/type/security/build gates, with 624.76
+seconds of pytest using three workers and configured real parent backends. Tested staged tree
+305e0706f45b898cc7a729cffe119b4f80369352; source/input fingerprint
+sha256:dd526ea26a071dd8d5667b3e4c67ecf4aae7ddde92bfe16d5cfb0c2d99bf8c59.
+Independent bridge review and the 92-case real adapted family passed. Corrected exact-head
+hosted checks remain required. No v1 digest reinterpretation, extra native run or physics pass.
