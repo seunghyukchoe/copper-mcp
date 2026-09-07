@@ -466,6 +466,51 @@ sha256:85ca8259777ce5d6b36de8503bd93603c1700f1969805a630045bccc5f9c45b0.
 Protected parent/hosted validation and the complete native export operation remain required.
 No model accuracy, simulator, physics, human approval or apply authority follows from preparation.
 
+2026-09-08 SEC-207 hosted review reopened the preparer gate: PR295 at13edfb87 passed its
+13m01s CI run34150551513, but review identified swapped source-symbol aliases that could
+target the wrong component and unbounded artifact identifiers hashed before admission.
+Do not merge this head. Remediation must verify captured instance/reference identity without
+breaking hierarchical overrides, bound nested records before hashing/sorting, retain all
+original controls and obtain fresh integration validation. The earlier green local/hosted
+results remain historical evidence, not a waiver of these findings or validation of a fix.
+
+2026-09-08 SEC-207 remediation preparation: reproduced the swapped-alias and early-admission
+failures before changing production code (six failing controls and one positive control).
+The fix reuses the bounded source census for effective instance references and admits nested
+binding fields before model selection or hashing. All original preparer/kernel cases remain;
+52 focused tests now pass on Python 3.11, 3.12 and 3.13. Kernel bytes are unchanged. Formatting,
+lint and type checks pass. Source-only census preparation is repeated under the same deadline;
+no additional native execution is introduced. Independent review, fresh full validation and
+updated exact-head hosted checks remain required before resolving the review and merging.
+
+2026-09-08 SEC-207 follow-up review found two remaining early-admission gaps: captured
+artifact identifiers still reached dictionary hashing, and a definition guard trusted an
+overridable __class__ attribute. Both were reproduced with failing regressions. The in-flight
+full run was deliberately interrupted because its source was known to require correction;
+its 5,340 partial passes and exit2/KeyboardInterrupt are not successful evidence. The corrected
+code uses an inline exact type check and the same bounded identifier admission for binding
+and captured records. Captured role/digest fields also refuse callback-bearing subtypes.
+All 56 focused tests pass on Python 3.11, 3.12 and 3.13; format, lint and targeted mypy pass.
+Independent delta review and a fresh full run must validate this new source before publication.
+
+2026-09-08 SEC-207 delta review accepted both follow-up corrections: exact definition type
+checking precedes field access, and shared identifier admission precedes captured/binding
+hashing. Hostile captured role/digest fields also refuse before callbacks. No supported-input
+semantic regression was found in the scoped recheck. Separate Ponytail review accepted removal
+of the single-use spoofable wrapper and found no further justified cut. Fresh full validation
+and exact-head hosted checks remain required.
+
+2026-09-08 SEC-207 corrected preparer full validation: fresh make check passed 5,601 tests,
+one intentional skip, 90% code coverage and all format/lint/type/security/build gates in
+567.49 seconds of pytest using three workers and configured real parent backends. Tested
+staged tree6ccef729aa6b1547472b4c711da09512f88bf746; source/input fingerprint
+sha256:fd69298e8c0972fd2e1a090f0a7f19918add1cc9cea266db9b6503ef6d637748.
+Independent review accepted the semantic alias correction and both final admission fixes;
+56 focused controls passed every supported interpreter. This successful run supersedes the
+interrupted correction attempt for final-source validation. Updated exact-head hosted checks,
+protected merge and resulting main verification remain required; no execution/physics/apply
+authority or five-area completion follows from source preparation.
+
 2026-09-08 SEC-207 whole-export publication preparation: restore the unchanged coordinator,
 all 12 coordinator cases and the original native preparation/export control above the accepted
 parser/kernel/preparer. The source/input fingerprint matches the complete extracted validation;
@@ -481,3 +526,15 @@ matching the 5,602-test complete extracted run. Fresh format/lint/type/security/
 and all 91 focused cases passed with configured real KiCad in 118.12 seconds. Reusing that full
 result is justified for identical source; no new full run is claimed. Protected parent/hosted
 gates and later simulator/physics work remain required before broader capability claims.
+
+2026-09-08 SEC-207 corrected-parent integration: carry the reviewed preparer correction from
+ef8443d into the whole native exporter without changing coordinator or native-control bytes.
+Retain the complete corrected parent ledger prefix. Earlier whole-export full-suite reuse
+is superseded because source admission and its tests changed. Fresh composed validation,
+targeted real native controls and independent integration review are required before publication.
+
+2026-09-08 SEC-207 corrected native integration checks: independent review accepted exact
+preparer/test bytes from ef8443d, unchanged coordinator/native controls and the complete parent
+ledger prefix. All 103 focused cases passed with configured real KiCad in 123.08 seconds;
+format/lint/type checks passed. A fresh full composed run remains required; previous complete
+suite reuse is not final validation of this corrected source.
