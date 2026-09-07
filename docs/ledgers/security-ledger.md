@@ -360,3 +360,27 @@ seconds of pytest using three workers and configured real parent backends. Teste
 sha256:9863b0cd0fd963601d2d74277a7b1b6289aa61d9659820dd83a2f4ce301de109.
 Independent isolation review and all 25 core cases on Python 3.11–3.13 passed. Protected hosted
 gates and the complete internal-capture/native-runner slice remain required; no physics or apply pass.
+
+2026-09-07 SEC-206 runner publication preparation: add the unchanged internally owned artifact,
+BOM and native-pin orchestration plus its complete 16-case group, including three real KiCad
+controls. Hash before final source/model freshness; check every shared alias before conversion.
+Source and tests match the corrected complete integration at 2a7c090. All three independent
+review findings are closed; source-settings, SPICE-export, simulator and physics authority remain
+unassessed. Preserve the full pure-join ledger prefix. Publication evidence reuse must demonstrate
+matching source/input fingerprints, fresh metadata/build checks and independent integration review.
+
+2026-09-08 SEC-206 runner inventory-link correction: retain the exact fresh BOM inventory and
+pass it into the corrected join. Verify both differently namespaced identity links and the common
+execution/backend context without another native run or changed v1 report fields/digest bytes.
+The adapted family passed 92 cases with real KiCad; Python 3.11 and 3.13 each passed 83 controls
+with nine native cases omitted. Independent review accepted the bridge and consumer. Earlier
+matching-fingerprint reuse is superseded by this code change; fresh full validation is required.
+
+2026-09-08 SEC-206 corrected runner full validation: fresh make check passed 5,511 tests,
+one intentional skip, 90% code coverage and all format/lint/type/security/build gates, with
+654.85 seconds of pytest using three workers and configured real KiCad/router backends.
+Tested staged tree69fd6d0eb6b80a9b6a38555a77911d92a0152d99; source/input fingerprint
+sha256:264f2a1caeedfe5b657198617ee495716781f2e5703d8b8bf1b1ec614de2ee6f.
+The independent bridge/consumer review and 92-case real family passed. This supersedes the
+pre-bridge 5,500-test composition for current consumer validation. Corrected parent synchronization,
+protected hosted gates and later source-settings/SPICE/simulator/physics work remain required.

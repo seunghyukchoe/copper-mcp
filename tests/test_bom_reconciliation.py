@@ -206,6 +206,31 @@ def _counts(report) -> dict[str, int]:
     return dict(report.mismatch_counts)
 
 
+def test_internal_pair_retains_exact_inventory_and_legacy_report_digest(tmp_path, monkeypatch):
+    from copper_mcp.engineering import bom_reconciliation as reconciliation
+
+    legacy, capture, libraries, declaration, paths, bindings = _case(tmp_path, monkeypatch)
+    assert (
+        legacy.digest == "sha256:2b3a1d68c105695f6cbb3274779dcf1a47db0a8e5caa7f078b3cb9ff9353cf7b"
+    )
+    inventory = _inventory(capture.digest, (_component("C1", "100n"), _component("R1", "1k")))
+    calls = []
+
+    def native(*args, **kwargs):
+        calls.append(True)
+        return inventory
+
+    monkeypatch.setattr(reconciliation, "_native_inventory", native)
+    report, retained = reconciliation._run_bom_reconciliation(
+        capture, libraries, declaration, paths, bindings, Settings(workspace=tmp_path)
+    )
+    assert calls == [True]
+    assert retained is inventory
+    assert report == legacy and report.digest == legacy.digest
+    assert report.native_inventory_digest == inventory.digest
+    assert report.native_inventory_digest != inventory.inventory_digest
+
+
 def test_complete_match_binds_models_and_redacts_private_metadata(tmp_path, monkeypatch):
     report, capture, _libraries, declaration, _paths, _bindings_json = _case(
         tmp_path,
