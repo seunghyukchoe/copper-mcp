@@ -20,6 +20,8 @@ Use standard CSV quoting, UTF-8, bounded fields/rows and context-free errors. Ex
 tokens take precedence over range expansion; ascending same-prefix numeric ranges are bounded before
 allocation. Numeric conversions must not depend on Python's configurable decimal integer-string
 limit or change global interpreter/Decimal settings. Arithmetic remains integral and exact.
+The reader also accepts lower remaining row/reference budgets. Reconciliation passes its shared
+remaining ceilings across artifacts, so another file cannot reset either budget.
 
 ## Reconciliation boundary
 
@@ -37,7 +39,7 @@ new binding digests identify the two input families without asserting complete e
 Native inventory, artifact reads, parsing, comparison, hashing and final source/artifact freshness
 checks share a bounded deadline. Changed bytes, malformed inputs and unavailable execution refuse;
 well-formed disagreements return fixed mismatch counts and take precedence over missing scope.
-Empty component scope without disagreement is inconclusive, never a successful coverage result.
+Empty BOM-eligible component scope without disagreement is inconclusive, never a successful coverage result.
 Final checks follow report hashing and precede successful delivery; they are not atomic
 filesystem or editor transaction guarantees.
 

@@ -33,6 +33,62 @@ def test_header_only_input_is_empty_without_a_completion_claim() -> None:
     assert parse(_HEADERS) == ()
 
 
+@pytest.mark.parametrize("name", ("max_rows", "max_references"))
+@pytest.mark.parametrize("value", (True, -1, 100_001, "1"))
+def test_rejects_invalid_remaining_budgets(name, value) -> None:
+    with pytest.raises(BomCsvError):
+        parse_bom_csv(
+            _HEADERS.encode(),
+            known_references=frozenset(),
+            deadline=time.monotonic() + 10,
+            **{name: value},
+        )
+
+
+def test_empty_file_can_consume_zero_remaining_budget() -> None:
+    assert (
+        parse_bom_csv(
+            _HEADERS.encode(),
+            known_references=frozenset(),
+            deadline=time.monotonic() + 10,
+            max_rows=0,
+            max_references=0,
+        )
+        == ()
+    )
+
+
+def test_remaining_row_budget_refuses_before_processing_extra_row(monkeypatch) -> None:
+    from copper_mcp.engineering import bom_csv
+
+    quantity = bom_csv._quantity
+    calls = []
+
+    def observe(value):
+        calls.append(value)
+        return quantity(value)
+
+    monkeypatch.setattr(bom_csv, "_quantity", observe)
+    with pytest.raises(BomCsvError):
+        parse_bom_csv(
+            (_HEADERS + "R1,1k,,1,\nR2,1k,,1,\n").encode(),
+            known_references=frozenset(),
+            deadline=time.monotonic() + 10,
+            max_rows=1,
+        )
+    assert calls == ["1"]
+
+
+def test_remaining_reference_budget_refuses_before_large_expansion() -> None:
+    with pytest.raises(BomCsvError, match="exceeds limits"):
+        parse_bom_csv(
+            (_HEADERS + "R1-R100000,1k,,100000,\n").encode(),
+            known_references=frozenset(),
+            deadline=time.monotonic() + 10,
+            max_references=1,
+        )
+
+
 def test_numeric_fields_do_not_depend_on_interpreter_digit_limit() -> None:
     script = r"""
 import time

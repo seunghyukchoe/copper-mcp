@@ -163,12 +163,19 @@ def parse_bom_csv(
     known_references: frozenset[str],
     deadline: float,
     max_bytes: int = _MAX_BYTES,
+    max_rows: int = _MAX_ROWS,
+    max_references: int = _MAX_ROWS,
 ) -> tuple[BomCsvRow, ...]:
     """Parse one fixed-profile BOM CSV without assigning reconciliation meaning."""
 
     active_deadline = _normalize_deadline(deadline)
     _check_deadline(active_deadline)
     if type(max_bytes) is not int or not 1 <= max_bytes <= _MAX_BYTES:
+        _malformed()
+    if any(
+        type(value) is not int or not 0 <= value <= _MAX_ROWS
+        for value in (max_rows, max_references)
+    ):
         _malformed()
     if type(payload) is not bytes:
         _malformed()
@@ -209,7 +216,7 @@ def parse_bom_csv(
     try:
         for record in reader:
             _check_deadline(active_deadline)
-            if len(rows) >= _MAX_ROWS:
+            if len(rows) >= max_rows:
                 _limited()
             if len(record) != len(headers):
                 _malformed()
@@ -218,7 +225,7 @@ def parse_bom_csv(
             dnp_value = fields[indices["DNP"]]
             if dnp_value not in {"", "DNP"}:
                 _malformed()
-            remaining = _MAX_ROWS - reference_count
+            remaining = max_references - reference_count
             references = _parse_references(
                 fields[indices["Refs"]], known_references, active_deadline, remaining
             )
