@@ -42,6 +42,10 @@ External XML is untrusted despite backend authentication. Bound bytes, structure
 processing time; disallow DTD/entity declarations and external resolution. Duplicate critical
 nodes, references, UUIDs or sheets refuse. Ordinary custom metadata is not interpreted as a new
 authority. Late parsing, mutation and divergent observations must not publish an inventory.
+Final inventory normalization checks the active deadline before/after bounded reference sorting,
+during key extraction and record conversion, and between streaming JSON/hash tokens. Preserve the
+v1 canonical bytes and derive identities from the returned immutable records. These are cooperative
+checkpoints over bounded native metadata, not hard real-time interruption of individual primitives.
 
 ## Follow-on and acceptance
 

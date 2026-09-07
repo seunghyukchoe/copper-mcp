@@ -12,6 +12,7 @@ from copper_mcp.engineering.component_netlist import (
     NativeComponent,
     parse_component_netlist,
 )
+from copper_mcp.optimization.contracts import digest_document
 
 CHILD_UUID = "20000000-0000-4000-8000-000000000002"
 R1_UUID = "1a000000-0000-4000-8000-000000000001"
@@ -99,6 +100,40 @@ def _parse(payload: bytes | None = None) -> ComponentNetlist:
         deadline=time.monotonic() + 60.0,
         max_bytes=len(data),
     )
+
+
+@pytest.mark.parametrize("empty", (False, True))
+def test_deadline_hash_preserves_v1_canonical_bytes(empty):
+    parsed = _parse()
+    record = dataclasses.replace(parsed.components[0], value='한글 Ω "quoted" \\')
+    observed = dataclasses.replace(
+        parsed,
+        components=() if empty else (parsed.components[1], record),
+        sheet_paths=tuple(reversed(parsed.sheet_paths)),
+    )
+    expected = digest_document(
+        "copper-mcp/component-netlist/v1",
+        {
+            "backend_version": observed.backend_version,
+            "components": [
+                dataclasses.asdict(item)
+                for item in sorted(observed.components, key=lambda item: item.reference)
+            ],
+            "sheet_paths": sorted(observed.sheet_paths),
+        },
+    )
+    assert observed.digest == observed._digest(time.monotonic() + 60) == expected
+
+
+def test_deadline_hash_stops_during_sort_key_extraction(monkeypatch):
+    from copper_mcp.engineering import component_netlist
+
+    observed = _parse()
+    ticks = iter((0.0, 0.0, 1.0))
+    monkeypatch.setattr(component_netlist.time, "monotonic", lambda: next(ticks, 1.0))
+    monkeypatch.setattr(component_netlist, "asdict", lambda _: pytest.fail("must not convert"))
+    with pytest.raises(ComponentNetlistError, match="deadline expired"):
+        observed._digest(0.5)
 
 
 def test_parses_sorted_native_component_metadata_without_claiming_authority() -> None:

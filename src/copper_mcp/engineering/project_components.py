@@ -195,7 +195,7 @@ def _execute(
             observation.components,
             observation.sheet_paths,
         )
-        _ = result.inventory_digest
+        _ = observation._digest(deadline)
         _check(deadline)
         return result
 
