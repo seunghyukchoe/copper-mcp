@@ -510,3 +510,40 @@ Independent review accepted the semantic alias correction and both final admissi
 interrupted correction attempt for final-source validation. Updated exact-head hosted checks,
 protected merge and resulting main verification remain required; no execution/physics/apply
 authority or five-area completion follows from source preparation.
+
+2026-09-08 SEC-207 whole-export publication preparation: restore the unchanged coordinator,
+all 12 coordinator cases and the original native preparation/export control above the accepted
+parser/kernel/preparer. The source/input fingerprint matches the complete extracted validation;
+all source/tests/config/scripts must remain identical for evidence reuse. Fresh metadata/build
+checks, targeted real controls and independent integration review remain required. No simulator,
+physics, human approval or application authority is asserted by native export agreement.
+
+2026-09-08 SEC-207 whole-export validation reuse: independent review confirmed all tracked
+non-documentation files are identical to cdbadb5 and the complete preparer ledger prefix is
+preserved. Source/input fingerprint remains
+sha256:43fe479e47cb5edd8e910298c97dcc487cb11b1c2e26e926526416aa83e140d7,
+matching the 5,602-test complete extracted run. Fresh format/lint/type/security/build checks passed,
+and all 91 focused cases passed with configured real KiCad in 118.12 seconds. Reusing that full
+result is justified for identical source; no new full run is claimed. Protected parent/hosted
+gates and later simulator/physics work remain required before broader capability claims.
+
+2026-09-08 SEC-207 corrected-parent integration: carry the reviewed preparer correction from
+ef8443d into the whole native exporter without changing coordinator or native-control bytes.
+Retain the complete corrected parent ledger prefix. Earlier whole-export full-suite reuse
+is superseded because source admission and its tests changed. Fresh composed validation,
+targeted real native controls and independent integration review are required before publication.
+
+2026-09-08 SEC-207 corrected native integration checks: independent review accepted exact
+preparer/test bytes from ef8443d, unchanged coordinator/native controls and the complete parent
+ledger prefix. All 103 focused cases passed with configured real KiCad in 123.08 seconds;
+format/lint/type checks passed. A fresh full composed run remains required; previous complete
+suite reuse is not final validation of this corrected source.
+
+2026-09-08 SEC-207 corrected whole-export full validation: fresh make check on1fda2c0
+passed 5,614 tests, one intentional skip, 90% code coverage and every format/lint/type/security/
+build gate, with 626.76 seconds of pytest and three workers using real parent backends.
+Tested tree412fb025c0e12ebacb9d4ed00b5439e1d1b6aa72; source/input fingerprint
+sha256:cae8e6fe03df7117523d67c6665ffd3ba75d2bc0f6ca0551a444e6fc445e1f16.
+The 103-case real native family and independent integration review also passed. This replaces
+the superseded pre-correction full reuse for current-source validation. Parent-main verification
+and protected publication remain required; native export is not simulation or physics authority.

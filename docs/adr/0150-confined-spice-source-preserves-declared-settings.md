@@ -1,6 +1,6 @@
 # ADR-0150: Confined SPICE source preserves declared settings
 
-- Status: Proposed; complete source-preparation publication under review
+- Status: Proposed; whole native-export publication under review
 - Date: 2026-09-08
 - Owners: CopperMCP maintainers
 - Related: [ADR-0149](0149-project-terminal-joins-consume-native-evidence.md)
@@ -41,6 +41,13 @@ Source aliases must resolve to the declared logical reference in the captured in
 raw Reference properties do not substitute for instance overrides. Admit bounded nested record
 types, identifiers, text and counts before model selection, sorting or binding hashing. Supplied
 records remain untrusted even when they were constructed through Python dataclasses.
+
+The final publication supplies that whole operation with all original coordinator and native
+controls. It derives binding, capture and preparation internally, requires two clean byte-equal
+and structurally matching authenticated exports, hashes the bound result, then recaptures model
+artifacts and verifies original source freshness. One enclosing deadline covers the sequence.
+No user-selected executable or approval capability is introduced; simulator, model-accuracy and
+engineering fields remain not_run, and application authority remains none.
 
 Preserve the complete implemented source preparer and native coordinator with all regression and
 real controls in the integration worktree. Publish their model/source admission and bounded edits,

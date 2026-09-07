@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private guarded SPICE export derives captured model/source inputs internally, verifies two
+  complete authenticated native exports under one deadline, then rechecks source/model freshness.
+  Results remain input/export observations, not simulation, physics, approval or apply authority.
 - Private project SPICE source preparation validates captured models and source aliases, preserves
   resolved instance ownership, and bounds nested binding fields before hashing or selection.
   It retains declared simulation settings and builds an immutable derivative. It performs no native
