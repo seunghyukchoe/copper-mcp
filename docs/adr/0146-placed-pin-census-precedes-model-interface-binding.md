@@ -1,6 +1,6 @@
 # ADR-0146: Placed-pin census precedes model interface binding
 
-- Status: Proposed; project-assembler publication under review
+- Status: Proposed; native-proof publication under review
 - Date: 2026-09-07
 - Owners: CopperMCP maintainers
 - Related: [ADR-0144](0144-native-component-inventory-precedes-bom-reconciliation.md),
@@ -8,11 +8,12 @@
 
 ## Decision
 
-The source-interpreter slice is followed by this complete project assembler and its unit controls.
-It adds the private census entry point, immutable records, canonical identity and full hierarchy
-occurrence assembly, while reusing the existing capture/hierarchy/flat-library preparation gate.
-It performs no native execution and is not a transport-authority replacement. The complete native
-differential proof below remains the mandatory final publication increment, not optional future work.
+The source interpreter and complete project assembler are followed by this final native-proof
+publication. It adds six comparison-negative controls and five repeated real KiCad cases,
+including one populated shared leaf reached through two distinct hierarchy occurrence paths.
+The derivation operation itself still performs no native execution and is not a transport-authority
+replacement. These fixed controls validate the stated examples, not arbitrary projects, model
+interfaces, calibrated physics or application authority.
 
 Derive a private occurrence census from the complete captured schematic hierarchy and verified
 flat symbol-library closure before binding simulation model ports. A BOM reference or native XML

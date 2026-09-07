@@ -282,4 +282,16 @@ not silently dropped. One budget and deadline span parsing, assembly, sorting an
 The result contains immutable repr-redacted symbol/pin tuples with a source-bound canonical digest.
 Its public-safe document exposes only digests/counts and native/model/engineering validation
 `not_run`, with apply authority `none`. It does not infer net membership, validate model ports,
-perform native execution or grant approval. The full native proof remains a mandatory final slice.
+perform native execution or grant approval. The controls below are the mandatory final proof slice.
+
+## Native pin-census proof controls
+
+The final test slice compares the assembled census with two fixed, authenticated KiCad XML exports
+for RC pins, selected-unit override/common pins, alternate body style, alternate function and a
+populated shared leaf instantiated twice with distinct paths and references. The shared case retains
+one source symbol and its pin UUIDs while checking all four occurrence pins against native output.
+Counters preserve occurrence multiplicity, duplicate native identities are rejected, and declared
+library metadata plus effective native pinfunction/type are compared. Separate negative controls
+prove the checker rejects duplicate and wrong-name evidence. Clean diagnostics and source/state
+freshness remain required. This verifies these controlled examples only; the runtime census keeps
+native/model/engineering validation `not_run` and apply authority `none`.
