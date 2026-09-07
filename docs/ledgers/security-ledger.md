@@ -601,3 +601,12 @@ sha256:0b4cdddebeec7e14073ef28536aaf9c6a10f5f8b12d20cb0bf1c7aab6952e220.
 All25 focused tests passed Python3.11,3.12 and3.13. This supersedes the pre-correction full
 result for publication; exact-head hosted checks and main verification remain required.
 No execution, convergence, calibration, physics or apply authority follows from parsing.
+
+| SEC-209 | 2026-09-08 | Mechanical shared container-process extraction | Original declarations and process methods are preserved by AST comparison; router constructor signature and public compatibility aliases remain. | No new execution profile, request selection, cleanup behavior or authority is introduced. Cleanup corrections and simulator execution remain separately reviewed stages. | Primary comparison and independent review |
+
+2026-09-08 SEC-209 focused validation: all17 original local router controls pass on Python3.11,
+3.12 and3.13. The two original real FreeRouting/SimpleRouteJson smokes passed in7.27s.
+Strict mypy passes163 source files. Independent review confirmed unchanged original tests,
+direct compatibility aliases, no circular/future-simulator dependency and no behavior fixes
+mixed into the extraction. Separate Ponytail review found no justified cuts. Exact-tip hosted
+validation, parent-main verification and the complete simulator program remain required.

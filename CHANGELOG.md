@@ -8,6 +8,8 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Shared internal container process ownership preserves existing router requests, resource
+  bounds, statuses and result identities. This mechanical change adds no simulator or authority.
 - Private bounded ngspice operating-point interpretation checks complete expected voltage/current
   outputs, admits exact byte payloads, and preserves finite subnormal decimal values in a
   deterministic identity. Supplied numbers do
