@@ -12,7 +12,7 @@ All notable changes are documented here. The format follows
   and source pin identities into immutable records under one cumulative budget and deadline.
   Native connectivity, model validation, physics and application authority remain unassessed.
 - Private pin-source interpretation validates raw pin inventories, unit/style selectors and
-  instance records under shared work/deadline limits. Project assembly, native pin evidence and
+  immutable instance indexes under shared work/deadline limits. Project assembly, native pin evidence and
   model/engineering/application authority are not included in this source-only slice.
 - Private BOM reconciliation compares captured CSV rows and explicit item bindings against a fresh
   native component inventory. Complete scope, cumulative budgets, exact metadata and final freshness
