@@ -538,3 +538,12 @@ preparer/test bytes from ef8443d, unchanged coordinator/native controls and the 
 ledger prefix. All 103 focused cases passed with configured real KiCad in 123.08 seconds;
 format/lint/type checks passed. A fresh full composed run remains required; previous complete
 suite reuse is not final validation of this corrected source.
+
+2026-09-08 SEC-207 corrected whole-export full validation: fresh make check on1fda2c0
+passed 5,614 tests, one intentional skip, 90% code coverage and every format/lint/type/security/
+build gate, with 626.76 seconds of pytest and three workers using real parent backends.
+Tested tree412fb025c0e12ebacb9d4ed00b5439e1d1b6aa72; source/input fingerprint
+sha256:cae8e6fe03df7117523d67c6665ffd3ba75d2bc0f6ca0551a444e6fc445e1f16.
+The 103-case real native family and independent integration review also passed. This replaces
+the superseded pre-correction full reuse for current-source validation. Parent-main verification
+and protected publication remain required; native export is not simulation or physics authority.
