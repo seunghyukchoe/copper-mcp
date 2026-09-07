@@ -87,7 +87,7 @@ class _BomComponentBindings(ClosedModel):
     schema_version: Literal["bom-component-bindings/v1"]
     declaration_digest: Digest
     project_capture_digest: Digest
-    items: Annotated[tuple[_BindingItem, ...], Field(min_length=1, max_length=512)]
+    items: Annotated[tuple[_BindingItem, ...], Field(max_length=512)]
 
     @model_validator(mode="after")
     def canonical_items(self) -> _BomComponentBindings:
@@ -217,7 +217,7 @@ def _parse_declaration(payload: bytes) -> ElectricalInputs:
         result = parse_electrical_inputs(payload)
     except (OptimizationError, ValueError, TypeError, RecursionError):
         pass
-    if result is None or not result.bom_bindings:
+    if result is None:
         _fail("BOM reconciliation declaration is malformed")
     return result
 

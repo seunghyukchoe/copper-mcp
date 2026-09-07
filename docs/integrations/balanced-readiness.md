@@ -251,6 +251,8 @@ similar labels. Shared row/reference ceilings span all artifacts, and the caller
 native receipt and final report hashing. Final artifact and source checks follow hashing.
 
 The private immutable report returns fixed mismatch counts and a limited metadata agreement result.
+Explicit matching empty item sets and a header-only BOM are inconclusive when no native components
+are BOM-eligible; they cannot hide missing eligible components, unbound rows or contradictory data.
 It binds the full native execution receipt, not only component metadata. Additional CSV columns and
 declared model associations remain explicitly unvalidated; model definitions, ratings and physics
 are not run, and apply authority is none. This operation is not a new MCP tool, engineering approval,

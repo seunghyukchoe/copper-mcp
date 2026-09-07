@@ -52,6 +52,9 @@ Checks are cooperative over bounded primitives, not hard real-time interruption 
 Changed bytes, malformed inputs and unavailable execution refuse;
 well-formed disagreements return fixed mismatch counts and take precedence over missing scope.
 Empty BOM-eligible component scope without disagreement is inconclusive, never a successful coverage result.
+Matching empty declaration and reference-binding sets are valid inputs to this comparison; the
+binding document must still contain its explicit `items` field. Nonempty native scope or contradictory
+BOM rows still fails, and unequal declaration/binding item sets still refuse before execution.
 Final checks follow report hashing and precede successful delivery; they are not atomic
 filesystem or editor transaction guarantees.
 

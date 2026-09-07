@@ -22,6 +22,10 @@ from copper_mcp.engineering.bom_reconciliation import (
 from copper_mcp.engineering.component_netlist import NativeComponent
 from copper_mcp.engineering.inputs import parse_electrical_inputs
 from copper_mcp.engineering.project_components import ProjectComponentInventory
+from copper_mcp.engineering.schematic_project_capture import (
+    ProjectFileBinding,
+    capture_schematic_project,
+)
 from copper_mcp.optimization.contracts import digest_document
 
 
@@ -178,7 +182,8 @@ def _case(
     artifacts = {"bom-main": ("inputs/bom.csv", bom), **(extra_artifacts or {})}
     declaration = _declaration(artifacts, item_quantities, model_item=model_item)
     paths = _write_artifacts(tmp_path, artifacts)
-    item_references = item_references or {"capacitors": ("C1",), "resistors": ("R1",)}
+    if item_references is None:
+        item_references = {"capacitors": ("C1",), "resistors": ("R1",)}
     bindings = _bindings(declaration, capture.digest, item_references)
     if native is None:
         native = (_component("C1", "100n"), _component("R1", "1k"))
@@ -435,6 +440,91 @@ def test_empty_native_scope_with_contradictory_bom_fails_before_inconclusive(tmp
     assert empty.metadata_agreement == "fail"
     assert empty.reasons == ("no_component_scope",)
     assert _counts(empty)["unexpected_component"] == 2
+
+
+@pytest.mark.parametrize("excluded", (False, True))
+def test_matching_empty_bindings_and_eligible_scope_are_inconclusive(
+    tmp_path, monkeypatch, excluded
+):
+    native = (_component("R1", "1k", excluded_from_bom=True),) if excluded else ()
+    report, *_ = _case(
+        tmp_path,
+        monkeypatch,
+        bom=_csv(),
+        native=native,
+        item_quantities=(),
+        item_references={},
+    )
+    assert report.metadata_agreement == "inconclusive"
+    assert report.reasons == ("no_component_scope",)
+    assert not any(_counts(report).values())
+    assert report.bom_row_count == report.bom_reference_count == 0
+    assert report.associations == ()
+    assert report.document()["model_definition_validation"] == "not_run"
+    assert report.document()["apply_authority"] == "none"
+
+
+def test_empty_bindings_do_not_hide_nonempty_native_scope(tmp_path, monkeypatch):
+    report, *_ = _case(
+        tmp_path,
+        monkeypatch,
+        bom=_csv(),
+        item_quantities=(),
+        item_references={},
+    )
+    assert report.metadata_agreement == "fail"
+    assert _counts(report)["missing_component"] == 2
+    assert report.reasons == ()
+
+
+def test_empty_bindings_do_not_hide_contradictory_bom_rows(tmp_path, monkeypatch):
+    report, *_ = _case(
+        tmp_path,
+        monkeypatch,
+        native=(),
+        item_quantities=(),
+        item_references={},
+    )
+    assert report.metadata_agreement == "fail"
+    assert _counts(report)["unexpected_component"] == 2
+    assert _counts(report)["missing_row_binding"] == 2
+    assert report.reasons == ("no_component_scope",)
+
+
+@pytest.mark.parametrize("empty_declaration", (False, True))
+def test_one_sided_empty_binding_sets_still_refuse(tmp_path, monkeypatch, empty_declaration):
+    with pytest.raises(BomReconciliationError, match="bindings are malformed"):
+        _case(
+            tmp_path,
+            monkeypatch,
+            bom=_csv(),
+            native=(),
+            item_quantities=() if empty_declaration else (("resistors", "bom-main", 1),),
+            item_references={"resistors": ("R1",)} if empty_declaration else {},
+        )
+
+
+def test_empty_scope_still_requires_an_explicit_items_field(tmp_path, monkeypatch):
+    report, capture, libraries, declaration, paths, bindings = _case(
+        tmp_path,
+        monkeypatch,
+        bom=_csv(),
+        native=(),
+        item_quantities=(),
+        item_references={},
+    )
+    assert report.metadata_agreement == "inconclusive"
+    missing_items = json.loads(bindings)
+    del missing_items["items"]
+    with pytest.raises(BomReconciliationError, match="bindings are malformed"):
+        run_bom_reconciliation(
+            capture,
+            libraries,
+            declaration,
+            paths,
+            json.dumps(missing_items).encode(),
+            Settings(workspace=tmp_path),
+        )
 
 
 def test_all_bom_excluded_components_have_no_eligible_scope(tmp_path, monkeypatch):
@@ -740,4 +830,56 @@ def test_real_native_reconciliation_checks_complete_known_fixture(tmp_path, scen
             "wrong-dnp": "dnp_mismatch",
         }[scenario]
         assert dict(report.mismatch_counts)[expected] == 1
+    assert all((tmp_path / name).read_bytes() == payload for name, payload in context.items())
+
+
+@pytest.mark.real_kicad
+@pytest.mark.parametrize("exclude_all", (False, True))
+@pytest.mark.skipif(
+    not _CONFIGURED_CLI, reason="requires explicit vendor-sealed KiCad 10.0.5 test backend"
+)
+def test_real_empty_bindings_distinguish_missing_and_ineligible_components(tmp_path, exclude_all):
+    capture, libraries, context = build_project(tmp_path)
+    if exclude_all:
+        assert b"(in_bom yes)" in context[capture.root_path]
+        context = {
+            name: payload.replace(b"(in_bom yes)", b"(in_bom no)")
+            if name.endswith(".kicad_sch")
+            else payload
+            for name, payload in context.items()
+        }
+        libraries = tuple(
+            dataclasses.replace(
+                library,
+                content=(content := library.content.replace(b"(in_bom yes)", b"(in_bom no)")),
+                digest=_sha(content),
+            )
+            for library in libraries
+        )
+        for name, payload in context.items():
+            (tmp_path / name).write_bytes(payload)
+        capture = capture_schematic_project(
+            tmp_path,
+            capture.root_path,
+            tuple(ProjectFileBinding(name, _sha(payload)) for name, payload in context.items()),
+        )
+    artifacts = {"bom-main": ("inputs/bom.csv", _csv())}
+    declaration = _declaration(artifacts, ())
+    paths = _write_artifacts(tmp_path, artifacts)
+    bindings = _bindings(declaration, capture.digest, {})
+    report = run_bom_reconciliation(
+        capture,
+        libraries,
+        declaration,
+        paths,
+        bindings,
+        Settings(workspace=tmp_path, kicad_cli=Path(_CONFIGURED_CLI), kicad_timeout_seconds=30),
+    )
+    assert report.metadata_agreement == ("inconclusive" if exclude_all else "fail")
+    assert report.native_component_count == 2
+    assert report.reasons == (("no_component_scope",) if exclude_all else ())
+    assert dict(report.mismatch_counts)["missing_component"] == (0 if exclude_all else 2)
+    if exclude_all:
+        assert not any(dict(report.mismatch_counts).values())
+    assert report.document()["apply_authority"] == "none"
     assert all((tmp_path / name).read_bytes() == payload for name, payload in context.items())
