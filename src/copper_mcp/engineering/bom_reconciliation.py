@@ -403,7 +403,7 @@ def _verify_project_source(
         _fail("BOM reconciliation freshness check failed")
 
 
-def run_bom_reconciliation(
+def _run_bom_reconciliation(
     project_capture: SchematicProjectCapture,
     libraries: tuple[SymbolLibraryInput, ...],
     declaration_json: bytes,
@@ -413,8 +413,8 @@ def run_bom_reconciliation(
     *,
     deadline: float | None = None,
     limits: CaptureLimits | None = None,
-) -> BomReconciliationReport:
-    """Compare every declared BOM row with one freshly executed native inventory."""
+) -> tuple[BomReconciliationReport, ProjectComponentInventory]:
+    """Retain the exact fresh inventory for internal cross-operation identity checks."""
 
     started = time.monotonic()
     copied_settings, copied_limits, active_deadline = _copy_controls(
@@ -592,4 +592,29 @@ def run_bom_reconciliation(
         _fail("BOM reconciliation freshness check failed")
     _verify_project_source(project_capture, copied_settings.workspace, active_deadline)
     _check_deadline(active_deadline)
+    return report, inventory
+
+
+def run_bom_reconciliation(
+    project_capture: SchematicProjectCapture,
+    libraries: tuple[SymbolLibraryInput, ...],
+    declaration_json: bytes,
+    artifact_paths_json: bytes,
+    bindings_json: bytes,
+    settings: Settings,
+    *,
+    deadline: float | None = None,
+    limits: CaptureLimits | None = None,
+) -> BomReconciliationReport:
+    """Preserve the v1 report-only API and its existing digest interpretation."""
+    report, _inventory = _run_bom_reconciliation(
+        project_capture,
+        libraries,
+        declaration_json,
+        artifact_paths_json,
+        bindings_json,
+        settings,
+        deadline=deadline,
+        limits=limits,
+    )
     return report

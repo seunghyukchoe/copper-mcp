@@ -11,8 +11,10 @@ import pytest
 
 from copper_mcp.engineering._spice_terminal_binding import (
     SpiceTerminalBindingError,
-    join_terminal_bindings,
     parse_terminal_bindings,
+)
+from copper_mcp.engineering._spice_terminal_binding import (
+    join_terminal_bindings as _join_terminal_bindings,
 )
 from copper_mcp.engineering.bom_reconciliation import BomItemAssociation, BomReconciliationReport
 from copper_mcp.engineering.capture import (
@@ -20,13 +22,57 @@ from copper_mcp.engineering.capture import (
     PublicElectricalCaptureProjection,
     _CapturedArtifact,
 )
+from copper_mcp.engineering.component_netlist import NativeComponent
 from copper_mcp.engineering.inputs import ElectricalInputs, parse_electrical_inputs
 from copper_mcp.engineering.native_pin_net_map import NativePinNet, NativePinNetMap, SourcePinAlias
+from copper_mcp.engineering.project_components import ProjectComponentInventory
 from copper_mcp.engineering.project_pin_net_map import ProjectPinNetMap
 
 
 def _sha(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def _inventory():
+    return ProjectComponentInventory(
+        _sha(b"project-capture"),
+        _sha(b"execution"),
+        _sha(b"syntax"),
+        _sha(b"component-command"),
+        _sha(b"executable"),
+        _sha(b"authentication"),
+        "10.0.5",
+        (
+            NativeComponent(
+                "R1",
+                "1k",
+                "",
+                "",
+                "Device:R",
+                "/",
+                ("20000000-0000-4000-8000-000000000001",),
+                False,
+                False,
+                False,
+            ),
+        ),
+        ("/",),
+    )
+
+
+def join_terminal_bindings(
+    document, declaration, capture, report, pin_map, *, deadline, bom_inventory=None
+):
+    """Supply the shared native inventory fixture for the pure-join controls."""
+    return _join_terminal_bindings(
+        document,
+        declaration,
+        capture,
+        report,
+        pin_map,
+        bom_inventory=_inventory() if bom_inventory is None else bom_inventory,
+        deadline=deadline,
+    )
 
 
 def _declaration(library: bytes, *, extra_nonspice: bool = False) -> ElectricalInputs:
@@ -99,7 +145,7 @@ def _bom(
 ) -> BomReconciliationReport:
     return BomReconciliationReport(
         _sha(b"project-capture"),
-        _sha(b"inventory"),
+        _inventory().digest,
         declaration.digest,
         capture.digest,
         _sha(b"binding"),
@@ -128,7 +174,7 @@ def _pin_map(
         NativePinNet("R1", "1", "Device:R", "1", "SIG", "Default", None, "passive", False, ()),
         NativePinNet("R1", "2", "Device:R", "2", "GND", "Default", None, "passive", False, ()),
     )
-    mapping = NativePinNetMap(_sha(b"census"), _sha(b"inventory"), "10.0.5", nodes, 0)
+    mapping = NativePinNetMap(_sha(b"census"), _inventory().inventory_digest, "10.0.5", nodes, 0)
     return ProjectPinNetMap(
         project_capture_digest,
         _sha(b"execution"),
@@ -209,6 +255,97 @@ def test_complete_join_preserves_native_pin_and_redacts_private_values() -> None
     assert result[0].pins[0].node.reference == "R1"
     assert result[0].pins[0].port == "A"
     assert "R1" not in repr(result[0])
+
+
+def test_join_rejects_pin_map_from_a_different_component_inventory():
+    library = b".model DMOD D(IS=1e-12)\n"
+    declaration = _declaration(library)
+    capture = _capture(declaration, library)
+    document = parse_terminal_bindings(
+        _bindings(declaration, library), deadline=time.monotonic() + 30
+    )
+    pin_map = _pin_map(_sha(b"project-capture"))
+    pin_map = replace(
+        pin_map,
+        mapping=replace(
+            pin_map.mapping, component_inventory_digest=_sha(b"different component metadata")
+        ),
+    )
+    with pytest.raises(SpiceTerminalBindingError):
+        join_terminal_bindings(
+            document,
+            declaration,
+            capture,
+            _bom(declaration, capture),
+            pin_map,
+            deadline=time.monotonic() + 30,
+        )
+
+
+@pytest.mark.parametrize(
+    "change",
+    (
+        "receipt",
+        "value",
+        "footprint",
+        "dnp",
+        "execution_digest",
+        "executable_digest",
+        "native_syntax_digest",
+        "backend_authentication_digest",
+    ),
+)
+def test_inventory_bridge_binds_receipt_metadata_and_execution_context(change):
+    library = b".model DMOD D(IS=1e-12)\n"
+    declaration = _declaration(library)
+    capture = _capture(declaration, library)
+    document = parse_terminal_bindings(
+        _bindings(declaration, library), deadline=time.monotonic() + 30
+    )
+    inventory = _inventory()
+    report = _bom(declaration, capture)
+    if change in {"value", "footprint", "dnp"}:
+        component = replace(
+            inventory.components[0], **{change: True if change == "dnp" else "different"}
+        )
+        inventory = replace(inventory, components=(component,))
+        report = replace(report, native_inventory_digest=inventory.digest)
+    elif change == "receipt":
+        report = replace(report, native_inventory_digest=_sha(b"different receipt"))
+    else:
+        inventory = replace(inventory, **{change: _sha(b"different context")})
+        report = replace(report, native_inventory_digest=inventory.digest)
+    with pytest.raises(SpiceTerminalBindingError) as error:
+        join_terminal_bindings(
+            document,
+            declaration,
+            capture,
+            report,
+            _pin_map(_sha(b"project-capture")),
+            bom_inventory=inventory,
+            deadline=time.monotonic() + 30,
+        )
+    _assert_fixed(error.value)
+
+
+def test_receipt_and_component_digests_are_distinct_but_matching_bridge_succeeds():
+    inventory = _inventory()
+    assert inventory.digest != inventory.inventory_digest
+    library = b".model DMOD D(IS=1e-12)\n"
+    declaration = _declaration(library)
+    capture = _capture(declaration, library)
+    document = parse_terminal_bindings(
+        _bindings(declaration, library), deadline=time.monotonic() + 30
+    )
+    assert join_terminal_bindings(
+        document,
+        declaration,
+        capture,
+        _bom(declaration, capture),
+        _pin_map(_sha(b"project-capture")),
+        bom_inventory=inventory,
+        deadline=time.monotonic() + 30,
+    )
 
 
 def test_accepts_opaque_model_digest_and_extra_nonspice_model() -> None:

@@ -29,6 +29,13 @@ extra nonvirtual BOM-excluded components cannot disappear. Other model kinds rem
 earn no SPICE coverage. Preserve every native source alias. NC requires both an explicit binding
 and a native no-connect observation; singleton or missing nets do not imply NC.
 
+Require the exact inventory paired with the BOM report. Verify its complete receipt digest against
+the report, then its normalized component-netlist digest against the pin map. The two identities
+use different namespaces and must not be equated directly. Also require matching capture,
+execution, syntax, executable and backend-authentication context; operation-specific command
+digests remain distinct. The later runner retains the inventory from the existing BOM call,
+without another native execution or any change to v1 report/map identities.
+
 Keep cumulative reference/pin/alias/model-byte ceilings and a finite caller deadline through
 parsing, joining and selected-definition hashing. Returned definition/pin records are immutable
 and repr-redacted, not author or model-accuracy attestations. Input declarations remain private.

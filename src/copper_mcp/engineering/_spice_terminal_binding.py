@@ -12,8 +12,10 @@ from pydantic import Field, StringConstraints, TypeAdapter, ValidationError, mod
 
 from copper_mcp.engineering.bom_reconciliation import BomItemAssociation, BomReconciliationReport
 from copper_mcp.engineering.capture import ElectricalArtifactCapture, _CapturedArtifact
+from copper_mcp.engineering.component_netlist import ComponentNetlist
 from copper_mcp.engineering.inputs import ElectricalInputs, Identifier
 from copper_mcp.engineering.native_pin_net_map import NativePinNet, NativePinNetMap
+from copper_mcp.engineering.project_components import ProjectComponentInventory
 from copper_mcp.engineering.project_pin_net_map import ProjectPinNetMap
 from copper_mcp.engineering.spice_model_library import (
     SpiceDefinition,
@@ -300,6 +302,7 @@ def join_terminal_bindings(
     bom_report: BomReconciliationReport,
     pin_map: ProjectPinNetMap,
     *,
+    bom_inventory: ProjectComponentInventory,
     deadline: float,
 ) -> tuple[BoundSpiceReference, ...]:
     """Join complete declared SPICE terminals to one immutable native pin observation set."""
@@ -323,6 +326,26 @@ def join_terminal_bindings(
         ):
             _fail()
         _check_native_bounds(pin_map, active_deadline)
+        if (
+            type(bom_inventory) is not ProjectComponentInventory
+            or bom_inventory.capture_digest != document.project_capture_digest
+            or len(bom_inventory.components) != bom_report.native_component_count
+            or any(
+                getattr(bom_inventory, field) != getattr(pin_map, field)
+                for field in (
+                    "execution_digest",
+                    "native_syntax_digest",
+                    "executable_digest",
+                    "backend_authentication_digest",
+                )
+            )
+            or bom_inventory._digest(active_deadline) != bom_report.native_inventory_digest
+            or ComponentNetlist(
+                bom_inventory.components, bom_inventory.sheet_paths, bom_inventory.backend_version
+            )._digest(active_deadline)
+            != pin_map.mapping.component_inventory_digest
+        ):
+            _fail()
         _ = pin_map._digest(active_deadline)
         references_to_items = _complete_bom_scope(declaration, bom_report, active_deadline)
 

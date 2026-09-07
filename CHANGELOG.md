@@ -10,7 +10,8 @@ All notable changes are documented here. The format follows
 
 - Private bounded SPICE terminal joins preserve complete model/reference/pin/no-connect assignments
   and source aliases from supplied captured records. Definition bytes and finite deadlines are
-  checked; native evidence collection, source-settings agreement and physics remain separate stages.
+  checked, including the BOM receipt and shared component inventory links; native evidence
+  collection, source-settings agreement and physics remain separate stages.
 - Read-only project pin-net execution derives the source census internally and binds two complete
   authenticated KiCad exports with final source-freshness checks. Shared source aliases and explicit
   no-connect observations are preserved; model/engineering validation and apply authority stay absent.

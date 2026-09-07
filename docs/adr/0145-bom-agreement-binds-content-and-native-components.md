@@ -58,6 +58,13 @@ BOM rows still fails, and unequal declaration/binding item sets still refuse bef
 Final checks follow report hashing and precede successful delivery; they are not atomic
 filesystem or editor transaction guarantees.
 
+For internal cross-operation checks, retain the exact native inventory alongside the report only
+after those same final checks. The existing public function still returns the unchanged v1 report.
+Its native_inventory_digest identifies the full project-component-inventory receipt, not the
+underlying component-netlist. Consumers must verify the report-to-receipt link and then compare
+the normalized component-netlist identity with other native observations. No extra native run,
+new serialized report field or reinterpretation of either v1 digest is introduced.
+
 ## Authority and disclosure
 
 Private, immutable associations can connect declared model IDs to checked BOM rows, but they do not
