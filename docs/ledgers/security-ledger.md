@@ -443,3 +443,70 @@ sha256:edce55a219e7e1fcdfef68ae5c109f433d3bdde853be1718654ed03608972cdb.
 Independent isolation and preservation reviews passed. Parent main verification and protected
 publication remain required; this internal kernel does not replace the full preparation/export
 operation or grant engineering/application authority.
+
+2026-09-08 SEC-207 complete-preparer publication preparation: copy the accepted facade and all
+39 original preparer cases plus its reexport-identity control exactly from cdbadb5. Preserve the
+full kernel ledger prefix and existing parser/kernel behavior. Complete project/model admission,
+source alias checks and bounded derivative construction are supplied, not native execution or
+physics authority. The complete native coordinator and all real controls remain mandatory later.
+Fresh isolated validation and independent integration review precede protected publication.
+
+2026-09-08 SEC-207 preparer isolation checks: all 44 preparer/kernel cases passed on Python
+3.12 with the future exporter import blocked (0.99s), 3.11 (1.43s) and 3.13 (1.45s). Facade
+and original test bytes match the accepted complete extraction. Fresh isolated full validation
+remains required; the full native exporter and its original real controls are not omitted from
+the program or replaced by this source-only operation.
+
+2026-09-08 SEC-207 isolated preparer validation: independent review accepted exact facade/test
+bytes, canonical kernel identities, complete parent ledger prefix and scope. Fresh make check
+passed 5,589 tests, one intentional skip, 90% code coverage and all format/lint/type/security/build
+gates, with 583.08 seconds of pytest using three workers and configured real parent backends.
+Tested treebfbd453f1042731d579459298a486b1ffc8acdeb; source/input fingerprint
+sha256:85ca8259777ce5d6b36de8503bd93603c1700f1969805a630045bccc5f9c45b0.
+Protected parent/hosted validation and the complete native export operation remain required.
+No model accuracy, simulator, physics, human approval or apply authority follows from preparation.
+
+2026-09-08 SEC-207 hosted review reopened the preparer gate: PR295 at13edfb87 passed its
+13m01s CI run34150551513, but review identified swapped source-symbol aliases that could
+target the wrong component and unbounded artifact identifiers hashed before admission.
+Do not merge this head. Remediation must verify captured instance/reference identity without
+breaking hierarchical overrides, bound nested records before hashing/sorting, retain all
+original controls and obtain fresh integration validation. The earlier green local/hosted
+results remain historical evidence, not a waiver of these findings or validation of a fix.
+
+2026-09-08 SEC-207 remediation preparation: reproduced the swapped-alias and early-admission
+failures before changing production code (six failing controls and one positive control).
+The fix reuses the bounded source census for effective instance references and admits nested
+binding fields before model selection or hashing. All original preparer/kernel cases remain;
+52 focused tests now pass on Python 3.11, 3.12 and 3.13. Kernel bytes are unchanged. Formatting,
+lint and type checks pass. Source-only census preparation is repeated under the same deadline;
+no additional native execution is introduced. Independent review, fresh full validation and
+updated exact-head hosted checks remain required before resolving the review and merging.
+
+2026-09-08 SEC-207 follow-up review found two remaining early-admission gaps: captured
+artifact identifiers still reached dictionary hashing, and a definition guard trusted an
+overridable __class__ attribute. Both were reproduced with failing regressions. The in-flight
+full run was deliberately interrupted because its source was known to require correction;
+its 5,340 partial passes and exit2/KeyboardInterrupt are not successful evidence. The corrected
+code uses an inline exact type check and the same bounded identifier admission for binding
+and captured records. Captured role/digest fields also refuse callback-bearing subtypes.
+All 56 focused tests pass on Python 3.11, 3.12 and 3.13; format, lint and targeted mypy pass.
+Independent delta review and a fresh full run must validate this new source before publication.
+
+2026-09-08 SEC-207 delta review accepted both follow-up corrections: exact definition type
+checking precedes field access, and shared identifier admission precedes captured/binding
+hashing. Hostile captured role/digest fields also refuse before callbacks. No supported-input
+semantic regression was found in the scoped recheck. Separate Ponytail review accepted removal
+of the single-use spoofable wrapper and found no further justified cut. Fresh full validation
+and exact-head hosted checks remain required.
+
+2026-09-08 SEC-207 corrected preparer full validation: fresh make check passed 5,601 tests,
+one intentional skip, 90% code coverage and all format/lint/type/security/build gates in
+567.49 seconds of pytest using three workers and configured real parent backends. Tested
+staged tree6ccef729aa6b1547472b4c711da09512f88bf746; source/input fingerprint
+sha256:fd69298e8c0972fd2e1a090f0a7f19918add1cc9cea266db9b6503ef6d637748.
+Independent review accepted the semantic alias correction and both final admission fixes;
+56 focused controls passed every supported interpreter. This successful run supersedes the
+interrupted correction attempt for final-source validation. Updated exact-head hosted checks,
+protected merge and resulting main verification remain required; no execution/physics/apply
+authority or five-area completion follows from source preparation.
