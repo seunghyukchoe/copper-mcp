@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private XML pin-net mapping joins complete source alias groups with bounded native-format data,
+  preserves explicit no-connect observations and self-binding identity, and rejects missing or
+  conflicting records. Authenticated execution remains separate; no model, physics or apply pass.
 - Private pin-net source admission validates and groups complete supplied census records with
   bounded text, identities, flags and hashing, rejects duplicate logical pins within an occurrence,
   and redacts private working records. This source-only slice adds no native XML mapping,
