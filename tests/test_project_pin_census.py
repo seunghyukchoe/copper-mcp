@@ -24,6 +24,7 @@ from pin_census_fixtures import (
     _library,
     _multi_body,
     _path,
+    _pin,
     _placed,
     _raw_pin,
     _resistor_body,
@@ -255,6 +256,61 @@ def test_units_common_pins_body_styles_alternates_hidden_and_flags(tmp_path: Pat
         item.effective_electrical_type == "no_connect"
         for item in result.pins
         if item.pin_number == "C"
+    )
+
+
+@pytest.mark.parametrize(("unit", "style", "raw_number"), (("2", "1", "1"), ("1", "2", "2")))
+def test_unit_and_body_style_must_exist_as_a_joint_selector(
+    tmp_path: Path, unit: str, style: str, raw_number: str
+) -> None:
+    def body(name: str) -> str:
+        return f'''(symbol "{name}"
+          (symbol "M_0_0" {_pin("C")})
+          (symbol "M_1_1" {_pin("1")})
+          (symbol "M_2_2" {_pin("2")}))'''
+
+    placed = _placed(
+        SYMBOL_1_UUID,
+        "U1",
+        (_raw_pin("C", PIN_UUIDS[0]), _raw_pin(raw_number, PIN_UUIDS[1])),
+        library_id="Test:M",
+        paths=(_path(f"/{ROOT_UUID}", "U1", unit),),
+        body_style=style,
+    )
+    capture, libraries = _capture(tmp_path, _source(body("Test:M"), placed), _library(body("M")))
+    with pytest.raises(ProjectPinCensusError, match="combination"):
+        _derive(capture, libraries)
+
+
+@pytest.mark.parametrize("case", ("common-style", "common-only", "declared-empty-body"))
+def test_joint_selector_preserves_supported_common_and_graphical_bodies(tmp_path: Path, case: str):
+    specific = (
+        f'(symbol "M_2_0" {_pin("2")})'
+        if case == "common-style"
+        else '(symbol "M_2_1")'
+        if case == "declared-empty-body"
+        else ""
+    )
+
+    def body(name: str) -> str:
+        return f'(symbol "{name}" (symbol "M_0_0" {_pin("C")} ){specific})'
+
+    raw = (_raw_pin("C", PIN_UUIDS[0]),)
+    if case == "common-style":
+        raw += (_raw_pin("2", PIN_UUIDS[1]),)
+    unit = "1" if case == "common-only" else "2"
+    placed = _placed(
+        SYMBOL_1_UUID,
+        "U1",
+        raw,
+        library_id="Test:M",
+        paths=(_path(f"/{ROOT_UUID}", "U1", unit),),
+        body_style="1",
+    )
+    capture, libraries = _capture(tmp_path, _source(body("Test:M"), placed), _library(body("M")))
+    result = _derive(capture, libraries)
+    assert tuple(pin.pin_number for pin in result.pins) == (
+        ("2", "C") if case == "common-style" else ("C",)
     )
 
 

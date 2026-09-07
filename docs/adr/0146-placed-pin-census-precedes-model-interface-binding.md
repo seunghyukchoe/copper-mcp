@@ -37,6 +37,10 @@ pin UUID inventory against the applicable library body, then emit pins belonging
 unit or common unit zero. Apply the corresponding body-style/common-style rules. Resolve selected
 alternate pin functions only against explicit library definitions. Refuse unsupported or ambiguous
 identities instead of choosing an arbitrary pairing or silently omitting an occurrence.
+Validate unit and body-style selectors together against actual declared sub-symbol combinations,
+including explicitly declared graphical bodies and the selected unit's common-style body. A purely
+common-unit symbol may use the implicit first unit; common pins cannot invent a missing combination
+when the library declares specific units. Independent membership of each selector is not enough.
 Validated instance indexes are read-only mappings of frozen records. Their backing dictionaries
 remain local to parsing and are never exposed, preserving constant-time path lookup without a
 mutable nested collection inside the frozen parsed template.
