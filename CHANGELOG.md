@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private pin-net source admission validates and groups complete supplied census records with
+  bounded text, identities, flags and hashing, rejects duplicate logical pins within an occurrence,
+  and redacts private working records. This source-only slice adds no native XML mapping,
+  KiCad execution, model/engineering verdict or application authority; those stages remain required.
 - Private SPICE model-library interpretation reads actual diode and passive subcircuit definitions,
   preserving ordered terminals and checking a bounded local dependency graph. Unsupported syntax
   refuses explicitly. Complete project bindings, sealed execution and calibrated physics remain
