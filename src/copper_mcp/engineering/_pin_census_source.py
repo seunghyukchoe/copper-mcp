@@ -10,7 +10,9 @@ import re
 import time
 import unicodedata
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from types import MappingProxyType
 from typing import NoReturn
 
 from copper_mcp.adapters.sexpr import SExpr, SExprError, is_quoted_atom, parse_sexpr
@@ -154,7 +156,7 @@ class _PlacedTemplate:
     on_board: bool
     dnp: bool
     raw_pins: tuple[_RawPin, ...]
-    instances: dict[str, _Instance]
+    instances: Mapping[str, _Instance]
     body: _LibraryBody
 
 
@@ -491,7 +493,7 @@ def _parse_raw_pin(
     return _RawPin(number, source_uuid, alternate)
 
 
-def _parse_instances(symbol: SExpr, budget: _Budget, deadline: float) -> dict[str, _Instance]:
+def _parse_instances(symbol: SExpr, budget: _Budget, deadline: float) -> Mapping[str, _Instance]:
     instances_node = _one(symbol, "instances", budget, deadline)
     instances: dict[str, _Instance] = {}
     for project in instances_node.items[1:]:
@@ -537,7 +539,9 @@ def _parse_instances(symbol: SExpr, budget: _Budget, deadline: float) -> dict[st
             instances[path] = _Instance(references[0], units[0])
     if not instances:
         _fail("project pin census instance paths are missing or ambiguous")
-    return instances
+    # The backing dictionary is local and never exposed to consumers.
+    # https://docs.python.org/3.11/library/types.html#types.MappingProxyType
+    return MappingProxyType(instances)
 
 
 def _body_style(symbol: SExpr, budget: _Budget, deadline: float) -> int:

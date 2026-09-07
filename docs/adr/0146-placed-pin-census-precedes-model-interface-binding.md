@@ -38,6 +38,9 @@ pin UUID inventory against the applicable library body, then emit pins belonging
 unit or common unit zero. Apply the corresponding body-style/common-style rules. Resolve selected
 alternate pin functions only against explicit library definitions. Refuse unsupported or ambiguous
 identities instead of choosing an arbitrary pairing or silently omitting an occurrence.
+Validated instance indexes are read-only mappings of frozen records. Their backing dictionaries
+remain local to parsing and are never exposed, preserving constant-time path lookup without a
+mutable nested collection inside the frozen parsed template.
 
 Native source inspection and a controlled RC export probe establish the initial seams, not broad
 profile coverage. The probe produced clean XML and SPICE exports with unchanged sources: XML
