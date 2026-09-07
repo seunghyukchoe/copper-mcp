@@ -72,6 +72,40 @@ def test_common_style_hidden_and_alternate_records_are_interpreted_directly() ->
     assert next(pin for pin in first.raw_pins if pin.number == "1").selected_alternate == "ALT"
 
 
+@pytest.mark.parametrize("mutation", ("add", "remove", "replace"))
+def test_parsed_instance_index_cannot_be_mutated(mutation):
+    placed = _placed(
+        SYMBOL_1_UUID, "R1", (_raw_pin("1", PIN_UUIDS[0]), _raw_pin("2", PIN_UUIDS[1]))
+    )
+    template = _interpret(_source(_resistor_body("Test:R"), placed))[0]
+    path = f"/{ROOT_UUID}"
+    original = template.instances[path]
+    with pytest.raises(TypeError):
+        if mutation == "add":
+            template.instances[path + "/extra"] = original
+        elif mutation == "remove":
+            del template.instances[path]
+        else:
+            template.instances[path] = source._Instance("altered", 2)
+    assert list(template.instances) == [path]
+    assert template.instances[path] is original
+
+
+def test_instance_records_are_frozen_and_mutating_a_copy_does_not_change_source():
+    placed = _placed(
+        SYMBOL_1_UUID, "R1", (_raw_pin("1", PIN_UUIDS[0]), _raw_pin("2", PIN_UUIDS[1]))
+    )
+    template = _interpret(_source(_resistor_body("Test:R"), placed))[0]
+    path = f"/{ROOT_UUID}"
+    original = template.instances[path]
+    with pytest.raises(AttributeError):
+        original.reference = "altered"
+    copied = dict(template.instances)
+    copied[path] = source._Instance("altered", 2)
+    assert template.instances[path] is original
+    assert (original.reference, original.unit) == ("R1", 1)
+
+
 @pytest.mark.parametrize("kind", ("cache", "symbol-uuid", "raw-number"))
 def test_duplicate_source_identities_refuse_directly(kind: str) -> None:
     cache = _resistor_body("Test:R")
