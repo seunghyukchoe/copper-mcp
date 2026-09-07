@@ -602,11 +602,46 @@ All25 focused tests passed Python3.11,3.12 and3.13. This supersedes the pre-corr
 result for publication; exact-head hosted checks and main verification remain required.
 No execution, convergence, calibration, physics or apply authority follows from parsing.
 
-| SEC-209 | 2026-09-08 | Mechanical shared container-process extraction | Original declarations and process methods are preserved by AST comparison; router constructor signature and public compatibility aliases remain. | No new execution profile, request selection, cleanup behavior or authority is introduced. Cleanup corrections and simulator execution remain separately reviewed stages. | Primary comparison and independent review |
+| SEC-209 | 2026-09-08 | Joint component/pin native acquisition | Each of two bounded native XML payloads passes both existing parsers; semantic agreement, component cross-binding, exact v1 identities, per-export verification, context authentication and final freshness remain. | Independent review accepted the implementation after restoring cheap BOM admission before native work. No cached authentication, larger budget, caller-selected authority or partial pair is introduced. | [ADR-0152](../adr/0152-joint-native-views-share-acquisition-not-authority.md), D-277 |
 
-2026-09-08 SEC-209 focused validation: all17 original local router controls pass on Python3.11,
+2026-09-08 SEC-209 isolation: all six source/test files match the reviewed complete checkpoint
+d5b514b. Original assertions/public signatures remain, with no future simulator/runtime imports.
+Independent isolation review accepted; Ponytail found no additional cuts beyond removing two
+redundant final hashes already performed by the report hashes. Isolated62 non-real tests passed
+with ten explicit real-case deselections, the real report/digest-equivalence control passed in
+33.19s, and metadata/type/security/build checks passed before adding these publication records.
+Exact-tip checks, fresh complete integration evidence and protected hosted/main gates remain.
+
+2026-09-08 SEC-209 complete integration evidence: the full optimized development checkpoint
+d5b514b passed5,736 tests, one intentional skip and every make-check gate in815.09s of pytest,
+including the repeated/asymmetric real simulator controls. Its source/input fingerprint is
+sha256:c148ba7929b5a73f3151ccb40ab4787c1116a861ef48d13b4a3504897f7acf07.
+That evidence belongs to the complete checkpoint, not this smaller isolated publication tip.
+Fresh isolated validation and protected hosted/main checks remain required.
+
+2026-09-08 SEC-209 isolated full validation: fresh make check passed5,654 tests, one
+intentional skip,90% code coverage and every format/lint/type/security/build gate, with
+645.28 seconds of pytest using three workers and configured real parent backends. Tested
+staged tree4933bb8a889346a0d4d4f44c660e2c101932f3bb; source/input fingerprint
+sha256:ae4fe296384511f45dddcbfdbab91ee4a90683a49c346bb8604e691006241d35.
+The isolated62-test selection passed all supported interpreters, and real v1 report/digest
+equivalence passed. Independent implementation, admission-order correction, isolation and
+publication-record reviews accepted. Protected exact-head hosted checks and resulting main
+verification remain required; no physics, approval, application or whole-goal authority follows.
+
+| SEC-210 | 2026-09-08 | Mechanical shared container-process extraction | Original declarations and process methods are preserved by AST comparison; router constructor signature and public compatibility aliases remain. | No new execution profile, request selection, cleanup behavior or authority is introduced. Cleanup corrections and simulator execution remain separately reviewed stages. | Primary comparison and independent review |
+
+2026-09-08 SEC-210 focused validation: all17 original local router controls pass on Python3.11,
 3.12 and3.13. The two original real FreeRouting/SimpleRouteJson smokes passed in7.27s.
 Strict mypy passes163 source files. Independent review confirmed unchanged original tests,
 direct compatibility aliases, no circular/future-simulator dependency and no behavior fixes
 mixed into the extraction. Separate Ponytail review found no justified cuts. Exact-tip hosted
 validation, parent-main verification and the complete simulator program remain required.
+
+2026-09-08 SEC-210 parent synchronization: process code and original router tests remain
+identical to6406d67; all six joint-acquisition files match1738756. The complete parent ledger
+prefix is preserved, and the mechanical stage's provisional entry is SEC210 to avoid the
+joint publication's SEC209. Independent integration review accepted these identities and
+scope. The79 combined non-effectful controls passed Python3.12,3.11 and3.13, with twelve real
+cases explicitly deselected in that selection. Metadata/type checks pass. Parent-main and
+exact-tip publication gates remain; no future cleanup/executor behavior is included here.

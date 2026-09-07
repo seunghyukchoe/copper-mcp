@@ -231,6 +231,29 @@ def test_internal_pair_retains_exact_inventory_and_legacy_report_digest(tmp_path
     assert report.native_inventory_digest != inventory.inventory_digest
 
 
+def test_owned_inventory_comparison_seam_does_not_reacquire_native_data(tmp_path, monkeypatch):
+    from copper_mcp.engineering import bom_reconciliation as reconciliation
+
+    legacy, capture, libraries, declaration, paths, bindings = _case(tmp_path, monkeypatch)
+    inventory = _inventory(capture.digest, (_component("C1", "100n"), _component("R1", "1k")))
+    monkeypatch.setattr(
+        reconciliation,
+        "_native_inventory",
+        lambda *_args, **_kwargs: pytest.fail("owned inventory must not be reacquired"),
+    )
+    report, retained = reconciliation._reconcile_bom_with_inventory(
+        capture,
+        libraries,
+        declaration,
+        paths,
+        bindings,
+        Settings(workspace=tmp_path),
+        inventory,
+    )
+    assert retained is inventory
+    assert report == legacy and report.digest == legacy.digest
+
+
 def test_complete_match_binds_models_and_redacts_private_metadata(tmp_path, monkeypatch):
     report, capture, _libraries, declaration, _paths, _bindings_json = _case(
         tmp_path,

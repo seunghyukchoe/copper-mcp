@@ -20,11 +20,15 @@ from copper_mcp.engineering._spice_terminal_binding import (
     join_terminal_bindings,
     parse_terminal_bindings,
 )
-from copper_mcp.engineering.bom_reconciliation import _copy_controls, _run_bom_reconciliation
+from copper_mcp.engineering.bom_reconciliation import (
+    _admit_bom_inputs,
+    _copy_controls,
+    _reconcile_bom_with_inventory,
+)
 from copper_mcp.engineering.capture import CaptureLimits, capture_electrical_artifacts
 from copper_mcp.engineering.inputs import parse_electrical_inputs
 from copper_mcp.engineering.project_erc_inputs import SymbolLibraryInput
-from copper_mcp.engineering.project_pin_net_map import run_project_pin_net_map
+from copper_mcp.engineering.project_native_inventory import run_project_native_inventory
 from copper_mcp.engineering.schematic_project_capture import SchematicProjectCapture
 from copper_mcp.engineering.spice_model_library import _digest as _definition_digest
 
@@ -162,6 +166,7 @@ def run_project_spice_model_binding(
             or document.project_capture_digest != project_capture.digest
         ):
             raise ProjectSpiceModelBindingError("project SPICE binding identities disagree")
+        _admit_bom_inputs(project_capture, declaration_json, bom_bindings_json, active_deadline)
         artifacts = capture_electrical_artifacts(
             declaration_json,
             artifact_paths_json,
@@ -169,13 +174,21 @@ def run_project_spice_model_binding(
             limits=active_limits,
             deadline=active_deadline,
         )
-        bom, bom_inventory = _run_bom_reconciliation(
+        bom_inventory, pin_map = run_project_native_inventory(
+            project_capture,
+            libraries,
+            copied,
+            deadline=active_deadline,
+            limits=active_limits,
+        )
+        bom, bom_inventory = _reconcile_bom_with_inventory(
             project_capture,
             libraries,
             declaration_json,
             artifact_paths_json,
             bom_bindings_json,
             copied,
+            bom_inventory,
             deadline=active_deadline,
             limits=active_limits,
         )
@@ -185,9 +198,6 @@ def run_project_spice_model_binding(
             or bom.electrical_artifact_capture_digest != artifacts.digest
         ):
             raise ProjectSpiceModelBindingError("project SPICE binding BOM evidence disagrees")
-        pin_map = run_project_pin_net_map(
-            project_capture, libraries, copied, deadline=active_deadline, limits=active_limits
-        )
         references = join_terminal_bindings(
             document,
             declaration,
