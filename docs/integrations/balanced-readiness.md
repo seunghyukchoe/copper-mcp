@@ -287,7 +287,9 @@ perform native execution or grant approval. The controls below are the mandatory
 ## Native pin-census proof controls
 
 The final test slice compares the assembled census with two fixed, authenticated KiCad XML exports
-for RC pins, selected-unit override/common pins, alternate body style and alternate function.
+for RC pins, selected-unit override/common pins, alternate body style, alternate function and a
+populated shared leaf instantiated twice with distinct paths and references. The shared case retains
+one source symbol and its pin UUIDs while checking all four occurrence pins against native output.
 Counters preserve occurrence multiplicity, duplicate native identities are rejected, and declared
 library metadata plus effective native pinfunction/type are compared. Separate negative controls
 prove the checker rejects duplicate and wrong-name evidence. Clean diagnostics and source/state

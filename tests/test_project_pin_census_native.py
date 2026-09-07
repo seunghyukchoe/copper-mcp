@@ -11,8 +11,11 @@ from pathlib import Path
 
 import pytest
 from pin_census_fixtures import (
+    CHILD_UUID,
     PIN_UUIDS,
     ROOT_UUID,
+    SHEET_A_UUID,
+    SHEET_B_UUID,
     SYMBOL_1_UUID,
     _capture,
     _library,
@@ -20,6 +23,7 @@ from pin_census_fixtures import (
     _path,
     _placed,
     _raw_pin,
+    _resistor_body,
     _source,
 )
 from test_project_erc import build_project
@@ -33,6 +37,37 @@ from copper_mcp.engineering.project_pin_census import PlacedPinOccurrence, deriv
 from copper_mcp.security import read_workspace_file
 
 _CLI = os.environ.get("COPPER_MCP_TEST_PROJECT_ERC_CLI")
+
+
+def _shared_leaf_inputs(tmp_path):
+    sheets = []
+    for index, sheet_uuid in enumerate((SHEET_A_UUID, SHEET_B_UUID), start=1):
+        y = index * 30
+        sheets.append(
+            f'''(sheet (at 100 {y}) (size 25 15)
+              (stroke (width 0.1524) (type default)) (fill (color 0 0 0 0))
+              (uuid "{sheet_uuid}")
+              (property "Sheetname" "Child{index}" (at 100 {y - 1} 0)
+                (effects (font (size 1.27 1.27))))
+              (property "Sheetfile" "child.kicad_sch" (at 100 {y + 16} 0)
+                (effects (font (size 1.27 1.27))))
+              (instances (project "root" (path "/{ROOT_UUID}" (page "{index + 1}")))))'''
+        )
+    shared = _placed(
+        SYMBOL_1_UUID,
+        "IGNORED",
+        (_raw_pin("1", PIN_UUIDS[0]), _raw_pin("2", PIN_UUIDS[1])),
+        paths=(
+            _path(f"/{ROOT_UUID}/{SHEET_A_UUID}", "R1"),
+            _path(f"/{ROOT_UUID}/{SHEET_B_UUID}", "R2"),
+        ),
+    )
+    return _capture(
+        tmp_path,
+        _source("", *sheets),
+        _library(_resistor_body("R")),
+        child=_source(_resistor_body("Test:R"), shared, root_uuid=CHILD_UUID),
+    )
 
 
 def _assert_exact_agreement(pins, expected, library_rows, node_rows):
@@ -53,6 +88,52 @@ def _assert_exact_agreement(pins, expected, library_rows, node_rows):
             pin.effective_electrical_type,
             function,
         )
+
+
+def _assert_shared_leaf_bindings(pins):
+    observed = Counter(
+        (
+            pin.sheet_uuid_path,
+            pin.effective_reference,
+            pin.pin_number,
+            pin.source_symbol_uuid,
+            pin.source_pin_uuid,
+        )
+        for pin in pins
+    )
+    assert observed == Counter(
+        (
+            (f"/{ROOT_UUID}/{SHEET_A_UUID}", "R1", "1", SYMBOL_1_UUID, PIN_UUIDS[0]),
+            (f"/{ROOT_UUID}/{SHEET_A_UUID}", "R1", "2", SYMBOL_1_UUID, PIN_UUIDS[1]),
+            (f"/{ROOT_UUID}/{SHEET_B_UUID}", "R2", "1", SYMBOL_1_UUID, PIN_UUIDS[0]),
+            (f"/{ROOT_UUID}/{SHEET_B_UUID}", "R2", "2", SYMBOL_1_UUID, PIN_UUIDS[1]),
+        )
+    )
+
+
+@pytest.mark.parametrize("fault", ("swapped", "repeated"))
+def test_shared_leaf_comparison_rejects_wrong_pin_uuid_correspondence(tmp_path, fault):
+    capture, libraries = _shared_leaf_inputs(tmp_path)
+    census = derive_project_pin_census(capture, libraries, deadline=time.monotonic() + 10)
+    _assert_shared_leaf_bindings(census.pins)
+    changed = tuple(
+        dataclasses.replace(
+            pin,
+            source_pin_uuid=(
+                PIN_UUIDS[1] if fault == "repeated" or pin.pin_number == "1" else PIN_UUIDS[0]
+            ),
+        )
+        if pin.effective_reference == "R2"
+        else pin
+        for pin in census.pins
+    )
+    # The old independent sets remain identical despite these incorrect pairings.
+    assert {pin.source_pin_uuid for pin in changed} == set(PIN_UUIDS[:2])
+    assert Counter((pin.effective_reference, pin.pin_number) for pin in changed) == Counter(
+        (pin.effective_reference, pin.pin_number) for pin in census.pins
+    )
+    with pytest.raises(AssertionError):
+        _assert_shared_leaf_bindings(changed)
 
 
 @pytest.mark.parametrize(
@@ -95,11 +176,15 @@ def test_native_comparison_rejects_lossy_occurrence_or_alternate_evidence(fault)
 
 @pytest.mark.real_kicad
 @pytest.mark.skipif(not _CLI, reason="requires explicit vendor-sealed KiCad 10.0.5 backend")
-@pytest.mark.parametrize("case", ("rc", "unit-override", "style-2", "alternate"))
+@pytest.mark.parametrize("case", ("rc", "unit-override", "style-2", "alternate", "shared-sheet"))
 def test_captured_pin_occurrences_agree_with_fixed_native_exports(tmp_path, case):
     if case == "rc":
         capture, libraries, sources = build_project(tmp_path)
         expected = {("C1", "1"), ("C1", "2"), ("R1", "1"), ("R1", "2")}
+    elif case == "shared-sheet":
+        capture, libraries = _shared_leaf_inputs(tmp_path)
+        sources = {item.path: item.content for item in capture._files}
+        expected = {("R1", "1"), ("R1", "2"), ("R2", "1"), ("R2", "2")}
     else:
         numbers = ("C", "3", "4") if case == "style-2" else ("C", "1", "2")
         raw = tuple(
@@ -133,6 +218,8 @@ def test_captured_pin_occurrences_agree_with_fixed_native_exports(tmp_path, case
     deadline = time.monotonic() + 45
     limits = CaptureLimits(max_capture_seconds=30)
     census = derive_project_pin_census(capture, libraries, limits=limits, deadline=deadline)
+    if case == "shared-sheet":
+        _assert_shared_leaf_bindings(census.pins)
     assert Counter((pin.effective_reference, pin.pin_number) for pin in census.pins) == Counter(
         expected
     )

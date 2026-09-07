@@ -9,7 +9,8 @@ All notable changes are documented here. The format follows
 ### Added
 
 - Native differential pin-census controls cover RC pins, instance-unit override/common pins,
-  body styles and alternate functions, including exact multiplicity and name/type comparisons.
+  body styles, alternate functions and populated shared-sheet occurrences, including exact
+  multiplicity and name/type comparisons.
   These controls do not turn arbitrary source interpretation into native or engineering authority.
 - Private project pin assembly binds complete hierarchy occurrences, instance unit/style selection
   and source pin identities into immutable records under one cumulative budget and deadline.

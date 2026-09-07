@@ -9,7 +9,8 @@
 ## Decision
 
 The source interpreter and complete project assembler are followed by this final native-proof
-publication. It adds all four comparison-negative controls and four repeated real KiCad cases.
+publication. It adds six comparison-negative controls and five repeated real KiCad cases,
+including one populated shared leaf reached through two distinct hierarchy occurrence paths.
 The derivation operation itself still performs no native execution and is not a transport-authority
 replacement. These fixed controls validate the stated examples, not arbitrary projects, model
 interfaces, calibrated physics or application authority.
