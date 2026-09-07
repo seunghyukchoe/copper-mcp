@@ -241,6 +241,33 @@ def _parse_bindings(payload: bytes) -> _BomComponentBindings:
     return result
 
 
+def _admit_bom_inputs(
+    project_capture: SchematicProjectCapture,
+    declaration_json: bytes,
+    bindings_json: bytes,
+    deadline: float,
+) -> tuple[ElectricalInputs, _BomComponentBindings, str, str]:
+    """Pure schema and identity admission required before native acquisition."""
+
+    declaration = _parse_declaration(declaration_json)
+    _check_deadline(deadline)
+    bindings = _parse_bindings(bindings_json)
+    _check_deadline(deadline)
+    declaration_digest = declaration.digest
+    binding_document_digest = bindings.digest
+    _check_deadline(deadline)
+    declaration_items = {item.item_id for item in declaration.bom_bindings}
+    binding_items = {item.item_id for item in bindings.items}
+    if (
+        bindings.declaration_digest != declaration_digest
+        or bindings.project_capture_digest != project_capture.digest
+        or declaration_items != binding_items
+    ):
+        _fail("BOM reconciliation bindings are malformed")
+    _check_deadline(deadline)
+    return declaration, bindings, declaration_digest, binding_document_digest
+
+
 def _copy_controls(
     settings: Settings,
     limits: CaptureLimits | None,
@@ -403,18 +430,18 @@ def _verify_project_source(
         _fail("BOM reconciliation freshness check failed")
 
 
-def _run_bom_reconciliation(
+def _run_bom_reconciliation_core(
     project_capture: SchematicProjectCapture,
     libraries: tuple[SymbolLibraryInput, ...],
     declaration_json: bytes,
     artifact_paths_json: bytes,
     bindings_json: bytes,
     settings: Settings,
+    inventory: ProjectComponentInventory | None,
     *,
     deadline: float | None = None,
     limits: CaptureLimits | None = None,
 ) -> tuple[BomReconciliationReport, ProjectComponentInventory]:
-    """Retain the exact fresh inventory for internal cross-operation identity checks."""
 
     started = time.monotonic()
     copied_settings, copied_limits, active_deadline = _copy_controls(
@@ -422,22 +449,9 @@ def _run_bom_reconciliation(
     )
     if type(project_capture) is not SchematicProjectCapture or type(libraries) is not tuple:
         _fail("BOM reconciliation inputs are malformed")
-    declaration = _parse_declaration(declaration_json)
-    _check_deadline(active_deadline)
-    bindings = _parse_bindings(bindings_json)
-    _check_deadline(active_deadline)
-    declaration_digest = declaration.digest
-    binding_document_digest = bindings.digest
-    _check_deadline(active_deadline)
-    declaration_items = {item.item_id for item in declaration.bom_bindings}
-    binding_items = {item.item_id for item in bindings.items}
-    if (
-        bindings.declaration_digest != declaration_digest
-        or bindings.project_capture_digest != project_capture.digest
-        or declaration_items != binding_items
-    ):
-        _fail("BOM reconciliation bindings are malformed")
-    _check_deadline(active_deadline)
+    declaration, bindings, declaration_digest, binding_document_digest = _admit_bom_inputs(
+        project_capture, declaration_json, bindings_json, active_deadline
+    )
 
     artifact_capture = _capture(
         declaration_json,
@@ -448,9 +462,10 @@ def _run_bom_reconciliation(
         freshness=False,
     )
     _check_deadline(active_deadline)
-    inventory = _native_inventory(
-        project_capture, libraries, copied_settings, copied_limits, active_deadline
-    )
+    if inventory is None:
+        inventory = _native_inventory(
+            project_capture, libraries, copied_settings, copied_limits, active_deadline
+        )
     if type(inventory) is not ProjectComponentInventory or (
         inventory.capture_digest != project_capture.digest
         or inventory.capture_digest != bindings.project_capture_digest
@@ -593,6 +608,61 @@ def _run_bom_reconciliation(
     _verify_project_source(project_capture, copied_settings.workspace, active_deadline)
     _check_deadline(active_deadline)
     return report, inventory
+
+
+def _reconcile_bom_with_inventory(
+    project_capture: SchematicProjectCapture,
+    libraries: tuple[SymbolLibraryInput, ...],
+    declaration_json: bytes,
+    artifact_paths_json: bytes,
+    bindings_json: bytes,
+    settings: Settings,
+    inventory: ProjectComponentInventory,
+    *,
+    deadline: float | None = None,
+    limits: CaptureLimits | None = None,
+) -> tuple[BomReconciliationReport, ProjectComponentInventory]:
+    """Compare BOM inputs with one internally produced native inventory record."""
+
+    if type(inventory) is not ProjectComponentInventory:
+        _fail("BOM reconciliation native inventory failed")
+    return _run_bom_reconciliation_core(
+        project_capture,
+        libraries,
+        declaration_json,
+        artifact_paths_json,
+        bindings_json,
+        settings,
+        inventory,
+        deadline=deadline,
+        limits=limits,
+    )
+
+
+def _run_bom_reconciliation(
+    project_capture: SchematicProjectCapture,
+    libraries: tuple[SymbolLibraryInput, ...],
+    declaration_json: bytes,
+    artifact_paths_json: bytes,
+    bindings_json: bytes,
+    settings: Settings,
+    *,
+    deadline: float | None = None,
+    limits: CaptureLimits | None = None,
+) -> tuple[BomReconciliationReport, ProjectComponentInventory]:
+    """Retain the exact fresh inventory for internal cross-operation identity checks."""
+
+    return _run_bom_reconciliation_core(
+        project_capture,
+        libraries,
+        declaration_json,
+        artifact_paths_json,
+        bindings_json,
+        settings,
+        None,
+        deadline=deadline,
+        limits=limits,
+    )
 
 
 def run_bom_reconciliation(

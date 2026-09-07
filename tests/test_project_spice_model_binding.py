@@ -93,10 +93,6 @@ def _case(tmp_path, monkeypatch=None):
     }
     if monkeypatch is not None:
         inventory = _inventory(capture.digest, (_component("C1", "100n"), _component("R1", "1k")))
-        monkeypatch.setattr(
-            "copper_mcp.engineering.bom_reconciliation.run_project_component_inventory",
-            lambda *args, **kwargs: inventory,
-        )
         nodes = tuple(
             NativePinNet(
                 ref,
@@ -124,7 +120,11 @@ def _case(tmp_path, monkeypatch=None):
             *("sha256:" + str(index) * 64 for index in range(1, 6)),
             NativePinNetMap("sha256:" + "6" * 64, inventory.inventory_digest, "10.0.5", nodes, 0),
         )
-        monkeypatch.setattr(binding, "run_project_pin_net_map", lambda *args, **kwargs: pin_map)
+        monkeypatch.setattr(
+            binding,
+            "run_project_native_inventory",
+            lambda *args, **kwargs: (inventory, pin_map),
+        )
     settings = Settings(
         workspace=tmp_path, kicad_cli=Path(_CLI) if _CLI else None, kicad_timeout_seconds=60
     )
@@ -162,6 +162,31 @@ def test_actual_captured_models_join_complete_references_and_pins(tmp_path, monk
     with pytest.raises(dataclasses.FrozenInstanceError):
         first.references = ()
     assert all((tmp_path / name).read_bytes() == payload for name, payload in case[-1].items())
+
+
+def test_binding_consumes_one_joint_inventory_pair(tmp_path, monkeypatch):
+    case = _case(tmp_path, monkeypatch)
+    producer = binding.run_project_native_inventory
+    reconcile = binding._reconcile_bom_with_inventory
+    produced = []
+    consumed = []
+
+    def counted_producer(*args, **kwargs):
+        result = producer(*args, **kwargs)
+        produced.append(result)
+        return result
+
+    def counted_reconcile(*args, **kwargs):
+        consumed.append(args[6])
+        return reconcile(*args, **kwargs)
+
+    monkeypatch.setattr(binding, "run_project_native_inventory", counted_producer)
+    monkeypatch.setattr(binding, "_reconcile_bom_with_inventory", counted_reconcile)
+    report = _run(case)
+    assert len(produced) == 1
+    assert consumed == [produced[0][0]]
+    assert report.pin_map_digest == produced[0][1].digest
+    assert "run_project_pin_net_map" not in binding.__dict__
 
 
 @pytest.mark.parametrize("location", ("source", "model"))
@@ -202,10 +227,34 @@ def test_document_identity_mismatch_refuses_before_native(tmp_path, monkeypatch,
     document[field] = "sha256:" + "f" * 64
     case[5] = json.dumps(document).encode()
     monkeypatch.setattr(
-        binding, "_run_bom_reconciliation", lambda *args, **kwargs: pytest.fail("must not execute")
+        binding,
+        "run_project_native_inventory",
+        lambda *args, **kwargs: pytest.fail("must not execute"),
     )
     with pytest.raises(binding.ProjectSpiceModelBindingError):
         _run(case)
+
+
+@pytest.mark.parametrize("kind", ("malformed", "stale-project", "unequal-items"))
+def test_bom_binding_admission_precedes_joint_native_acquisition(tmp_path, monkeypatch, kind):
+    case = list(_case(tmp_path, monkeypatch))
+    if kind == "malformed":
+        case[4] = b"{}"
+    else:
+        document = json.loads(case[4])
+        if kind == "stale-project":
+            document["project_capture_digest"] = "sha256:" + "f" * 64
+        else:
+            document["items"].pop()
+        case[4] = json.dumps(document).encode()
+    monkeypatch.setattr(
+        binding,
+        "run_project_native_inventory",
+        lambda *_args, **_kwargs: pytest.fail("BOM admission must precede native acquisition"),
+    )
+    with pytest.raises(binding.ProjectSpiceModelBindingError) as error:
+        _run(case)
+    assert error.value.__cause__ is None and error.value.__context__ is None
 
 
 def _two_alias_report(tmp_path, monkeypatch):
