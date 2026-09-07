@@ -361,6 +361,26 @@ sha256:9863b0cd0fd963601d2d74277a7b1b6289aa61d9659820dd83a2f4ce301de109.
 Independent isolation review and all 25 core cases on Python 3.11–3.13 passed. Protected hosted
 gates and the complete internal-capture/native-runner slice remain required; no physics or apply pass.
 
+2026-09-08 SEC-206 PR291 inventory-link correction: hosted review identified cross-inventory
+mixing despite matching project IDs and references. A red control reproduced acceptance after
+changing only the pin map's component identity. Retain the exact inventory from the existing BOM
+call after its final checks; preserve the report-only public API and recorded v1 digest bytes.
+The join verifies both full-receipt and normalized component links under the active deadline,
+plus common capture/execution/syntax/executable/authentication context. Direct comparison of
+the two differently namespaced digests would reject valid inputs and is not used.
+Golden-digest and one-native-call controls pass. The adapted full family passed 92 cases including
+real KiCad observations; independent correctness/security review accepted the bridge and found
+no justified Ponytail cuts. Fresh full and exact-head hosted validation remain required; earlier
+full results are pre-correction evidence, not proof for this change.
+
+2026-09-08 SEC-206 corrected PR291 full validation: make check passed 5,495 tests, one
+intentional skip, 90% code coverage and all format/lint/type/security/build gates, with 624.76
+seconds of pytest using three workers and configured real parent backends. Tested staged tree
+305e0706f45b898cc7a729cffe119b4f80369352; source/input fingerprint
+sha256:dd526ea26a071dd8d5667b3e4c67ecf4aae7ddde92bfe16d5cfb0c2d99bf8c59.
+Independent bridge review and the 92-case real adapted family passed. Corrected exact-head
+hosted checks remain required. No v1 digest reinterpretation, extra native run or physics pass.
+
 2026-09-07 SEC-206 runner publication preparation: add the unchanged internally owned artifact,
 BOM and native-pin orchestration plus its complete 16-case group, including three real KiCad
 controls. Hash before final source/model freshness; check every shared alias before conversion.
