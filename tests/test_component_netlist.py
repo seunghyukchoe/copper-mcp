@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import time
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -150,6 +151,73 @@ def test_empty_native_inventory_is_valid_without_manufacturing_a_component() -> 
 
     assert result.components == ()
     assert result.sheet_paths == SHEETS
+
+
+def _tail_across_feed_boundary(tail: bytes) -> bytes:
+    from copper_mcp.engineering import component_netlist as module
+
+    original = _payload()
+    marker = original.index(b"</future>")
+    prefix, suffix = original[:marker], original[marker:]
+    padding = module._PARSE_CHUNK_BYTES - len(prefix) - len(b"<edge/>")
+    assert padding > 0
+    aligned = prefix + b"<x/>" * (padding // 4) + b" " * (padding % 4) + b"<edge/>"
+    assert len(aligned) == module._PARSE_CHUNK_BYTES
+    return aligned + tail + suffix
+
+
+def test_rejects_nonwhitespace_tail_added_by_a_later_feed() -> None:
+    with pytest.raises(ComponentNetlistError):
+        _parse(_tail_across_feed_boundary(b"untrusted tail"))
+
+
+def test_rejects_oversize_tail_added_by_a_later_feed() -> None:
+    from copper_mcp.engineering import component_netlist as module
+
+    with pytest.raises(ComponentNetlistError):
+        _parse(_tail_across_feed_boundary(b" " * (module._MAX_VALUE_BYTES + 1)))
+
+
+def test_final_value_budget_includes_later_tail_text(monkeypatch) -> None:
+    from copper_mcp.engineering import component_netlist as module
+
+    payload = _tail_across_feed_boundary(b" " * 1000)
+    document = ET.fromstring(payload)  # noqa: S314 - trusted synthetic byte-count oracle
+    total = sum(
+        len(value.encode("utf-8"))
+        for element in document.iter()
+        for value in (*element.attrib.keys(), *element.attrib.values(), element.text, element.tail)
+        if value is not None
+    )
+    monkeypatch.setattr(module, "_MAX_TOTAL_VALUE_BYTES", total)
+    assert _parse(payload).components
+    monkeypatch.setattr(module, "_MAX_TOTAL_VALUE_BYTES", total - 1)
+    with pytest.raises(ComponentNetlistError):
+        _parse(payload)
+
+
+def test_expiry_during_completed_tail_check_refuses(monkeypatch) -> None:
+    from copper_mcp.engineering import component_netlist as module
+
+    payload = _tail_across_feed_boundary(b" " * 1000)
+    clock = [0.0]
+    value_bytes = module._element_value_bytes
+
+    def expire_on_late_tail(value):
+        if value == " " * 1000:
+            clock[0] = 2.0
+        return value_bytes(value)
+
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(module, "_element_value_bytes", expire_on_late_tail)
+    with pytest.raises(ComponentNetlistError, match="deadline expired"):
+        parse_component_netlist(
+            payload,
+            expected_source=SOURCE,
+            expected_sheet_paths=SHEETS,
+            deadline=1.0,
+            max_bytes=len(payload),
+        )
 
 
 def test_results_are_frozen_and_repr_redacted() -> None:

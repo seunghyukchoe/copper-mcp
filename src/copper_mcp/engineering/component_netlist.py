@@ -243,6 +243,23 @@ def _parse_xml(payload: bytes, deadline: float) -> ET.Element:
         malformed = True
     if malformed or root is None or depth != 0:
         _fail()
+    # An end event does not seal its tail: a later feed can append text without
+    # emitting that event again. Keep early admission checks, then account for
+    # the completed tree independently so no late value escapes the budget.
+    total_value_bytes = 0
+    for index, element in enumerate(root.iter()):
+        if index % _DEADLINE_NODE_INTERVAL == 0:
+            _check_deadline(deadline)
+        for key, value in element.attrib.items():
+            total_value_bytes += _element_value_bytes(key)
+            total_value_bytes += _element_value_bytes(value)
+        for text_value in (element.text, element.tail):
+            if text_value is not None:
+                total_value_bytes += _element_value_bytes(text_value)
+        if element.tail is not None and element.tail.strip():
+            _fail()
+        if total_value_bytes > _MAX_TOTAL_VALUE_BYTES:
+            _fail(_BOUNDS)
     _check_deadline(deadline)
     return root
 
