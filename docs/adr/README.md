@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0150**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0151**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -226,6 +226,7 @@ never silently widens it.
 | [0147](0147-captured-spice-definitions-precede-terminal-binding.md) | Captured SPICE definitions precede terminal binding | Proposed |
 | [0148](0148-native-pin-net-maps-preserve-source-aliases.md) | Native pin-net maps preserve source aliases | Proposed |
 | [0149](0149-project-terminal-joins-consume-native-evidence.md) | Project terminal joins consume native evidence | Proposed |
+| [0150](0150-confined-spice-source-preserves-declared-settings.md) | Confined SPICE source preserves declared settings | Proposed |
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read

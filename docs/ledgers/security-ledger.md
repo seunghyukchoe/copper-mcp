@@ -404,3 +404,20 @@ sha256:264f2a1caeedfe5b657198617ee495716781f2e5703d8b8bf1b1ec614de2ee6f.
 The independent bridge/consumer review and 92-case real family passed. This supersedes the
 pre-bridge 5,500-test composition for current consumer validation. Corrected parent synchronization,
 protected hosted gates and later source-settings/SPICE/simulator/physics work remain required.
+
+| SEC-207 | 2026-09-08 | Native SPICE parser publication | Preserve the reviewed exact output matcher, ordered-port/name-collision checks, bounded framing/tokenization and deadline-safe result publication. | Supplied records are not authenticated. Confined source preparation, two internally executed exports, final freshness and all later simulator/physics/human gates remain mandatory. Isolation and full validation required. | D-275, R-212; [ADR-0150](../adr/0150-confined-spice-source-preserves-declared-settings.md) |
+
+2026-09-08 SEC-207 parser isolation preparation: parser and all 34 tests are byte-identical to
+the accepted complete implementation. Python 3.12 passed with future-preparer/coordinator imports
+blocked (0.48s); Python 3.11 and 3.13 passed all 34 cases (0.48s/0.98s). Format, type and metadata
+checks pass. The complete composition passed 5,597 tests; fresh isolated full validation remains
+required for this smaller source population. No native, simulator, physics or apply authority added.
+
+2026-09-08 SEC-207 isolated parser validation: independent isolation review accepted unchanged
+parser/test bytes, all 34 assertions/cases, absent future consumers and complete parent ledger
+prefixes. Fresh make check passed 5,545 tests, one intentional skip, 90% code coverage and all
+format/lint/type/security/build gates, with 550.31 seconds of pytest using three workers and
+configured real parent backends. Tested treef3760cf21120bdaf90dfbccc9759d0758c4e04df;
+source/input fingerprint sha256:43afc1497e2962a00387a474efee299d23b9d0c4a89d14a6606a18a5563d3017.
+Parent main verification and protected hosted gates remain required before publication; the
+complete source-preparation/native operation and later simulator/physics work are not replaced.
