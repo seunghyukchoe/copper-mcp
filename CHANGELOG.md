@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private project SPICE model binding derives actual artifact/BOM/native pin evidence internally,
+  checks complete terminal/no-connect scope and rechecks source/model freshness after final hashing.
+  Existing simulation settings, SPICE export, model accuracy and physics remain unverified.
 - Private bounded SPICE terminal joins preserve complete model/reference/pin/no-connect assignments
   and source aliases from supplied captured records. Definition bytes and finite deadlines are
   checked, including the BOM receipt and shared component inventory links; native evidence

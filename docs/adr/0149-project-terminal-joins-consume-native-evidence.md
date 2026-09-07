@@ -1,6 +1,6 @@
 # ADR-0149: Project terminal joins consume native evidence
 
-- Status: Proposed; pure-join publication under review
+- Status: Proposed; internal-capture/native-runner publication under review
 - Date: 2026-09-07
 - Owners: CopperMCP maintainers
 - Related: [ADR-0145](0145-bom-agreement-binds-content-and-native-components.md),
@@ -9,10 +9,12 @@
 
 ## Publication scope
 
-Publish the closed terminal document and pure bounded join first; actual artifact capture,
-fresh BOM/native pin execution and final source freshness belong to the mandatory following
-orchestration slice. This helper does not authenticate supplied receipts or execute KiCad.
-Both slices are implemented in the preserved integration worktree and require their own gates.
+This second publication adds the actual artifact/BOM/native runner above the unchanged pure join.
+It derives evidence internally, never accepts a caller-supplied success receipt, binds the final
+report and then recaptures artifacts and verifies original project bytes. Shared aliases receive
+individual deadline checks during hashing while the canonical digest encoding remains unchanged.
+The pure helper still does not authenticate supplied receipts; authority comes only from the
+bounded internally owned capture/native path. All real controls remain with this operation.
 
 ## Complete join
 
@@ -33,7 +35,7 @@ Require the exact inventory paired with the BOM report. Verify its complete rece
 the report, then its normalized component-netlist digest against the pin map. The two identities
 use different namespaces and must not be equated directly. Also require matching capture,
 execution, syntax, executable and backend-authentication context; operation-specific command
-digests remain distinct. The later runner retains the inventory from the existing BOM call,
+digests remain distinct. The runner retains the inventory from the existing BOM call,
 without another native execution or any change to v1 report/map identities.
 
 Keep cumulative reference/pin/alias/model-byte ceilings and a finite caller deadline through
@@ -44,8 +46,8 @@ and repr-redacted, not author or model-accuracy attestations. Input declarations
 
 Retain all pure-join tests, numeric-port/deadline corrections, independent safety and separate
 Ponytail review. Validate the isolated slice and complete composition before publishing.
-The next operation must derive capture/BOM/native evidence internally, hash its report, then
-recapture artifacts and reverify source bytes; it must not accept a caller-supplied success receipt.
+The operation derives capture/BOM/native evidence internally, hashes its report, then recaptures
+artifacts and reverifies source bytes; it does not accept a caller-supplied success receipt.
 Neither slice establishes agreement with existing Sim.Library/Sim.Name/Sim.Pins settings, SPICE
 export, simulation, physical accuracy, an engineering pass or application authority. Source-setting
 checks, confined native export, sealed ngspice execution and calibration remain mandatory later
