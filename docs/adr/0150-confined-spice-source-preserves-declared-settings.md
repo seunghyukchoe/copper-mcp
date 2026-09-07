@@ -1,6 +1,6 @@
 # ADR-0150: Confined SPICE source preserves declared settings
 
-- Status: Proposed; native-export parser publication under review
+- Status: Proposed; private edit-kernel publication under review
 - Date: 2026-09-08
 - Owners: CopperMCP maintainers
 - Related: [ADR-0149](0149-project-terminal-joins-consume-native-evidence.md)
@@ -23,6 +23,13 @@ finite caller deadline through validation, sorting and streaming identity. Assig
 results only after all checks succeed. Keep private observations immutable and repr-redacted.
 
 ## Mandatory remaining stages
+
+The second publication adds the standalone internal edit kernel: canonical error/check objects,
+literal directive/pin parsing, projected UTF-8 sizing and byte-preserving source splices. These
+primitives require the later preparer's admitted inputs; direct parser/CST refusals can retain
+their native types, while the preparer supplies the fixed public refusal boundary. The kernel
+has no facade/coordinator dependency or execution authority. Public preparation and every original
+end-to-end test remain in the complete implementation and are not replaced by kernel smoke tests.
 
 Preserve the complete implemented source preparer and native coordinator with all regression and
 real controls in the integration worktree. Publish their model/source admission and bounded edits,

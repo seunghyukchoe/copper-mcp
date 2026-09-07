@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private SPICE edit primitives retain UTF-8 source regions, inspect literal simulation text and
+  measure bounded replacements before materialization. Project/model admission and native
+  execution remain separate mandatory stages; no physics or application authority is added.
 - Private bounded SPICE output interpretation compares complete expected components, ordered
   terminals and includes, with structural limits and deadline-safe identity. Supplied output is
   not authenticated execution, simulation, physics or apply authority; those stages remain separate.
