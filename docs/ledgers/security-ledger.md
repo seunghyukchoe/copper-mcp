@@ -421,3 +421,25 @@ configured real parent backends. Tested treef3760cf21120bdaf90dfbccc9759d0758c4e
 source/input fingerprint sha256:43afc1497e2962a00387a474efee299d23b9d0c4a89d14a6606a18a5563d3017.
 Parent main verification and protected hosted gates remain required before publication; the
 complete source-preparation/native operation and later simulator/physics work are not replaced.
+
+2026-09-08 SEC-207 edit-kernel preparation: copy the mechanically extracted kernel and its four
+direct tests without changing implementation bytes. Keep canonical error/check/edit identities,
+no future-facade/coordinator imports, bounded source inspection and pre-materialization sizing.
+All original preparer and native-operation assertions remain in later mandatory stages; these
+internal primitives do not authenticate records or promise public fixed-error conversion alone.
+Complete extracted validation, isolated kernel checks and independent review remain required.
+
+2026-09-08 SEC-207 kernel isolation: independent review accepted unchanged kernel/test bytes,
+canonical definitions, existing-only imports, complete parent ledger prefix and explicitly
+internal scope. All four direct tests passed Python 3.12 with future imports blocked (0.25s),
+3.11 (0.21s) and 3.13 (0.25s); format/type/metadata checks passed. The complete extracted
+composition passed 5,602 tests; fresh isolated full validation and protected publication remain.
+
+2026-09-08 SEC-207 isolated kernel validation: fresh make check passed 5,549 tests, one
+intentional skip, 89% code coverage and all format/lint/type/security/build gates, with 574.10
+seconds of pytest using three workers and configured real parent backends. Tested staged tree
+ac5fc7331ac10878ea8459b39c138c79e052f00d; source/input fingerprint
+sha256:edce55a219e7e1fcdfef68ae5c109f433d3bdde853be1718654ed03608972cdb.
+Independent isolation and preservation reviews passed. Parent main verification and protected
+publication remain required; this internal kernel does not replace the full preparation/export
+operation or grant engineering/application authority.
