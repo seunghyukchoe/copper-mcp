@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private bounded ngspice operating-point interpretation checks complete expected voltage/current
+  outputs and preserves exported decimal values in a deterministic identity. Supplied numbers do
+  not establish authenticated execution, convergence, calibrated physics or application authority.
 - Private guarded SPICE export derives captured model/source inputs internally, verifies two
   complete authenticated native exports under one deadline, then rechecks source/model freshness.
   Results remain input/export observations, not simulation, physics, approval or apply authority.

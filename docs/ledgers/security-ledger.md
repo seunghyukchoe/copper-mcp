@@ -481,3 +481,19 @@ matching the 5,602-test complete extracted run. Fresh format/lint/type/security/
 and all 91 focused cases passed with configured real KiCad in 118.12 seconds. Reusing that full
 result is justified for identical source; no new full run is claimed. Protected parent/hosted
 gates and later simulator/physics work remain required before broader capability claims.
+
+| SEC-208 | 2026-09-08 | Private operating-point output boundary | Owned pinned ngspice 45.2 raw-output probe establishes the one-point format; implementation tests and independent review remain pending. | Treat all supplied bytes, counts, vector identities and numbers as untrusted. Enforce structural/time bounds and exact expected output; do not infer execution, convergence, calibration or apply authority from parsing. | [ADR-0151](../adr/0151-operating-point-numbers-are-not-physics-authority.md) |
+
+2026-09-08 SEC-208 validation: primary review caught and corrected a test fixture that did
+not match actual native formatting; the retained fixture now matches pinned 45.2 output.
+All 22 controls passed Python 3.11, 3.12 and 3.13. Two fresh owned native runs were parsed
+directly, with clean diagnostics, confirmed cleanup and identical semantic digest
+sha256:7e93a52d7b9eaf0614b868d2dc6f81fd149041d5de20fe260e34899231b153da.
+Independent correctness/security review accepted the scoped interpreter; separate Ponytail
+review found no justified cuts. Fresh make check passed 5,624 tests, one intentional skip,
+90% code coverage and all format/lint/type/security/build gates in 624.49 seconds of pytest
+with three workers and configured real parent backends. Tested staged tree
+12c0fcb396f57d5e8baff99b7dbbd64c815fdd29; source/input fingerprint
+sha256:d23a140a31e4a1b400973c110335810392f196a09c0af86d462803e95103d7d1.
+This verifies supplied-output interpretation only. Production execution, convergence,
+case/net binding, calibration, physics, human approval and apply remain separate gates.
