@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private BOM reconciliation compares captured CSV rows and explicit item bindings against a fresh
+  native component inventory. Complete scope, cumulative budgets, exact metadata and final freshness
+  are checked; native receipt and final report hashing share the active deadline. Model definitions,
+  ratings, physics and application authority remain unassessed. Matching empty bindings and a
+  header-only BOM yield inconclusive for an empty eligible scope, never a pass.
 - Private native-format BOM CSV reading validates bounded references, quantities and DNP markers,
   retains extra columns, and remains deterministic under restrictive integer-conversion settings
   and unrelated process-wide CSV limits or dialect configuration.

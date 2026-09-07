@@ -236,3 +236,24 @@ or dialect registrations from changing valid input acceptance. Shared module sta
 unsupported private-backend initialization refuses without exposing loader context.
 Actual artifact/native comparison is separate; see
 [ADR-0145](../adr/0145-bom-agreement-binds-content-and-native-components.md).
+
+## Private BOM/native metadata agreement
+
+`engineering.bom_reconciliation.run_bom_reconciliation()` captures actual declared artifact bytes
+and executes a fresh native component inventory. A separate `bom-component-bindings/v1` document
+binds the electrical declaration and project capture to explicit item/reference groups; existing
+electrical-inputs/v1 digest meanings remain unchanged.
+
+Every declared item must match exactly one row in its declared BOM artifact, every row must be
+bound once, and the complete BOM-eligible native reference set includes DNP parts. Compare exact
+reference, value, footprint, quantity and DNP metadata; do not guess electrical equivalence from
+similar labels. Shared row/reference ceilings span all artifacts, and the caller deadline includes
+native receipt and final report hashing. Final artifact and source checks follow hashing.
+
+The private immutable report returns fixed mismatch counts and a limited metadata agreement result.
+Explicit matching empty item sets and a header-only BOM are inconclusive when no native components
+are BOM-eligible; they cannot hide missing eligible components, unbound rows or contradictory data.
+It binds the full native execution receipt, not only component metadata. Additional CSV columns and
+declared model associations remain explicitly unvalidated; model definitions, ratings and physics
+are not run, and apply authority is none. This operation is not a new MCP tool, engineering approval,
+complete pin/model mapping or a native transaction guarantee.
