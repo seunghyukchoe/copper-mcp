@@ -60,7 +60,15 @@ class ProjectComponentInventory:
 
     @property
     def digest(self) -> str:
-        return digest_document(
+        return self._digest(math.inf)
+
+    def _digest(self, deadline: float) -> str:
+        _check(deadline)
+        inventory_digest = ComponentNetlist(
+            self.components, self.sheet_paths, self.backend_version
+        )._digest(deadline)
+        _check(deadline)
+        result = digest_document(
             "copper-mcp/project-component-inventory/v1",
             {
                 "capture_digest": self.capture_digest,
@@ -70,9 +78,11 @@ class ProjectComponentInventory:
                 "executable_digest": self.executable_digest,
                 "backend_authentication_digest": self.backend_authentication_digest,
                 "backend_version": self.backend_version,
-                "native_inventory_digest": self.inventory_digest,
+                "native_inventory_digest": inventory_digest,
             },
         )
+        _check(deadline)
+        return result
 
     def document(self) -> dict[str, object]:
         return {
