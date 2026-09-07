@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private bounded SPICE output interpretation compares complete expected components, ordered
+  terminals and includes, with structural limits and deadline-safe identity. Supplied output is
+  not authenticated execution, simulation, physics or apply authority; those stages remain separate.
 - Private project SPICE model binding derives actual artifact/BOM/native pin evidence internally,
   checks complete terminal/no-connect scope and rechecks source/model freshness after final hashing.
   Existing simulation settings, SPICE export, model accuracy and physics remain unverified.
