@@ -11,7 +11,8 @@ All notable changes are documented here. The format follows
 - Private native component inventory runs the sealed KiCad exporter twice over captured project
   bytes and checks source freshness, diagnostics and repeated metadata. Resolved references and
   selected fields remain private; BOM/model reconciliation and engineering/application authority
-  are not supplied by this capture.
+  are not supplied by this capture. Final inventory normalization and streaming hash work check
+  the active deadline without changing canonical identities.
 - Private native component XML observations validate declared source/tool/sheet identities and
   selected component fields under bounded parsing. Empty optional metadata is supported without
   accepting conflicting values; report parsing alone grants no execution, BOM/model or apply authority.

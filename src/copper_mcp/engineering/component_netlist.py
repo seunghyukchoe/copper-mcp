@@ -6,6 +6,8 @@ placement, electrical, fabrication, model, execution, or apply authority.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
 import time
@@ -13,8 +15,6 @@ import unicodedata
 from dataclasses import asdict, dataclass
 from typing import NoReturn, cast
 from xml.etree import ElementTree as ET
-
-from copper_mcp.optimization.contracts import digest_document
 
 _BACKEND_VERSION = "10.0.5"
 _EXPECTED_TOOL = f"Eeschema {_BACKEND_VERSION}"
@@ -78,17 +78,37 @@ class ComponentNetlist:
 
     @property
     def digest(self) -> str:
-        return digest_document(
-            "copper-mcp/component-netlist/v1",
-            {
-                "backend_version": self.backend_version,
-                "components": [
-                    asdict(component)
-                    for component in sorted(self.components, key=lambda item: item.reference)
-                ],
-                "sheet_paths": sorted(self.sheet_paths),
-            },
+        return self._digest(math.inf)
+
+    def _digest(self, deadline: float) -> str:
+        """Preserve v1 canonical bytes with cooperative normalization/hash checkpoints."""
+
+        def reference_key(component: NativeComponent) -> str:
+            _check_deadline(deadline)
+            return component.reference
+
+        _check_deadline(deadline)
+        ordered = sorted(self.components, key=reference_key)
+        records = []
+        for component in ordered:
+            _check_deadline(deadline)
+            records.append(asdict(component))
+        _check_deadline(deadline)
+        document = {
+            "backend_version": self.backend_version,
+            "components": records,
+            "sheet_paths": sorted(self.sheet_paths),
+        }
+        encoder = json.JSONEncoder(
+            sort_keys=True, ensure_ascii=True, allow_nan=False, separators=(",", ":")
         )
+        digest = hashlib.sha256(b"copper-mcp/component-netlist/v1\x00")
+        _check_deadline(deadline)
+        for token in encoder.iterencode(document):
+            _check_deadline(deadline)
+            digest.update(token.encode("ascii"))
+        _check_deadline(deadline)
+        return "sha256:" + digest.hexdigest()
 
     def __repr__(self) -> str:
         return "<ComponentNetlist redacted>"
