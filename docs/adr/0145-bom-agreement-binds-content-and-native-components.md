@@ -32,7 +32,6 @@ existing 4,096-byte field validation remaining authoritative. This preserves pri
 refusal classification as well as valid input acceptance. Initialization and parsing share the
 caller deadline. Unsupported initialization produces a fixed, context-free unavailable-backend
 refusal. Isolation is verified on CPython 3.11, 3.12 and 3.13; no model/plugin path is selected.
-
 ## Reconciliation boundary
 
 The subsequent private operation executes the existing native inventory internally and captures
@@ -47,9 +46,15 @@ snapshot and project-context digests are not reinterpreted as schematic-capture 
 new binding digests identify the two input families without asserting complete electrical inputs.
 
 Native inventory, artifact reads, parsing, comparison, hashing and final source/artifact freshness
-checks share a bounded deadline. Changed bytes, malformed inputs and unavailable execution refuse;
+checks share a bounded deadline. Carry it into the complete native receipt's component digest and
+the final report's association conversion and streaming JSON/hash work, preserving canonical bytes.
+Checks are cooperative over bounded primitives, not hard real-time interruption guarantees.
+Changed bytes, malformed inputs and unavailable execution refuse;
 well-formed disagreements return fixed mismatch counts and take precedence over missing scope.
 Empty BOM-eligible component scope without disagreement is inconclusive, never a successful coverage result.
+Matching empty declaration and reference-binding sets are valid inputs to this comparison; the
+binding document must still contain its explicit `items` field. Nonempty native scope or contradictory
+BOM rows still fails, and unequal declaration/binding item sets still refuse before execution.
 Final checks follow report hashing and precede successful delivery; they are not atomic
 filesystem or editor transaction guarantees.
 
