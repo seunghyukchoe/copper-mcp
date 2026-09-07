@@ -14,6 +14,11 @@ one point. Consume the entire result; reject extra plots, malformed or duplicate
 missing values and non-finite numbers. Check byte, line, vector and time ceilings before
 materializing larger intermediate structures. Keep results immutable and private.
 
+Reject non-exact byte payloads before invoking length or other payload operations. Finite
+subnormal doubles remain valid observations; a decimal exponent alone is not a finiteness
+test. Keep bounded numeric text and syntax checks, preserve the original decimal spelling,
+and reject values whose floating-point interpretation is non-finite.
+
 Bind semantic identity to the expected backend, title, ordered vectors and exported values.
 The native date is checked as bounded metadata but excluded from semantic identity. Preserve
 exported decimal precision without depending on the process-global decimal context. Agreement

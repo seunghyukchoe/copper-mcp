@@ -583,3 +583,21 @@ sha256:f4caabf85a31e22f465ad052a1d9aa15b559132592a8e080073c4506dfb8029b.
 The independent integration review and 120-case compatibility family passed. This replaces
 pre-correction full evidence for the current source. Parent-main verification and protected
 publication remain required; simulated numbers still grant no convergence/physics/apply authority.
+
+2026-09-08 SEC-208 hosted review reopened PR297 despite green CI: record ADR0151 in the
+canonical decision ledger, reject non-byte payloads before length callbacks, and preserve
+finite subnormal values instead of applying an absolute exponent cutoff. D276 now records
+the decision. The parser fixes and regressions retain all original controls; 25 focused tests
+pass Python3.11,3.12 and3.13 with format/lint/type checks. Independent review and a fresh
+full run must precede updated publication; earlier full evidence does not cover this correction.
+
+2026-09-08 SEC-208 corrected parser validation: independent review accepted exact-byte
+admission before callbacks, finite subnormal preservation, and D276's canonical ADR link.
+Separate Ponytail review accepted removal of the redundant exponent cutoff. Fresh make check
+passed 5,639 tests, one intentional skip, 90% code coverage and every format/lint/type/security/
+build gate, with 817.79 seconds of pytest on three workers. Tested staged tree
+57becfecb500b10226175bd0b24d25d48fe39c9b; source/input fingerprint
+sha256:0b4cdddebeec7e14073ef28536aaf9c6a10f5f8b12d20cb0bf1c7aab6952e220.
+All25 focused tests passed Python3.11,3.12 and3.13. This supersedes the pre-correction full
+result for publication; exact-head hosted checks and main verification remain required.
+No execution, convergence, calibration, physics or apply authority follows from parsing.

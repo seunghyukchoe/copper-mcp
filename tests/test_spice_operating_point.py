@@ -63,6 +63,44 @@ def test_parses_actual_resistor_divider_shape_and_identity_excludes_date() -> No
     assert repr(first) == "<SpiceOperatingPoint redacted>"
 
 
+def test_accepts_and_preserves_finite_subnormal_decimal_spelling() -> None:
+    result = _parse(
+        RAW.replace(b"1.000000000000000e+00", b"5e-324")
+        .replace(b"5.000000000000000e-01", b"-5e-324")
+        .replace(b"-5.000000000000000e-04", b"2.2250738585072014e-308")
+    )
+    assert tuple(value for _name, _kind, value in result.vectors) == (
+        "5e-324",
+        "-5e-324",
+        "2.2250738585072014e-308",
+    )
+
+
+def test_refuses_nonexact_bytes_before_hostile_length_access() -> None:
+    calls: list[str] = []
+
+    class Hostile:
+        def __len__(self) -> int:
+            calls.append("len")
+            raise RuntimeError("must not run")
+
+    class BytesSubclass(bytes):
+        pass
+
+    for payload in (Hostile(), BytesSubclass(RAW)):
+        with pytest.raises(SpiceOperatingPointError) as error:
+            parse_spice_operating_point(
+                cast(bytes, payload),
+                expected_title=TITLE,
+                expected_command=COMMAND,
+                expected_vectors=SCHEMA,
+                deadline=time.monotonic() + 10,
+                max_bytes=64 * 1024,
+            )
+        _fixed(error.value)
+    assert calls == []
+
+
 @pytest.mark.parametrize(
     "mutate",
     (
@@ -74,6 +112,7 @@ def test_parses_actual_resistor_divider_shape_and_identity_excludes_date() -> No
         lambda data: data + b"late\n",
         lambda data: data.replace(b"1.000000000000000e+00", b"NaN"),
         lambda data: data.replace(b"1.000000000000000e+00", b"-inf"),
+        lambda data: data.replace(b"1.000000000000000e+00", b"1e999"),
         lambda data: data.replace(b"1.000000000000000e+00", b"1e9999"),
         lambda data: data.replace(b"1.000000000000000e+00", b"1" * 129),
     ),

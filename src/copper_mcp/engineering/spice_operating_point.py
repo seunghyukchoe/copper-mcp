@@ -115,9 +115,6 @@ def _controls(
 def _decimal(value: str) -> str:
     if len(value) > _MAX_DECIMAL_BYTES or _DECIMAL.fullmatch(value) is None:
         _fail()
-    exponent = value.lower().partition("e")[2]
-    if exponent and abs(int(exponent)) > 308:
-        _fail()
     try:
         numeric = float(value)
     except ValueError:
@@ -175,6 +172,8 @@ def parse_spice_operating_point(
     active = _deadline(deadline)
     result: SpiceOperatingPoint | None = None
     try:
+        if type(payload) is not bytes:
+            _fail()
         title, command, schema = _controls(
             expected_title, expected_command, expected_vectors, max_bytes, active
         )
