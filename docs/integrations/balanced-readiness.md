@@ -236,3 +236,16 @@ or dialect registrations from changing valid input acceptance. Shared module sta
 unsupported private-backend initialization refuses without exposing loader context.
 Actual artifact/native comparison is separate; see
 [ADR-0145](../adr/0145-bom-agreement-binds-content-and-native-components.md).
+
+## Private pin-source interpretation
+
+The internal `_pin_census_source` module interprets raw pin UUID records, cached flat-library
+unit/style/alternate definitions and explicit instance paths under a shared work budget/deadline.
+It is not an input-authority replacement: callers must first establish the existing captured
+project/hierarchy/library preconditions. It has no assembler dependency, MCP operation, public
+census record/digest, native execution or engineering/application authority.
+
+The complete project assembler and the full native differential controls are separate mandatory
+publication increments, not optional follow-on work. This first source-only slice does not complete
+the pin census or model interface binding. See
+[ADR-0146](../adr/0146-placed-pin-census-precedes-model-interface-binding.md).

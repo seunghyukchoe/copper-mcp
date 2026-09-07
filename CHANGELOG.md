@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private pin-source interpretation validates raw pin inventories, unit/style selectors and
+  instance records under shared work/deadline limits. Project assembly, native pin evidence and
+  model/engineering/application authority are not included in this source-only slice.
 - Private native-format BOM CSV reading validates bounded references, quantities and DNP markers,
   retains extra columns, and remains deterministic under restrictive integer-conversion settings
   and unrelated process-wide CSV limits or dialect configuration.
