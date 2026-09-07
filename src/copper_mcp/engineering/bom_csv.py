@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import csv
+import _csv
 import io
 import math
 import re
@@ -10,12 +10,15 @@ import time
 import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal
+from importlib.util import module_from_spec
+from types import ModuleType
 from typing import NoReturn
 
 _MAX_BYTES = 8 * 1024 * 1024
 _MAX_ROWS = 100_000
 _MAX_COLUMNS = 64
 _MAX_FIELD_BYTES = 4096
+_CSV_FIELD_CHARS = 128 * 1024
 _REQUIRED_HEADERS = ("Refs", "Value", "Footprint", "Qty", "DNP")
 _RANGE = re.compile(r"(?P<prefix>[^0-9,\-]+)(?P<start>[0-9]+)-(?P=prefix)(?P<end>[0-9]+)")
 
@@ -52,6 +55,37 @@ def _expired() -> NoReturn:
 def _check_deadline(deadline: float) -> None:
     if time.monotonic() >= deadline:
         _expired()
+
+
+def _private_csv_backend(deadline: float) -> ModuleType:
+    """Use isolated stdlib module state, never the shared field limit or registry.
+
+    CPython's multi-phase _csv owns its field limit and Error type per module.
+    https://docs.python.org/3.12/library/importlib.html#importlib.util.module_from_spec
+    https://github.com/python/cpython/blob/3.11/Modules/_csv.c
+    """
+    _check_deadline(deadline)
+    backend = None
+    try:
+        spec = _csv.__spec__
+        if spec is not None and spec.loader is not None:
+            candidate = module_from_spec(spec)
+            _check_deadline(deadline)
+            if candidate is not _csv:
+                spec.loader.exec_module(candidate)
+                _check_deadline(deadline)
+                if candidate.Error is not _csv.Error and issubclass(candidate.Error, Exception):
+                    # Retain the previous stdlib parsing ceiling/refusal taxonomy;
+                    # _validate_text separately enforces the 4096-byte contract.
+                    candidate.field_size_limit(_CSV_FIELD_CHARS)
+                    if candidate.field_size_limit() == _CSV_FIELD_CHARS:
+                        backend = candidate
+    except (ImportError, AttributeError, OSError, TypeError, ValueError, RuntimeError):
+        pass
+    _check_deadline(deadline)
+    if backend is None:
+        raise BomCsvError("BOM CSV backend is unavailable")
+    return backend
 
 
 def _normalize_deadline(deadline: float) -> float:
@@ -190,11 +224,22 @@ def parse_bom_csv(
         pass
     if text is None:
         _malformed()
-    reader = csv.reader(io.StringIO(text, newline=""), strict=True)
+    backend = _private_csv_backend(active_deadline)
+    reader = backend.reader(
+        io.StringIO(text, newline=""),
+        delimiter=",",
+        quotechar='"',
+        escapechar=None,
+        doublequote=True,
+        skipinitialspace=False,
+        lineterminator="\r\n",
+        quoting=backend.QUOTE_MINIMAL,
+        strict=True,
+    )
     header = None
     try:
         header = next(reader, None)
-    except csv.Error:
+    except backend.Error:
         pass
     if header is None:
         _malformed()
@@ -247,7 +292,7 @@ def parse_bom_csv(
                     extra_fields=tuple(sorted((headers[index], fields[index]) for index in extras)),
                 )
             )
-    except csv.Error:
+    except backend.Error:
         malformed_csv = True
     if malformed_csv:
         _malformed()

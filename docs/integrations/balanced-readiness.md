@@ -231,5 +231,8 @@ remaining rows accepts header-only input, and extra row work or expansion refuse
 Conversions use exact standard-library Decimal construction only to avoid dependence on Python's
 configurable integer-string limit; arithmetic remains integral and global settings are unchanged.
 The result is immutable and repr-redacted, with no agreement, model or engineering verdict.
+An isolated standard-library CSV module and explicit dialect keep unrelated process field limits
+or dialect registrations from changing valid input acceptance. Shared module state is not changed;
+unsupported private-backend initialization refuses without exposing loader context.
 Actual artifact/native comparison is separate; see
 [ADR-0145](../adr/0145-bom-agreement-binds-content-and-native-components.md).
