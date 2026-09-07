@@ -539,6 +539,15 @@ ledger prefix. All 103 focused cases passed with configured real KiCad in 123.08
 format/lint/type checks passed. A fresh full composed run remains required; previous complete
 suite reuse is not final validation of this corrected source.
 
+2026-09-08 SEC-207 corrected whole-export full validation: fresh make check on1fda2c0
+passed 5,614 tests, one intentional skip, 90% code coverage and every format/lint/type/security/
+build gate, with 626.76 seconds of pytest and three workers using real parent backends.
+Tested tree412fb025c0e12ebacb9d4ed00b5439e1d1b6aa72; source/input fingerprint
+sha256:cae8e6fe03df7117523d67c6665ffd3ba75d2bc0f6ca0551a444e6fc445e1f16.
+The 103-case real native family and independent integration review also passed. This replaces
+the superseded pre-correction full reuse for current-source validation. Parent-main verification
+and protected publication remain required; native export is not simulation or physics authority.
+
 | SEC-208 | 2026-09-08 | Private operating-point output boundary | Owned pinned ngspice 45.2 raw-output probe establishes the one-point format; implementation tests and independent review remain pending. | Treat all supplied bytes, counts, vector identities and numbers as untrusted. Enforce structural/time bounds and exact expected output; do not infer execution, convergence, calibration or apply authority from parsing. | [ADR-0151](../adr/0151-operating-point-numbers-are-not-physics-authority.md) |
 
 2026-09-08 SEC-208 validation: primary review caught and corrected a test fixture that did
@@ -565,3 +574,12 @@ exact corrected parent source/native controls from1fda2c0 and its complete ledge
 The 120 non-native family controls passed on Python3.12 (2.21s),3.11 (1.58s) and3.13 (1.66s),
 with five real cases explicitly deselected. The parent separately passed103 cases with real
 KiCad. Format/lint/type checks passed. A fresh full composed run remains required.
+
+2026-09-08 SEC-208 corrected composed full validation: fresh make check onac1be5c passed
+5,636 tests, one intentional skip, 90% code coverage and all format/lint/type/security/build
+gates, with 624.64 seconds of pytest using three workers and configured real parent backends.
+Tested treea403267c00e9f8af86522144a500964da9183d24; source/input fingerprint
+sha256:f4caabf85a31e22f465ad052a1d9aa15b559132592a8e080073c4506dfb8029b.
+The independent integration review and 120-case compatibility family passed. This replaces
+pre-correction full evidence for the current source. Parent-main verification and protected
+publication remain required; simulated numbers still grant no convergence/physics/apply authority.
