@@ -71,20 +71,26 @@ def _alias_key(alias: SourcePinAlias, deadline: float) -> tuple[str, str, str]:
     return alias.sheet_uuid_path, alias.source_symbol_uuid, alias.source_pin_uuid
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class _SourcePinGroup:
     aliases: tuple[SourcePinAlias, ...]
     library_id: str
     effective_name: str
     electrical_type: str
 
+    def __repr__(self) -> str:
+        return "<SourcePinGroup redacted>"
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, repr=False)
 class _SourceSymbolContext:
     reference: str
     library_id: str
     selected_unit: int
     body_style: int
+
+    def __repr__(self) -> str:
+        return "<SourceSymbolContext redacted>"
 
 
 def _source_text(value: object, *, allow_empty: bool = False) -> str:
@@ -143,6 +149,7 @@ def _validate_census(
     nonvirtual_components: set[tuple[str, str]] = set()
     symbols_by_identity: dict[tuple[str, str], _SourceSymbolContext] = {}
     identities: set[tuple[str, str, str]] = set()
+    occurrence_pins: set[tuple[str, str, str]] = set()
     virtual_pin_count = 0
     if len(census.symbols) > _xml._MAX_COMPONENTS:
         _fail(_BOUNDS)
@@ -248,9 +255,11 @@ def _validate_census(
             source_symbol.body_style,
         ):
             _fail()
-        if pin_identity in identities:
+        occurrence_pin = (pin_identity[0], pin_identity[1], number)
+        if pin_identity in identities or occurrence_pin in occurrence_pins:
             _fail()
         identities.add(pin_identity)
+        occurrence_pins.add(occurrence_pin)
         if reference.startswith("#"):
             virtual_pin_count += 1
             continue
