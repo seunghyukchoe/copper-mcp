@@ -193,6 +193,11 @@ def _derive(
                 _fail("project pin census current instance is missing or ambiguous")
             if instance.unit not in template.body.units:
                 _fail("project pin census selected unit is unknown")
+            if (instance.unit, template.body_style) not in template.body.unit_body_styles and (
+                instance.unit,
+                0,
+            ) not in template.body.unit_body_styles:
+                _fail("project pin census selected unit/body style combination is unknown")
             occurrence = PlacedSymbolOccurrence(
                 path,
                 template.source_symbol_uuid,
