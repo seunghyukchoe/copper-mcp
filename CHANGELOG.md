@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private native component XML observations validate declared source/tool/sheet identities and
+  selected component fields under bounded parsing. Empty optional metadata is supported without
+  accepting conflicting values; report parsing alone grants no execution, BOM/model or apply authority.
 - Private ordinary-project parity executes real KiCad against immutable candidate board bytes,
   with fixed parity rules, native liveness checks and repeated finding identities. Full DRC remains
   inconclusive and no physics, fabrication, save or apply authority is granted.

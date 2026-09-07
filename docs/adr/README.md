@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0144**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0145**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -220,6 +220,7 @@ never silently widens it.
 | [0141](0141-project-erc-prepares-an-explicit-rule-and-library-derivative.md) | Project ERC prepares an explicit rule and library derivative | Proposed |
 | [0142](0142-project-connectivity-erc-binds-execution-and-source-freshness.md) | Project connectivity ERC binds execution and source freshness | Proposed |
 | [0143](0143-project-parity-uses-native-liveness-and-immutable-candidates.md) | Project parity uses native liveness and immutable candidates | Proposed |
+| [0144](0144-native-component-inventory-precedes-bom-reconciliation.md) | Native component inventory precedes BOM reconciliation | Proposed |
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
