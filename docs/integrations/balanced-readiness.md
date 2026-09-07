@@ -270,3 +270,16 @@ The complete project assembler and the full native differential controls are sep
 publication increments, not optional follow-on work. This first source-only slice does not complete
 the pin census or model interface binding. See
 [ADR-0146](../adr/0146-placed-pin-census-precedes-model-interface-binding.md).
+
+## Private project pin assembly
+
+`engineering.project_pin_census.derive_project_pin_census()` combines the existing verified
+project preparation with pin-source interpretation over every captured hierarchy occurrence.
+Instance-path lookups are indexed; selected/common units, body styles and alternate functions
+retain explicit source pin UUIDs. Excluded, virtual, hidden and unconnected pin occurrences are
+not silently dropped. One budget and deadline span parsing, assembly, sorting and identity work.
+
+The result contains immutable repr-redacted symbol/pin tuples with a source-bound canonical digest.
+Its public-safe document exposes only digests/counts and native/model/engineering validation
+`not_run`, with apply authority `none`. It does not infer net membership, validate model ports,
+perform native execution or grant approval. The full native proof remains a mandatory final slice.

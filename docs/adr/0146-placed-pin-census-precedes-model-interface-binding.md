@@ -1,6 +1,6 @@
 # ADR-0146: Placed-pin census precedes model interface binding
 
-- Status: Proposed; source-interpreter publication under review
+- Status: Proposed; project-assembler publication under review
 - Date: 2026-09-07
 - Owners: CopperMCP maintainers
 - Related: [ADR-0144](0144-native-component-inventory-precedes-bom-reconciliation.md),
@@ -8,12 +8,11 @@
 
 ## Decision
 
-The first publication contains the private source interpreter and direct controls only. It does not
-include a project census entry point, public census records/digest, occurrence assembly or native
-execution. The interpreter is an internal consumer of source bytes whose capture/hierarchy/flat-
-library equivalence must be established by the existing preparation gate; it is not a replacement
-verifier or an untrusted transport boundary. The complete assembler and native proof below remain
-mandatory subsequent increments, not optional future work.
+The source-interpreter slice is followed by this complete project assembler and its unit controls.
+It adds the private census entry point, immutable records, canonical identity and full hierarchy
+occurrence assembly, while reusing the existing capture/hierarchy/flat-library preparation gate.
+It performs no native execution and is not a transport-authority replacement. The complete native
+differential proof below remains the mandatory final publication increment, not optional future work.
 
 Derive a private occurrence census from the complete captured schematic hierarchy and verified
 flat symbol-library closure before binding simulation model ports. A BOM reference or native XML
@@ -38,6 +37,10 @@ pin UUID inventory against the applicable library body, then emit pins belonging
 unit or common unit zero. Apply the corresponding body-style/common-style rules. Resolve selected
 alternate pin functions only against explicit library definitions. Refuse unsupported or ambiguous
 identities instead of choosing an arbitrary pairing or silently omitting an occurrence.
+Validate unit and body-style selectors together against actual declared sub-symbol combinations,
+including explicitly declared graphical bodies and the selected unit's common-style body. A purely
+common-unit symbol may use the implicit first unit; common pins cannot invent a missing combination
+when the library declares specific units. Independent membership of each selector is not enough.
 Validated instance indexes are read-only mappings of frozen records. Their backing dictionaries
 remain local to parsing and are never exposed, preserving constant-time path lookup without a
 mutable nested collection inside the frozen parsed template.

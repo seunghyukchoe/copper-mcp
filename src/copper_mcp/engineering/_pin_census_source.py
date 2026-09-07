@@ -132,6 +132,7 @@ class _LibraryBody:
     pins: tuple[_LibraryPin, ...]
     units: frozenset[int]
     body_styles: frozenset[int]
+    unit_body_styles: frozenset[tuple[int, int]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,6 +419,8 @@ def _parse_library_body(
     pins: list[_LibraryPin] = []
     units = {1}
     body_styles = {1}
+    selectors: set[tuple[int, int]] = set()
+    has_specific_unit = False
     nested_names: set[str] = set()
 
     for item in expression.items[2:]:
@@ -428,6 +431,8 @@ def _parse_library_body(
             if len(pins) >= _MAX_LIBRARY_PINS_PER_BODY:
                 _fail("project pin census library pin traversal budget exceeded")
             pins.append(_parse_library_pin(item, 1, 1, source_version, budget, deadline))
+            selectors.add((1, 1))
+            has_specific_unit = True
         elif item.head == "symbol":
             if len(item.items) < 2 or not isinstance(item.items[1], str):
                 _fail("project pin census library body selector is malformed")
@@ -438,6 +443,8 @@ def _parse_library_body(
             unit, body_style = _nested_selectors(nested_name, base_name)
             units.add(unit)
             body_styles.add(body_style)
+            selectors.add((unit, body_style))
+            has_specific_unit = has_specific_unit or unit > 0
             for nested_item in item.items[2:]:
                 budget.field(deadline)
                 if not isinstance(nested_item, SExpr):
@@ -458,7 +465,15 @@ def _parse_library_body(
                 elif nested_item.head == "symbol":
                     _fail("project pin census nested library body is unsupported")
 
-    return _LibraryBody(tuple(pins), frozenset(units), frozenset(body_styles))
+    if not has_specific_unit:
+        # A common-only symbol has the implicit first unit. Common pins must not
+        # invent a missing combination once the library declares specific units.
+        common_selectors = set()
+        for _, style in selectors:
+            budget.step(deadline)
+            common_selectors.add((1, style))
+        selectors = common_selectors
+    return _LibraryBody(tuple(pins), frozenset(units), frozenset(body_styles), frozenset(selectors))
 
 
 def _parse_raw_pin(
