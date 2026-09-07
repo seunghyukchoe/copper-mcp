@@ -192,3 +192,16 @@ The parity-specific project derivative does not establish full DRC. DRC is incon
 and fabrication are not run, and application authority is none. General model/BOM, versioned job
 integration, held-out quality and real editor/human/physics gates remain open. See
 [ADR-0143](../adr/0143-project-parity-uses-native-liveness-and-immutable-candidates.md).
+
+## Private component XML observations
+
+`engineering.component_netlist.parse_component_netlist()` extracts bounded, private component
+records from the pinned native XML shape. It validates declared source/tool/sheet identities,
+preserves relevant native flags, accepts optional empty metadata and refuses duplicate or
+conflicting identities/values. A reused child symbol UUID remains distinct under a different
+sheet path. DTD/entity declarations and extra processing instructions are refused.
+
+The result has no execution, engineering, BOM/model or apply verdict. Native unit grouping also
+means its UUID list is not a complete placed-unit census. Authenticated export and BOM-content
+reconciliation remain separate work; see
+[ADR-0144](../adr/0144-native-component-inventory-precedes-bom-reconciliation.md).
