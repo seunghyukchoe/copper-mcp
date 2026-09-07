@@ -13,6 +13,7 @@ All notable changes are documented here. The format follows
   These controls do not turn arbitrary source interpretation into native or engineering authority.
 - Private project pin assembly binds complete hierarchy occurrences, instance unit/style selection
   and source pin identities into immutable records under one cumulative budget and deadline.
+  Undeclared unit/body-style combinations refuse rather than silently emitting only common pins.
   Native connectivity, model validation, physics and application authority remain unassessed.
 - Private pin-source interpretation validates raw pin inventories, unit/style selectors and
   immutable instance indexes under shared work/deadline limits. Project assembly, native pin evidence and
