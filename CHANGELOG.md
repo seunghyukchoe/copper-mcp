@@ -9,7 +9,8 @@ All notable changes are documented here. The format follows
 ### Added
 
 - Private project SPICE source preparation validates captured models and source aliases, preserves
-  declared simulation settings and builds an immutable bounded derivative. It performs no native
+  resolved instance ownership, and bounds nested binding fields before hashing or selection.
+  It retains declared simulation settings and builds an immutable derivative. It performs no native
   execution, simulation, engineering sign-off or application; those gates remain separate.
 - Private SPICE edit primitives retain UTF-8 source regions, inspect literal simulation text and
   measure bounded replacements before materialization. Project/model admission and native
