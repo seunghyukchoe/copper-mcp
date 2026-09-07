@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private project pin assembly binds complete hierarchy occurrences, instance unit/style selection
+  and source pin identities into immutable records under one cumulative budget and deadline.
+  Native connectivity, model validation, physics and application authority remain unassessed.
 - Private pin-source interpretation validates raw pin inventories, unit/style selectors and
   instance records under shared work/deadline limits. Project assembly, native pin evidence and
   model/engineering/application authority are not included in this source-only slice.

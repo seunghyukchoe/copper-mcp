@@ -2,10 +2,28 @@
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
+from copper_mcp.engineering.project_erc_inputs import SymbolLibraryInput
+from copper_mcp.engineering.schematic_project_capture import (
+    ProjectFileBinding,
+    SchematicProjectCapture,
+    capture_schematic_project,
+)
+
 ROOT_UUID = "10000000-0000-4000-8000-000000000001"
+CHILD_UUID = "10000000-0000-4000-8000-000000000002"
+SHEET_A_UUID = "10000000-0000-4000-8000-00000000000a"
+SHEET_B_UUID = "10000000-0000-4000-8000-00000000000b"
 SYMBOL_1_UUID = "20000000-0000-4000-8000-000000000001"
 SYMBOL_2_UUID = "20000000-0000-4000-8000-000000000002"
+SYMBOL_3_UUID = "20000000-0000-4000-8000-000000000003"
 PIN_UUIDS = tuple(f"30000000-0000-4000-8000-{index:012d}" for index in range(1, 16))
+
+
+def _sha(payload: bytes) -> str:
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
 def _pin(number: str, *, name: str = "~", kind: str = "passive", tail: str = "") -> str:
@@ -68,3 +86,48 @@ def _source(cache_body: str, *symbols: str, root_uuid: str = ROOT_UUID) -> bytes
         f'''(kicad_sch (version 20250114) (generator "test")
           (uuid "{root_uuid}") (lib_symbols {cache_body}) {"".join(symbols)})'''
     ).encode()
+
+
+def _library(body: str, *, digest: str | None = None) -> SymbolLibraryInput:
+    payload = f'(kicad_symbol_lib (version 20241209) (generator "test") {body})'.encode()
+    return SymbolLibraryInput("Test", payload, _sha(payload) if digest is None else digest)
+
+
+def _capture(
+    tmp_path: Path,
+    root: bytes,
+    library: SymbolLibraryInput,
+    *,
+    child: bytes | None = None,
+) -> tuple[SchematicProjectCapture, tuple[SymbolLibraryInput, ...]]:
+    files: dict[str, bytes] = {"root.kicad_sch": root, "root.kicad_pro": b"{}"}
+    if child is not None:
+        files["child.kicad_sch"] = child
+    for name, payload in files.items():
+        (tmp_path / name).write_bytes(payload)
+    capture = capture_schematic_project(
+        tmp_path,
+        "root.kicad_sch",
+        tuple(ProjectFileBinding(name, _sha(payload)) for name, payload in files.items()),
+    )
+    return capture, (library,)
+
+
+def _basic_inputs(
+    tmp_path: Path,
+) -> tuple[SchematicProjectCapture, tuple[SymbolLibraryInput, ...], bytes]:
+    cache = _resistor_body("Test:R")
+    library = _library(_resistor_body("R"))
+    first = _placed(
+        SYMBOL_1_UUID,
+        "R1",
+        (_raw_pin("2", PIN_UUIDS[1]), _raw_pin("1", PIN_UUIDS[0])),
+    )
+    second = _placed(
+        SYMBOL_2_UUID,
+        "R2",
+        (_raw_pin("1", PIN_UUIDS[2]), _raw_pin("2", PIN_UUIDS[3])),
+    )
+    source = _source(cache, second, first)
+    capture, libraries = _capture(tmp_path, source, library)
+    return capture, libraries, source
