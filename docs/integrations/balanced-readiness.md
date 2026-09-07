@@ -205,3 +205,16 @@ The result has no execution, engineering, BOM/model or apply verdict. Native uni
 means its UUID list is not a complete placed-unit census. Authenticated export and BOM-content
 reconciliation remain separate work; see
 [ADR-0144](../adr/0144-native-component-inventory-precedes-bom-reconciliation.md).
+
+## Authenticated native component inventory
+
+`engineering.project_components.run_project_component_inventory()` now captures those records
+through the existing sealed project execution context. Two fixed XML exports must agree and have
+empty diagnostics; native annotation warnings refuse even when KiCad exits zero. Original source
+bytes are checked before execution and delivery, and no workspace board is read or written.
+
+The result binds capture, execution, native syntax, command/backend identities and the actual
+returned component data. Its repr is redacted; `document()` exposes counts/digests with explicit
+not-run BOM/model/engineering validation and no apply authority. Shared child symbols can retain
+the same leaf UUID while resolving to different sheet paths and references. This is not a complete
+placed-unit census, a BOM content check, model calibration or a new v1 approval interpretation.
