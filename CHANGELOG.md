@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private SPICE model-library interpretation reads actual diode and passive subcircuit definitions,
+  preserving ordered terminals and checking a bounded local dependency graph. Unsupported syntax
+  refuses explicitly. Complete project bindings, sealed execution and calibrated physics remain
+  separate requirements; this reader does not grant an engineering pass or application authority.
 - Native differential pin-census controls cover RC pins, instance-unit override/common pins,
   body styles, alternate functions and populated shared-sheet occurrences, including exact
   multiplicity and name/type comparisons.
