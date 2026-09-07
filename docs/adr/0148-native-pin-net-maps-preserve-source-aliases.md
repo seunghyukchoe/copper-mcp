@@ -33,6 +33,9 @@ selectors, text and digest bounds. Known QuotedAtom source strings may become pl
 after the early length gate; native XML validation remains strict. Check each pin against its exact
 source-symbol occurrence and require consistent metadata within an alias group. Do not choose one
 occurrence and drop the rest. Count virtual pins explicitly outside the physical-component scope.
+Reject duplicate pin numbers within one sheet/symbol occurrence even when their pin UUIDs differ;
+legitimate aliases must come from distinct source occurrences. Apply that check before virtual-pin
+exclusion and before hashing. Source group/context representations are fixed and redact private fields.
 
 The later XML join must require exactly one native node for every logical pin and refuse missing,
 extra, duplicate or cross-net keys before dictionary reduction. Retain net names/codes/classes and
