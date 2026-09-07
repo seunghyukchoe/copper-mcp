@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Joint native component/pin acquisition removes duplicated XML execution contexts from model
+  binding while preserving v1 report identities, pre-native BOM admission and authentication/
+  freshness checks. No authentication cache, larger budget or new authority is introduced.
 - Private bounded ngspice operating-point interpretation checks complete expected voltage/current
   outputs, admits exact byte payloads, and preserves finite subnormal decimal values in a
   deterministic identity. Supplied numbers do
