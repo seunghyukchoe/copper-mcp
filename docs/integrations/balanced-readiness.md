@@ -293,3 +293,18 @@ library metadata plus effective native pinfunction/type are compared. Separate n
 prove the checker rejects duplicate and wrong-name evidence. Clean diagnostics and source/state
 freshness remain required. This verifies these controlled examples only; the runtime census keeps
 native/model/engineering validation `not_run` and apply authority `none`.
+
+## Bounded SPICE definition interpretation
+
+`engineering.spice_model_library.parse_spice_model_library()` reads actual library bytes for the
+fixed passive/diode profile in [ADR-0147](../adr/0147-captured-spice-definitions-precede-terminal-binding.md).
+It retains immutable original definitions and their ordered terminals, resolves local dependency
+names and arity, and refuses unsupported syntax or excessive source/expanded work. It performs no
+file reads or model execution. A source digest identifies bytes, not physical validity or a complete
+symbol-to-model binding.
+
+Owned real-KiCad controls compare diode and subcircuit terminal emission with explicit normal and
+reversed pin mappings, including reversed subcircuit header order. They verify fixed export cases,
+not ngspice convergence, device calibration or full project binding. The production path still needs
+complete per-pin associations or explicit NC decisions bound to checked BOM/native/project inputs,
+a sealed simulator environment, freshness checks and independently validated physical limits.
