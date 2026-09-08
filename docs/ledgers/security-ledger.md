@@ -719,3 +719,22 @@ This is a complete serial run of unchanged tests, limits and authentication, not
 budget relaxation. The earlier parallel run remains unsuccessful evidence and its contention
 hypothesis remains unproven. Independent review accepted the actual P1 implementation; updated
 protected hosted validation and resulting main verification are still required before landing.
+
+| SEC-216 | 2026-09-08 | Private complete layered-tree composition | Exact source-pad/layer membership; bounded pre-hash admission; deterministic replay; complete source-net verification; shared through-via identity and remaining allowances; source-preserving reparse; context-free callback errors and final cancellation checks. | Scoped correctness review is accepted. Native DRC, full integration, held-out quality and protected publication remain pending. No external conversion, physics, human confirmation, apply or saving authority is introduced. | [ADR-0158](../adr/0158-layered-trees-bind-complete-pad-connectivity.md), D-283 |
+
+2026-09-08 SEC-216 independent review closed the reported terminal-layer, complete-pad-set,
+nonfinite budget, inherited exception-context, pre-hash traversal, shared-via, remaining allowance,
+late-cancellation and same-layer/source-pad contact findings. The final reviewer independently ran
+71 scoped tests in 1.42 seconds, plus pair-budget and cancellation controls. The implementation
+worker reported 154 combined new/legacy unit tests in 6.99 seconds. Counts are overlapping, not
+additive. Inner-only SMD fixtures are synthetic only; the ordinary outer-pad native fixture is
+prepared but has not executed. No native, full-suite, held-out or readiness acceptance is claimed.
+
+2026-09-08 SEC-216 native fixture check: the ordinary three-outer-pad/four-layer case passed
+with KiCad 10.0.5 in 2.03 seconds. Its source had unconnected items; the deterministically
+serialized complete result had zero hard DRC errors and zero unconnected items. The original
+source bytes, inode and modification time were unchanged. This uses distinct single-pad blocker
+nets and exercises actual inner copper, not the invalid inner-only SMD fixture. Source/input
+fingerprint sha256:6e9b09caecd6f810520b5e04ee792e521fff50a7b5bf66f3a1c5ccb9468a5072.
+This owned fixture proves only that composed case. Full integration, broader native coverage,
+held-out quality and protected publication remain required; no physics or apply authority is added.

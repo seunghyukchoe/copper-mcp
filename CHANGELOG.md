@@ -8,6 +8,10 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Native optimization proposes bounded cross-layer multi-pin trees with complete pad membership,
+  shared through-vias, source-pad contact and layered detours. Candidates remain private and pass
+  replay, source-preserving serialization and complete-net verification before the existing
+  composed-board KiCad DRC gate. General routing quality and live application are not claimed.
 - Private fixed-image ngspice execution confines one bounded deck to the pinned ngspice 45.2
   runtime, captures only bounded raw/diagnostic bytes, and confirms container cleanup. It does
   not select caller programs or establish convergence, physics, engineering, approval or apply authority.

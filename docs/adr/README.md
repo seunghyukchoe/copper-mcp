@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0154**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0159**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -230,6 +230,7 @@ never silently widens it.
 | [0151](0151-operating-point-numbers-are-not-physics-authority.md) | Operating-point numbers are not physics authority | Proposed |
 | [0152](0152-joint-native-views-share-acquisition-not-authority.md) | Joint native views share acquisition, not authority | Proposed |
 | [0153](0153-confined-ngspice-execution-confirms-cleanup.md) | Confined ngspice execution confirms cleanup | Proposed |
+| [0158](0158-layered-trees-bind-complete-pad-connectivity.md) | Layered trees bind complete pad connectivity | Proposed |
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
@@ -389,3 +390,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 
 2026-09-05 integration: the reserved ADR-0131 from PR #265 is included, and ADR-0133
 records execution above the existing ADR-0132 foundation. No spent identifier is recycled.
+
+2026-09-08 parallel increment: ADR-0154 through ADR-0157 are held by the operating-point cases,
+topology, project execution and host-consent stages. The layered-tree increment takes ADR-0158
+rather than reusing those pending identities. Its isolated branch does not yet contain their files.
