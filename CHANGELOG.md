@@ -19,6 +19,9 @@ All notable changes are documented here. The format follows
 - Private operating-point topology preflight reparses captured model bytes and conservatively
   rejects unsupported nominal-DC graphs before any simulator work. It grants no execution,
   convergence, physics, engineering, approval or apply authority.
+- Private composed-clearance observations measure bounded, downward-rounded IR-class spacing
+  with explicit unavailable results and source/constraint binding. Existing v1 package scoring
+  is unchanged; versioned ranking integration and held-out improvement remain pending.
 - Private operating-point case binding validates complete explicit rail/load/ground mappings
   against declared inputs and bound native pins. It creates no deck, execution, convergence,
   physics, engineering, approval or apply authority.

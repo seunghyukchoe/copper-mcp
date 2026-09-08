@@ -234,6 +234,7 @@ never silently widens it.
 | [0155](0155-operating-point-topology-is-conservative-preflight.md) | Operating-point topology is conservative preflight | Proposed |
 | [0156](0156-project-operating-point-is-bounded-observation.md) | Project operating point is bounded observation | Proposed |
 | [0157](0157-verified-host-delivery-consent-is-challenge-bound.md) | Verified-host confirmation is challenge-bound | Proposed |
+| [0159](0159-composed-clearance-is-an-input-bound-measurement.md) | Composed clearance is an input-bound measurement | Proposed |
 | [0160](0160-custom-rule-loading-needs-native-witness.md) | Custom-rule loading needs a native witness | Proposed |
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and

@@ -298,6 +298,8 @@ does not certify every assertion expression; that distinct native compiler limit
 
 | D-282 | 2026-09-08 | Proposed | Preserve v1 geometry-disclosure and review-approval semantics using default-off verified-host challenges bound to owner, purpose, job record, package and judge. Use SDK Resolve/Elicit across protocol versions, fixed expected refusals and pre-prompt/post-acceptance delivery checks; keep approval's source checks and no-apply boundary. Continuation integrity is neither single-use consent nor proof of a human. | [ADR-0157](../adr/0157-verified-host-delivery-consent-is-challenge-bound.md), SEC-215 |
 
+| D-284 | 2026-09-08 | Proposed | Measure complete supplied-IR foreign-net spacing with exact geometry, downward rounding, source/rule identity and cumulative work accounting. Unavailable input never supplies a fabricated numeric margin. Keep v1 scoring unchanged until explicit versioned integration. | [ADR-0159](../adr/0159-composed-clearance-is-an-input-bound-measurement.md), SEC-217 |
+
 2026-09-08 D-254 corrective follow-up: the held-out audio evaluator also requires
 `work_exhausted` and exactly its declared 96 placement evaluations before reading retained
 scores. A controlled scheduling pause reproduced partial-versus-complete replay divergence;
