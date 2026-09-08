@@ -771,3 +771,13 @@ sha256:104e9bd2b86f21f1a830ec903708524a3b4da239ac167bebb79c7a8d89f77d45.
 The shared container/P1 correction has since been propagated from the reviewed executor stage;
 topology logic and its original assertions remain unchanged. That correction requires new
 exact-source validation. The historical full result is not a pass for the current source.
+
+2026-09-08 SEC-213 complete serial validation passed 5,732 tests with one skip and 90% code
+coverage in 1847.52 seconds. All format, lint, strict type, security and build gates passed.
+Tested commit 92cfafe17448496ea02ae90e9b59a997372c233d; tree
+c70c6976498807fd0c4b65c45ba16109908d7b7f; source/input fingerprint
+sha256:1fdef2ffd51228d341351a89ee98a1509daf9287d8af425fbe58d4d8ac6cbd93.
+No test selection, authentication or work/time limit was relaxed. This source includes the
+container cleanup correction but precedes PR301's foreign-pin admission correction. Integrating
+that correction requires fresh exact-source validation; this result must not be attributed to
+the later source. No convergence, physics, application, hosted or release acceptance is claimed.
