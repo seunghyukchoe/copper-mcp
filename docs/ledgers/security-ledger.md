@@ -754,6 +754,17 @@ isolated-stage evidence after the parent cleanup correction, not the older pre-P
 Main2cbf2df is verified green. Exact-head hosted checks and resulting main verification remain
 required before further publication; no physics, execution or apply authority is claimed here.
 
+2026-09-08 SEC-212 review correction: PR301 identified caller-created model pins whose native
+reference differed from their enclosing bound component. Nine regression cases reproduced
+acceptance before the fix: renamed owner, renamed selected pin, and unused no-connect foreign
+pin, each through source admission, expected export rows and operating-point case resolution.
+Both shared admission boundaries now require exact reference equality before optional-pin
+selection. The nine regressions pass; related focused controls passed124 tests with three
+environment-gated skips. All21 case controls passed on Python3.11 and3.13; format and Ruff passed.
+The prior5,700-test full and hosted CI34186402701 succeeded on the pre-correction source only.
+Independent review and fresh corrected-source full/hosted/main validation remain required.
+No source authentication, numerical, physics, engineering or apply authority is added.
+
 | SEC-213 | 2026-09-08 | Conservative operating-point topology preflight | Fresh bounded captured-model parsing; positive R/C/L admission; iterative expansion and node/work/path limits; case-folded hierarchy-collision refusal before renaming; grounded-incidence and voltage/inductor-loop checks. | Malformed, unavailable, unsupported and expired input refuses. No source authentication, deck/backend execution, convergence, physical correctness, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), D-280 |
 
 2026-09-08 SEC-213 isolated controls passed32 tests on each of Python3.11,3.12 and3.13.

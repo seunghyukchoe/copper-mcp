@@ -334,6 +334,8 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Private SPICE source admission and expected export rows reject pins owned by a different
+  bound component, including unused no-connect pins, before case endpoints can be selected.
 - Router and simulator clients use nonblocking local pipe I/O, preserving abort-time process-group
   ownership and bounded closure when an exited leader leaves inherited pipes open. Exchange and
   remover exceptions still clean up; failed or uncertain work cannot return a candidate/result.
