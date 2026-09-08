@@ -704,3 +704,11 @@ and conservative non-authority claims. Ponytail's optional unread _Model.name fi
 is recorded but not applied; _Element.name remains necessary for hierarchical identity.
 Fresh isolated-full and composed/native/publication evidence remain separate gates. None of
 these controls establishes complete singularity detection, convergence or physical accuracy.
+
+2026-09-08 SEC-213 historical full result: the pre-P1 stage at4ca0f79 passed5,724 tests,
+one skip and all make-check gates in673.17s of pytest. Tested tree
+95591f7401516947d4bf59ba77ee7cdb2e1ff6fb; source/input fingerprint
+sha256:104e9bd2b86f21f1a830ec903708524a3b4da239ac167bebb79c7a8d89f77d45.
+The shared container/P1 correction has since been propagated from the reviewed executor stage;
+topology logic and its original assertions remain unchanged. That correction requires new
+exact-source validation. The historical full result is not a pass for the current source.
