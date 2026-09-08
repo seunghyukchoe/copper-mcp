@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private operating-point case binding validates complete explicit rail/load/ground mappings
+  against declared inputs and bound native pins. It creates no deck, execution, convergence,
+  physics, engineering, approval or apply authority.
 - Private fixed-image ngspice execution confines one bounded deck to the pinned ngspice 45.2
   runtime, captures only bounded raw/diagnostic bytes, and confirms container cleanup. It does
   not select caller programs or establish convergence, physics, engineering, approval or apply authority.
@@ -328,6 +331,8 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Private SPICE source admission and expected export rows reject pins owned by a different
+  bound component, including unused no-connect pins, before case endpoints can be selected.
 - Router and simulator clients use nonblocking local pipe I/O, preserving abort-time process-group
   ownership and bounded closure when an exited leader leaves inherited pipes open. Exchange and
   remover exceptions still clean up; failed or uncertain work cannot return a candidate/result.

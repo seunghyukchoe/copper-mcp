@@ -89,6 +89,8 @@ def expected_spice_rows(
             ports = {}
             for pin in reference.pins:
                 _check(active)
+                if pin.node.reference != reference.reference:
+                    raise ValueError
                 if pin.port is None:
                     continue
                 if pin.port in ports or pin.node.no_connect:

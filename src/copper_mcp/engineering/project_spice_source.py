@@ -237,6 +237,8 @@ def _admit_binding(binding: ProjectSpiceModelBinding, deadline: float) -> None:
             if type(node.no_connect) is not bool or type(node.aliases) is not tuple:
                 _fail()
             _bounded_text(node.reference)
+            if node.reference != reference.reference:
+                _fail()
             number = _bounded_text(node.pin_number)
             if any(character.isspace() or character == "=" for character in number):
                 _fail()

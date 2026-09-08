@@ -719,3 +719,58 @@ This is a complete serial run of unchanged tests, limits and authentication, not
 budget relaxation. The earlier parallel run remains unsuccessful evidence and its contention
 hypothesis remains unproven. Independent review accepted the actual P1 implementation; updated
 protected hosted validation and resulting main verification are still required before landing.
+
+| SEC-212 | 2026-09-08 | Explicit operating-point case binding | Closed bounded case JSON; declaration/capture/binding identity checks; complete non-NC native endpoints; native-ground normalization; all-rail mapping; explicit energization; directed load-pair and temperature-limit checks; deadline-bound identities. | Caller-created binding/declaration data is not authenticated source or physics proof. No deck, backend, execution, convergence, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0154](../adr/0154-operating-point-cases-bind-explicit-inputs.md), D-279 |
+
+2026-09-08 SEC-212 isolated controls passed12 tests each on Python3.11,3.12 and3.13.
+Format, Ruff, complete lint/metadata, strict typecheck, security audit and package build passed.
+Independent isolation and metadata review accepted the unchanged source/assertions, complete
+parent ledger prefixes and private non-authority interpretation. Ponytail found no justified
+cuts in this binding stage. These results do not claim fresh isolated-full, native execution,
+physics, hosted publication or main verification; those remain separate gates.
+
+2026-09-08 SEC-212 complete isolated validation: make check passed5,692 tests, one skip,
+90% code coverage and every format, lint, type, security and build gate. Pytest completed
+in619.68 seconds on three workers. Tested commit388768a32138f70404b32c163b1863ce9fd9b667;
+tree663eb5055ed2341ad5f57af9ccafcb913c81b74a; source/input fingerprint
+sha256:6d583420728ca02d564c4dfa6e6a0fbf871a8749ca40383c1dc83ba83b04bfbc.
+Independent source/isolation and metadata reviews accepted. This establishes the isolated
+binding stage's validation, not a simulator, calibrated authority or completed readiness goal.
+Parent-publication, protected hosted checks and resulting main verification remain required.
+
+2026-09-08 SEC-212 parent correction: the six shared container/P1 test files now match the
+independently reviewed nonblocking correction in the executor stage. Case binding and its
+original assertions are unchanged. The earlier full result is pre-correction evidence; it
+does not establish a corrected-source full pass. Parent full/hosted/main validation and this
+stage's updated exact-source gates remain required.
+
+2026-09-08 SEC-212 corrected full validation passed5,700 tests with one skip and90% coverage
+in1759.34s of serial pytest. All format, lint, strict type, security and build gates passed.
+Tested commitac45173c25d3e56b19a7255a09fded1f402ae27a; tree
+6fa848fc31ef0fbbd1b3be5df55b6d75f0c6b587; source/input fingerprint
+sha256:278e96ed0bfcb2e1b826374033c6e95a3663a9970dde0a53ddca7af002da1214.
+The complete test selection, authentication and all limits were unchanged. This is current
+isolated-stage evidence after the parent cleanup correction, not the older pre-P1 result.
+Main2cbf2df is verified green. Exact-head hosted checks and resulting main verification remain
+required before further publication; no physics, execution or apply authority is claimed here.
+
+2026-09-08 SEC-212 review correction: PR301 identified caller-created model pins whose native
+reference differed from their enclosing bound component. Nine regression cases reproduced
+acceptance before the fix: renamed owner, renamed selected pin, and unused no-connect foreign
+pin, each through source admission, expected export rows and operating-point case resolution.
+Both shared admission boundaries now require exact reference equality before optional-pin
+selection. The nine regressions pass; related focused controls passed124 tests with three
+environment-gated skips. All21 case controls passed on Python3.11 and3.13; format and Ruff passed.
+The prior5,700-test full and hosted CI34186402701 succeeded on the pre-correction source only.
+Independent review and fresh corrected-source full/hosted/main validation remain required.
+No source authentication, numerical, physics, engineering or apply authority is added.
+
+2026-09-08 SEC-212 pin-owner correction complete validation: 5,709 tests passed with one skip
+and 90% code coverage in 1764.40 seconds of serial pytest. All format, lint, strict type,
+security and source/wheel build gates passed. Tested commit
+43afebcdea5f9ad2699b6cbbaa690f3de9148a34; tree 31718671f11f8927892ec5bece57abcaec1a99cb;
+source/input fingerprint sha256:10ac9630ef8851c4b303ef98d50f9ec88e9d7665e650841e10cfe3ad4f8fcee0.
+Independent correction review accepted the shared pin-owner guards and reproduced 21 passing
+case controls. Hosted CI34187753206 passed on the same implementation. This record changes no
+source or test bytes; final metadata and exact-tip hosted checks, followed by resulting main
+verification, remain required before the next milestone publishes. No physics or apply claim.
