@@ -686,6 +686,40 @@ for this isolated stage. Parent-history synchronization and protected hosted/mai
 remain required before later publication. Complete project composition and all calibrated
 physics, engineering and application requirements remain separate; this executor grants none.
 
+2026-09-08 SEC-211 hosted P1 correction: an exited leader could be reaped while a descendant
+held its pipe open, after which buffered stream closure could hang. Four real, externally guarded
+probe/cleanup regressions (same-group and escaped descendants) fail against the published source
+in32.19 seconds. The correction uses unbuffered nonblocking selectors, retains leader identity
+until pipe completion or abort, signals the owned group before reaping, and closes local pipes
+without I/O workers. Already-reaped handles do not signal stale groups. Exchange/removal exception
+paths also clean up; their two regressions failed before adding finally ownership.
+All51 focused controls pass on Python3.11,3.12 and3.13, with two real-router cases skipped in
+that selection. Fresh actual small/300KB ngspice checks passed1.594s; both real router smokes
+passed4.62s. Format, Ruff and strict mypy pass. Independent review accepted scoped P1 closure,
+including the stronger unconfirmed-reap refusal/closure control and retained original assertions.
+Source/input fingerprint: sha256:6e031f8b1d0cab3e4303e06873ae1d68d0beea2c4408ef9edc463bbef024ed7b.
+The earlier full run is pre-P1 evidence. A new corrected-source full run, updated PR review/checks
+and main verification remain mandatory; no descendant-containment, physics or apply claim follows.
+
+2026-09-08 SEC-211 parallel full validation was unsuccessful: four native authority controls
+failed while5,684 passed and one skipped in970.40s on three workers. Two SPICE controls expose
+exit-time deep bundle-signature verification timeouts with about8s and5s remaining. Two project
+ERC failures deliberately suppress internal context, so their exact original cause is not
+asserted. The selector/cleanup controls passed in that run. The same four native cases passed
+serially with coverage in51.44s and unchanged authentication/deadline limits; diagnostic timing
+was limited to elapsed time, remaining budget, exit status and exception type. That observation
+does not establish a causal contention result or replace full validation. The next full attempt
+uses standard serial test execution, retaining every test, coverage and all original limits.
+
+2026-09-08 SEC-211 corrected serial full validation passed5,688 tests with one skip and90%
+code coverage in1658.22s of pytest. All format, lint, strict type, security and build gates
+passed. Tested staged treedc4bf17d3960de2a91957c14de0def13422fe150; source/input fingerprint
+sha256:6e031f8b1d0cab3e4303e06873ae1d68d0beea2c4408ef9edc463bbef024ed7b.
+This is a complete serial run of unchanged tests, limits and authentication, not a subset or
+budget relaxation. The earlier parallel run remains unsuccessful evidence and its contention
+hypothesis remains unproven. Independent review accepted the actual P1 implementation; updated
+protected hosted validation and resulting main verification are still required before landing.
+
 | SEC-212 | 2026-09-08 | Explicit operating-point case binding | Closed bounded case JSON; declaration/capture/binding identity checks; complete non-NC native endpoints; native-ground normalization; all-rail mapping; explicit energization; directed load-pair and temperature-limit checks; deadline-bound identities. | Caller-created binding/declaration data is not authenticated source or physics proof. No deck, backend, execution, convergence, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0154](../adr/0154-operating-point-cases-bind-explicit-inputs.md), D-279 |
 
 2026-09-08 SEC-212 isolated controls passed12 tests each on Python3.11,3.12 and3.13.
@@ -694,6 +728,21 @@ Independent isolation and metadata review accepted the unchanged source/assertio
 parent ledger prefixes and private non-authority interpretation. Ponytail found no justified
 cuts in this binding stage. These results do not claim fresh isolated-full, native execution,
 physics, hosted publication or main verification; those remain separate gates.
+
+2026-09-08 SEC-212 complete isolated validation: make check passed5,692 tests, one skip,
+90% code coverage and every format, lint, type, security and build gate. Pytest completed
+in619.68 seconds on three workers. Tested commit388768a32138f70404b32c163b1863ce9fd9b667;
+tree663eb5055ed2341ad5f57af9ccafcb913c81b74a; source/input fingerprint
+sha256:6d583420728ca02d564c4dfa6e6a0fbf871a8749ca40383c1dc83ba83b04bfbc.
+Independent source/isolation and metadata reviews accepted. This establishes the isolated
+binding stage's validation, not a simulator, calibrated authority or completed readiness goal.
+Parent-publication, protected hosted checks and resulting main verification remain required.
+
+2026-09-08 SEC-212 parent correction: the six shared container/P1 test files now match the
+independently reviewed nonblocking correction in the executor stage. Case binding and its
+original assertions are unchanged. The earlier full result is pre-correction evidence; it
+does not establish a corrected-source full pass. Parent full/hosted/main validation and this
+stage's updated exact-source gates remain required.
 
 | SEC-213 | 2026-09-08 | Conservative operating-point topology preflight | Fresh bounded captured-model parsing; positive R/C/L admission; iterative expansion and node/work/path limits; case-folded hierarchy-collision refusal before renaming; grounded-incidence and voltage/inductor-loop checks. | Malformed, unavailable, unsupported and expired input refuses. No source authentication, deck/backend execution, convergence, physical correctness, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), D-280 |
 
