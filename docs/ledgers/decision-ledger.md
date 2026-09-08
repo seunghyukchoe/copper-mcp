@@ -291,3 +291,5 @@ requires a separate private native witness before the original-context summary m
 This restores the existing authoritative-rule contract; it does not add a public authority surface.
 Complete validation and independent integrated review remain pending at this record. The witness
 does not certify every assertion expression; that distinct native compiler limitation remains open.
+
+| D-284 | 2026-09-08 | Proposed | Measure complete supplied-IR foreign-net spacing with exact geometry, downward rounding, source/rule identity and cumulative work accounting. Unavailable input never supplies a fabricated numeric margin. Keep v1 scoring unchanged until explicit versioned integration. | [ADR-0159](../adr/0159-composed-clearance-is-an-input-bound-measurement.md), SEC-217 |

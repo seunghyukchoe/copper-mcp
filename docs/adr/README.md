@@ -231,6 +231,7 @@ never silently widens it.
 | [0152](0152-joint-native-views-share-acquisition-not-authority.md) | Joint native views share acquisition, not authority | Proposed |
 | [0153](0153-confined-ngspice-execution-confirms-cleanup.md) | Confined ngspice execution confirms cleanup | Proposed |
 | [0154](0154-operating-point-cases-bind-explicit-inputs.md) | Operating-point cases bind explicit inputs | Proposed |
+| [0159](0159-composed-clearance-is-an-input-bound-measurement.md) | Composed clearance is an input-bound measurement | Proposed |
 | [0160](0160-custom-rule-loading-needs-native-witness.md) | Custom-rule loading needs a native witness | Proposed |
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and

@@ -801,3 +801,13 @@ Independent final implementation review repeated 124 tests and 25 subtests and f
 findings in scope. Fresh full validation, protected hosted/main checks and final evidence review
 remain pending. This is loading/fallback detection, not static rule-expression certification;
 inactive invalid assertion expressions remain a distinct unresolved native limitation.
+
+| SEC-217 | 2026-09-08 | Private composed IR-class clearance | Complete input admission before hashing; exact rational geometry; physical-layer and net-class checks; cumulative work; fixed refusals; final cancellation; input-bound measured/unavailable observation. | Private implementation review accepted; parser-produced quoted strings are preserved while hostile subclasses refuse. Native comparisons are owned fixtures only. Full validation, versioned ranking integration and held-out improvement remain pending; no native-rule, physics or application authority is added. | [ADR-0159](../adr/0159-composed-clearance-is-an-input-bound-measurement.md), D-284 |
+
+2026-09-08 SEC-217 scoped evidence: 73 unit controls plus two independent arithmetic tests passed.
+The latter cover 128 deterministic projection samples and translation/reflection invariance, not
+128 physical measurements. Independent review repeated 75 non-native tests in 0.33 seconds.
+The real KiCad circular-pad comparison passed three cases in 1.34 seconds after explicit `0.5mm`
+replaced the incorrect unitless fixture value. Earlier parser-admission and wrong-unit attempts
+remain failed evidence, not native validation passes. New shared rule-loading integration still
+needs current-source native/full verification. No production ranking or readiness gain is claimed.
