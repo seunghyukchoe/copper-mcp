@@ -802,27 +802,6 @@ findings in scope. Fresh full validation, protected hosted/main checks and final
 remain pending. This is loading/fallback detection, not static rule-expression certification;
 inactive invalid assertion expressions remain a distinct unresolved native limitation.
 
-| SEC-217 | 2026-09-08 | Private composed IR-class clearance | Complete input admission before hashing; exact rational geometry; physical-layer and net-class checks; cumulative work; fixed refusals; final cancellation; input-bound measured/unavailable observation. | Private implementation review accepted; parser-produced quoted strings are preserved while hostile subclasses refuse. Native comparisons are owned fixtures only. Full validation, versioned ranking integration and held-out improvement remain pending; no native-rule, physics or application authority is added. | [ADR-0159](../adr/0159-composed-clearance-is-an-input-bound-measurement.md), D-284 |
-
-2026-09-08 SEC-217 scoped evidence: 73 unit controls plus two independent arithmetic tests passed.
-The latter cover 128 deterministic projection samples and translation/reflection invariance, not
-128 physical measurements. Independent review repeated 75 non-native tests in 0.33 seconds.
-The real KiCad circular-pad comparison passed three cases in 1.34 seconds after explicit `0.5mm`
-replaced the incorrect unitless fixture value. Earlier parser-admission and wrong-unit attempts
-remain failed evidence, not native validation passes. New shared rule-loading integration still
-needs current-source native/full verification. No production ranking or readiness gain is claimed.
-
-2026-09-08 SEC-003 complete validation of the loading/fallback correction passed 5,781 tests
-with one skip and 90% code coverage in 1765.24 seconds of serial pytest. Format, lint/metadata,
-strict typecheck, secret/dependency audit and source/wheel builds all passed. Tested commit
-68a811b067b0c81af6aaa80b8256b4794b691cc2; tree 1bc3e5dc623df889e69f97698f0d9e928a553311;
-source/input fingerprint sha256:0fb075b0f78365db1bca07a7154dd99d235b2b6cb1303fad5c58b4b2ad9c5563.
-The run enabled the new native rule-loading controls and existing real-router/native settings,
-without removing tests, relaxing limits or replacing native checks with mocks. This record changes
-no implementation or test bytes. Final record review, exact-tip hosted validation and resulting
-main verification remain required. The static-expression limitation above and full five-area
-readiness, physics and human-approval gates remain open.
-
 | SEC-213 | 2026-09-08 | Conservative operating-point topology preflight | Fresh bounded captured-model parsing; positive R/C/L admission; iterative expansion and node/work/path limits; case-folded hierarchy-collision refusal before renaming; grounded-incidence and voltage/inductor-loop checks. | Malformed, unavailable, unsupported and expired input refuses. No source authentication, deck/backend execution, convergence, physical correctness, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), D-280 |
 
 2026-09-08 SEC-213 isolated controls passed32 tests on each of Python3.11,3.12 and3.13.
@@ -922,3 +901,43 @@ production executable discovery, identity admission and drift checks are unchang
 cases failed before correction (43.80 seconds) and passed afterward on Python 3.12 (149.43
 seconds on a heavily contended host). This is mock-contract evidence, not native execution.
 The new exact-tip hosted matrix and complete integration validation remain pending.
+
+| SEC-216 | 2026-09-08 | Private complete layered-tree composition | Exact source-pad/layer membership; bounded pre-hash admission; deterministic replay; complete source-net verification; shared through-via identity and remaining allowances; source-preserving reparse; context-free callback errors and final cancellation checks. | Scoped correctness review is accepted. Native DRC, full integration, held-out quality and protected publication remain pending. No external conversion, physics, human confirmation, apply or saving authority is introduced. | [ADR-0158](../adr/0158-layered-trees-bind-complete-pad-connectivity.md), D-283 |
+
+2026-09-08 SEC-216 independent review closed the reported terminal-layer, complete-pad-set,
+nonfinite budget, inherited exception-context, pre-hash traversal, shared-via, remaining allowance,
+late-cancellation and same-layer/source-pad contact findings. The final reviewer independently ran
+71 scoped tests in 1.42 seconds, plus pair-budget and cancellation controls. The implementation
+worker reported 154 combined new/legacy unit tests in 6.99 seconds. Counts are overlapping, not
+additive. Inner-only SMD fixtures are synthetic only; the ordinary outer-pad native fixture is
+prepared but has not executed. No native, full-suite, held-out or readiness acceptance is claimed.
+
+2026-09-08 SEC-216 native fixture check: the ordinary three-outer-pad/four-layer case passed
+with KiCad 10.0.5 in 2.03 seconds. Its source had unconnected items; the deterministically
+serialized complete result had zero hard DRC errors and zero unconnected items. The original
+source bytes, inode and modification time were unchanged. This uses distinct single-pad blocker
+nets and exercises actual inner copper, not the invalid inner-only SMD fixture. Source/input
+fingerprint sha256:6e9b09caecd6f810520b5e04ee792e521fff50a7b5bf66f3a1c5ccb9468a5072.
+This owned fixture proves only that composed case. Full integration, broader native coverage,
+held-out quality and protected publication remain required; no physics or apply authority is added.
+
+| SEC-217 | 2026-09-08 | Private composed IR-class clearance | Complete input admission before hashing; exact rational geometry; physical-layer and net-class checks; cumulative work; fixed refusals; final cancellation; input-bound measured/unavailable observation. | Private implementation review accepted; parser-produced quoted strings are preserved while hostile subclasses refuse. Native comparisons are owned fixtures only. Full validation, versioned ranking integration and held-out improvement remain pending; no native-rule, physics or application authority is added. | [ADR-0159](../adr/0159-composed-clearance-is-an-input-bound-measurement.md), D-284 |
+
+2026-09-08 SEC-217 scoped evidence: 73 unit controls plus two independent arithmetic tests passed.
+The latter cover 128 deterministic projection samples and translation/reflection invariance, not
+128 physical measurements. Independent review repeated 75 non-native tests in 0.33 seconds.
+The real KiCad circular-pad comparison passed three cases in 1.34 seconds after explicit `0.5mm`
+replaced the incorrect unitless fixture value. Earlier parser-admission and wrong-unit attempts
+remain failed evidence, not native validation passes. New shared rule-loading integration still
+needs current-source native/full verification. No production ranking or readiness gain is claimed.
+
+2026-09-08 SEC-003 complete validation of the loading/fallback correction passed 5,781 tests
+with one skip and 90% code coverage in 1765.24 seconds of serial pytest. Format, lint/metadata,
+strict typecheck, secret/dependency audit and source/wheel builds all passed. Tested commit
+68a811b067b0c81af6aaa80b8256b4794b691cc2; tree 1bc3e5dc623df889e69f97698f0d9e928a553311;
+source/input fingerprint sha256:0fb075b0f78365db1bca07a7154dd99d235b2b6cb1303fad5c58b4b2ad9c5563.
+The run enabled the new native rule-loading controls and existing real-router/native settings,
+without removing tests, relaxing limits or replacing native checks with mocks. This record changes
+no implementation or test bytes. Final record review, exact-tip hosted validation and resulting
+main verification remain required. The static-expression limitation above and full five-area
+readiness, physics and human-approval gates remain open.

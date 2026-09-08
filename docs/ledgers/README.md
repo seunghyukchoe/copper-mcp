@@ -36,6 +36,11 @@ topology, project, host-consent and layered-tree identities D-280 through D-283,
 SEC-216 and ADR-0155 through ADR-0158. ADR-0160 is the integrated shared DRC correction and
 amends existing D-005/SEC-003. Pending identities are not free for reuse.
 
+The 2026-09-08 layered-tree lane steps over D-279 through D-282, SEC-212 through SEC-215 and
+ADR-0154 through ADR-0157, held by the operating-point and host-consent stages. It takes D-283,
+SEC-216 and ADR-0158. These pending identities are not available for reuse; their absence from
+this isolated branch is not permission to recycle them.
+
 The 2026-08-24 parallel closure wave pre-assigned `D-219`/`R-170`/`SEC-158`/`ADR-0119`
 to the authoritative-signoff lane and `D-220`/`R-171` to its sibling lane. This record therefore
 takes `D-221`/`R-172`/`SEC-159`/`ADR-0120` rather than racing either branch. `R-169` was deliberately

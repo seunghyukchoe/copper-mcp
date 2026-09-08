@@ -234,8 +234,10 @@ never silently widens it.
 | [0155](0155-operating-point-topology-is-conservative-preflight.md) | Operating-point topology is conservative preflight | Proposed |
 | [0156](0156-project-operating-point-is-bounded-observation.md) | Project operating point is bounded observation | Proposed |
 | [0157](0157-verified-host-delivery-consent-is-challenge-bound.md) | Verified-host confirmation is challenge-bound | Proposed |
+| [0158](0158-layered-trees-bind-complete-pad-connectivity.md) | Layered trees bind complete pad connectivity | Proposed |
 | [0159](0159-composed-clearance-is-an-input-bound-measurement.md) | Composed clearance is an input-bound measurement | Proposed |
 | [0160](0160-custom-rule-loading-needs-native-witness.md) | Custom-rule loading needs a native witness | Proposed |
+
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
@@ -399,3 +401,7 @@ records execution above the existing ADR-0132 foundation. No spent identifier is
 2026-09-08 corrective increment: ADR-0155 through ADR-0159 remain held by the topology,
 project-execution, host-consent, layered-tree and measured-clearance lanes. The urgent DRC
 correction takes ADR-0160 and amends existing D-005/SEC-003; no held number is recycled.
+
+2026-09-08 parallel increment: ADR-0154 through ADR-0157 are held by the operating-point cases,
+topology, project execution and host-consent stages. The layered-tree increment takes ADR-0158
+rather than reusing those pending identities. Its isolated branch does not yet contain their files.

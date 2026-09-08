@@ -9,6 +9,9 @@ from copper_mcp.adapters import (
     render_kicad_candidate_board,
     render_kicad_layered_candidate_board,
 )
+from copper_mcp.adapters.kicad_layered_tree_patch import (
+    render_kicad_layered_tree_candidate_board,
+)
 from copper_mcp.board_ir import BoardIRSnapshot
 from copper_mcp.config import Settings
 from copper_mcp.optimization.contracts import digest_document
@@ -23,6 +26,8 @@ from copper_mcp.routing import (
     LayeredRouteRequest,
 )
 from copper_mcp.routing.contracts import AStarSettings, RouteRequest
+from copper_mcp.routing.layered_tree_contracts import LayeredTreeTerminal
+from copper_mcp.routing.layered_tree_router import LayeredTreeRequest, LayeredTreeRouter
 
 
 @dataclass(frozen=True)
@@ -80,8 +85,8 @@ def route_targets(
 
     Each successful edit is replayed, serialized, and reparsed before the next net sees it.
     Already-connected nets count as connected without manufacturing an empty copper candidate.
-    Multi-pin nets require a common supported layer; cross-layer multi-pin search remains a
-    refusal until its tree composer can preserve all pad connectivity.
+    Multi-pin nets first retain the established common-layer path, then use the private layered
+    tree composer only when every original target can be bound and replayed as one component.
     """
 
     base = snapshot.snapshot_digest
@@ -172,6 +177,51 @@ def route_targets(
                 candidate_ids.append(layered.candidate.candidate_id)
                 length += layered.candidate.metrics.wire_length_nm
                 vias += layered.candidate.metrics.vias
+        if routed_source is None and len(pads) > 2:
+            routing_settings = _reserve_search(prepared, probe)
+            ordered_pads = tuple(sorted(pads, key=lambda pad: pad.id))
+            terminals: list[LayeredTreeTerminal] = []
+            for pad in ordered_pads:
+                access = next(
+                    (
+                        layer.id
+                        for layer in layers
+                        if layer.kind == "signal" and layer.id in pad.layer_ids
+                    ),
+                    None,
+                )
+                if access is None:
+                    raise OptimizationExecutionError("unsupported_geometry")
+                terminals.append(LayeredTreeTerminal(pad.id, access))
+            tree_request = LayeredTreeRequest(
+                board_revision=snapshot.snapshot_digest,
+                net_id=net,
+                terminals=tuple(terminals),
+                grid_step_nm=routing_settings.grid_step_nm,
+                seed=prepared.request.seed + index,
+                settings=LayeredAStarSettings(
+                    max_expansions=routing_settings.max_expansions,
+                    max_obstacle_checks=routing_settings.max_obstacle_checks,
+                    max_nodes=routing_settings.max_grid_nodes,
+                    max_obstacles=routing_settings.max_obstacles,
+                ),
+            )
+            tree = LayeredTreeRouter().propose(snapshot, tree_request, cancelled=probe.cancelled)
+            probe.checkpoint()
+            if tree.candidate is not None:
+                probes += tree.candidate.metrics.branch_count
+                routed_source = render_kicad_layered_tree_candidate_board(
+                    source,
+                    snapshot,
+                    tree.candidate,
+                    prepared.profile,
+                    request=tree_request,
+                    limits=limits,
+                    cancelled=probe.cancelled,
+                )
+                candidate_ids.append(tree.candidate.candidate_id)
+                length += tree.candidate.metrics.wire_length_nm
+                vias += tree.candidate.metrics.vias
         if routed_source is None:
             raise OptimizationExecutionError("backend_failure")
         converted = parse_kicad_bytes(routed_source, prepared.profile, limits)
