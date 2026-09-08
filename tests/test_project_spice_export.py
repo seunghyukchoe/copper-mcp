@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+from dataclasses import FrozenInstanceError
 
 import pytest
 from test_project_spice_model_binding import _case
@@ -77,6 +78,55 @@ def test_all_stages_receive_one_shared_deadline(tmp_path, monkeypatch):
     result = export.run_project_spice_export(*case[:7])
     assert len(deadlines) == 5 and len(set(deadlines)) == 1
     assert result.document()["simulation"] == "not_run"
+
+
+def test_retained_bundle_is_private_immutable_and_public_report_is_identical(tmp_path, monkeypatch):
+    case = _mock_case(tmp_path, monkeypatch)
+    prepared = []
+    original = export.prepare_project_spice_source
+
+    def capture_prepared(*args, **kwargs):
+        result = original(*args, **kwargs)
+        prepared.append(result)
+        return result
+
+    monkeypatch.setattr(export, "prepare_project_spice_source", capture_prepared)
+    retained = export._run_project_spice_export_retained(*case[:7])
+    public = export.run_project_spice_export(*case[:7])
+    assert retained.report == public
+    assert retained.prepared is prepared[0]
+    assert retained.binding is not None
+    assert retained.report.observation.rows
+    assert retained.prepared.model_paths
+    assert repr(retained) == "<_RetainedProjectSpiceExport redacted>"
+    with pytest.raises(FrozenInstanceError):
+        retained.report = public
+
+
+def test_public_export_executes_once_and_stale_final_source_blocks_retained_delivery(
+    tmp_path, monkeypatch
+):
+    case = _mock_case(tmp_path, monkeypatch)
+    calls = []
+    original_execute = export._execute
+
+    def counted(*args, **kwargs):
+        calls.append(True)
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(export, "_execute", counted)
+    assert isinstance(export.run_project_spice_export(*case[:7]), export.ProjectSpiceExport)
+    assert calls == [True]
+    original_digest = export.ProjectSpiceExport._digest
+
+    def stale(report, deadline):
+        result = original_digest(report, deadline)
+        (tmp_path / case[0].root_path).write_bytes(b"changed")
+        return result
+
+    monkeypatch.setattr(export.ProjectSpiceExport, "_digest", stale)
+    with pytest.raises(export.ProjectSpiceExportError):
+        export._run_project_spice_export_retained(*case[:7])
 
 
 @pytest.mark.parametrize("deadline", (True, float("nan"), float("inf"), 10**1000, 0))

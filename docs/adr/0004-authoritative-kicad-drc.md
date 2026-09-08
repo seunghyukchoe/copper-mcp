@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-03
+- Custom-rule loading follow-up: [ADR-0160](0160-custom-rule-loading-needs-native-witness.md)
 
 ## Context
 

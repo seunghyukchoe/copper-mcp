@@ -310,3 +310,12 @@ reversed pin mappings, including reversed subcircuit header order. They verify f
 not ngspice convergence, device calibration or full project binding. The production path still needs
 complete per-pin associations or explicit NC decisions bound to checked BOM/native/project inputs,
 a sealed simulator environment, freshness checks and independently validated physical limits.
+
+## Bounded nominal-DC operating-point observation
+
+The private nominal-DC coordinator reuses one internally verified SPICE export for explicit cases,
+checks topology before deck naming, uses captured model definitions, runs each case twice through
+the fixed executor, validates bounded diagnostics and vectors, then recaptures artifacts and
+rechecks source bytes. This is a passive/diode observation only: duration is not exercised, and
+calibration/model accuracy remain not_run while engineering is inconclusive and apply is none. It
+does not earn SI, PI, thermal, EMC, convergence, physical-correctness, approval or release credit.
