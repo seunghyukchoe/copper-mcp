@@ -783,3 +783,12 @@ development reference is preserved at fingerprint
 sha256:18793b02532f865d42ccb978f945ced1a895bae52ffeeb59ed17f08e54a16f27.
 The earlier a105 fingerprint and its full run remain historical. Corrected-source full and
 protected publication/main validation are still required before this stage can land.
+
+2026-09-08 SEC-214 corrected full attempt remains unsuccessful:5,747 tests passed, one skipped
+and one native SPICE-source control failed in2150.82s. Its trace names exit-time deep bundle
+authentication timing out with about20s remaining. That test and authentication implementation
+are unchanged from main2cbf2df. A standalone signature check subsequently completed in7.48s;
+the exact failed test passed with coverage and unchanged limits in23.24s, with timing-only
+diagnostics showing deep checks around4s. These observations do not prove the cause of the
+full-run latency spike or establish a full pass. No check was cached, skipped or weakened.
+Complete-project acceptance remains open pending successful full validation and hosted gates.
