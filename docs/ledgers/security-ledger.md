@@ -812,3 +812,24 @@ without removing tests, relaxing limits or replacing native checks with mocks. T
 no implementation or test bytes. Final record review, exact-tip hosted validation and resulting
 main verification remain required. The static-expression limitation above and full five-area
 readiness, physics and human-approval gates remain open.
+
+2026-09-08 SEC-003 PR302 follow-up: review found that each native pass independently resolves
+the executable. A changed PATH, configured alias or executable can separate the loading witness
+from the original report's backend. The prior full run is successful evidence for its recorded
+source, but does not close this finding. A single resolved executable identity with bounded
+content/stat checks before both passes and after cleanup is being implemented. It will require
+new scoped/full/hosted validation; no atomic-exec, vendor or shared-library assurance is implied.
+Dependent topology validation was intentionally interrupted, exit130, after322 passing tests
+and442.61 seconds. Its partial log remains non-successful evidence; it will not be reused as a pass.
+
+2026-09-08 SEC-003 executable-binding correction: one resolved path and bounded descriptor-backed
+content/stat identity now bind the operation. Drift checks cover both passes and final cleanup,
+including no-rule execution. A new mocked outbound-timeout control reproduced 10 seconds being
+granted after seven seconds of a ten-second budget; the corrected no-rule path grants three.
+Independent review accepted the implementation and this final deadline correction. Integrated
+checks passed 137 tests and 25 subtests on Python 3.11, 3.12 and 3.13; four native cases were
+deselected in those runs. A separate controlled native group passed 18 cases in 39.14 seconds.
+An earlier worker command accidentally selected one native unittest and failed its workspace
+assertion; that run is not acceptance evidence, and no installed executable was modified.
+Fresh complete and exact-tip hosted validation remain required. Executable consistency does not
+establish atomic pathname execution, publisher authentication or shared-library integrity.
