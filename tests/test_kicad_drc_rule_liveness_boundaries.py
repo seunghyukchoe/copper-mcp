@@ -3,11 +3,16 @@
 from pathlib import Path
 
 import pytest
+from kicad_drc_mock import make_fake_kicad_cli
 from test_kicad_drc_rule_liveness import _build, _context, _summary
 
 from copper_mcp import kicad_cli
 from copper_mcp import kicad_drc_rule_liveness as rules
 from copper_mcp.config import Settings
+
+
+def _settings(tmp_path: Path) -> Settings:
+    return Settings(workspace=tmp_path, kicad_cli=make_fake_kicad_cli(tmp_path))
 
 
 @pytest.mark.parametrize("extension", [".KICAD_PCB", ".KiCaD_PcB"])
@@ -26,7 +31,7 @@ def test_no_rule_fast_path_preserves_case_insensitive_board_suffixes(
     monkeypatch.setattr(kicad_cli, "_run_captured_drc_pass", run_pass)
     assert (
         kicad_cli._run_captured_drc(
-            context, board_relative=board_name, settings=Settings(workspace=tmp_path)
+            context, board_relative=board_name, settings=_settings(tmp_path)
         )
         == expected
     )
@@ -54,7 +59,7 @@ def test_rule_liveness_path_preserves_case_insensitive_board_suffixes(
     monkeypatch.setattr(kicad_cli, "_run_captured_drc_pass", run_pass)
     assert (
         kicad_cli._run_captured_drc(
-            context, board_relative=board_name, settings=Settings(workspace=tmp_path)
+            context, board_relative=board_name, settings=_settings(tmp_path)
         )
         == expected
     )
@@ -84,7 +89,7 @@ def test_final_private_tree_check_cannot_outlive_shared_deadline(tmp_path: Path,
         kicad_cli._run_captured_drc(
             _context(),
             board_relative="board.kicad_pcb",
-            settings=Settings(workspace=tmp_path),
+            settings=_settings(tmp_path),
             deadline=10.0,
         )
     assert len(checks) == 3
@@ -151,7 +156,7 @@ def test_valid_unicode_and_space_paths_survive_context_admission(tmp_path: Path,
     monkeypatch.setattr(kicad_cli, "_run_captured_drc_pass", run_pass)
     assert (
         kicad_cli._run_captured_drc(
-            context, board_relative=board_name, settings=Settings(workspace=tmp_path)
+            context, board_relative=board_name, settings=_settings(tmp_path)
         )
         == expected
     )
@@ -183,7 +188,7 @@ def test_nonfinite_or_overflowing_deadline_is_a_fixed_refusal(tmp_path: Path, de
         kicad_cli._run_captured_drc(
             _context(),
             board_relative="board.kicad_pcb",
-            settings=Settings(workspace=tmp_path),
+            settings=_settings(tmp_path),
             deadline=deadline,  # type: ignore[arg-type]
         )
 
@@ -240,7 +245,7 @@ def test_new_store_restore_and_cleanup_errors_are_context_free(
         kicad_cli._run_captured_drc(
             _context(),
             board_relative="board.kicad_pcb",
-            settings=Settings(workspace=tmp_path),
+            settings=_settings(tmp_path),
         )
     assert private not in str(error.value)
     assert error.value.__cause__ is None
@@ -274,7 +279,7 @@ def test_cleanup_completion_is_inside_the_shared_deadline(tmp_path: Path, monkey
         kicad_cli._run_captured_drc(
             _context(),
             board_relative="board.kicad_pcb",
-            settings=Settings(workspace=tmp_path),
+            settings=_settings(tmp_path),
             deadline=10.0,
         )
     assert cleaned == [True]
@@ -298,7 +303,7 @@ def test_invalid_path_text_is_refused_before_context_hash(tmp_path: Path, monkey
     )
     with pytest.raises(kicad_cli.KiCadCliError):
         kicad_cli._run_captured_drc(
-            context, board_relative="board.kicad_pcb", settings=Settings(workspace=tmp_path)
+            context, board_relative="board.kicad_pcb", settings=_settings(tmp_path)
         )
 
 
@@ -312,6 +317,6 @@ def test_new_original_store_validation_error_has_no_private_cause(tmp_path: Path
     monkeypatch.setattr(kicad_cli, "_validate_snapshot_tree", fail_validation)
     with pytest.raises(kicad_cli.KiCadCliError) as error:
         kicad_cli._run_captured_drc(
-            _context(), board_relative="board.kicad_pcb", settings=Settings(workspace=tmp_path)
+            _context(), board_relative="board.kicad_pcb", settings=_settings(tmp_path)
         )
     assert error.value.__cause__ is None and error.value.__context__ is None

@@ -6,6 +6,15 @@ import re
 from pathlib import Path
 
 
+def make_fake_kicad_cli(root: Path, name: str = "kicad-cli") -> Path:
+    """Create one inert executable used only as a stable unit-test identity."""
+
+    executable = root / name
+    executable.write_bytes(b"#!/bin/sh\nexit 0\n")
+    executable.chmod(0o700)
+    return executable.resolve()
+
+
 def rule_liveness_report(board: Path) -> dict[str, object] | None:
     payload = board.read_bytes()
     if b"__copper_mcp_rule_liveness_" not in payload:

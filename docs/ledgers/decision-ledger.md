@@ -295,3 +295,13 @@ does not certify every assertion expression; that distinct native compiler limit
 | D-280 | 2026-09-08 | Proposed | Preflight only conservative bounded nominal-DC topology from freshly parsed captured model bytes. Require positive passive values, collision-free hierarchy, minimum grounded incidence and no voltage/inductor constraint loop. Unsupported or unavailable topology refuses; no source authentication, backend execution, convergence, physics, engineering, approval or apply authority follows. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), SEC-213 |
 
 | D-281 | 2026-09-08 | Proposed | Coordinate one internally retained verified SPICE export across explicit passive/diode nominal-DC cases. Require topology before naming, exact captured models, two fixed-runtime replays per case, bounded diagnostics/vector/numeric checks and final source/artifact freshness. Preserve v1 export identities; duration/calibration/model accuracy remain not_run and engineering is inconclusive. | [ADR-0156](../adr/0156-project-operating-point-is-bounded-observation.md), SEC-214 |
+
+2026-09-08 D-254 corrective follow-up: the held-out audio evaluator also requires
+`work_exhausted` and exactly its declared 96 placement evaluations before reading retained
+scores. A controlled scheduling pause reproduced partial-versus-complete replay divergence;
+the original failing log did not retain both metric objects, so that mechanism is not claimed
+as its proven historical cause. Six regression cases refuse interrupted or mismatched work
+counts. No solver setting, timer, fixture, signature or historical artifact is changed.
+The first covered module validation failed four routing targets and one historical replay
+timeout, not this new placement guard; those failures remain unsuccessful validation evidence.
+Full integrated validation remains required.

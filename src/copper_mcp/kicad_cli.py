@@ -83,6 +83,7 @@ KICAD_ERC_SCHEMA = "https://schemas.kicad.org/erc.v1.json"
 _MACOS_KICAD_CLI = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")
 _ACCEPTED_DRC_RETURN_CODES = frozenset({0, 5})
 _ACCEPTED_ERC_RETURN_CODES = frozenset({0, 5})
+_MAX_KICAD_EXECUTABLE_BYTES = 512 * 1024 * 1024
 _MAX_ERC_SHEETS = 1_000
 _MAX_ERC_VIOLATIONS = 100_000
 _SEVERITIES = frozenset({"error", "warning"})
@@ -251,6 +252,136 @@ def discover_kicad_cli(settings: Settings) -> Path:
         if executable is not None:
             return executable
     raise KiCadCliError("KiCad CLI was not found; set COPPER_MCP_KICAD_CLI")
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class _PinnedExecutable:
+    """One bounded executable observation, not a publisher-authentication claim."""
+
+    path: Path
+    device: int
+    inode: int
+    mode: int
+    size: int
+    modified_ns: int
+    changed_ns: int
+    digest: str
+
+
+def _read_kicad_cli_executable(
+    path: Path,
+    settings: Settings,
+    deadline: float,
+    *,
+    error_message: str,
+) -> _PinnedExecutable:
+    """Read one stable regular executable through a non-following descriptor."""
+
+    _candidate_drc_deadline_settings(settings, deadline)
+    descriptor: int | None = None
+    failed = False
+    identity: _PinnedExecutable | None = None
+    try:
+        if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+            failed = True
+        else:
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            before = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_mode & 0o111 == 0
+                or before.st_size < 0
+                or before.st_size > _MAX_KICAD_EXECUTABLE_BYTES
+            ):
+                failed = True
+            else:
+                digest = hashlib.sha256()
+                total = 0
+                while total <= _MAX_KICAD_EXECUTABLE_BYTES:
+                    _candidate_drc_deadline_settings(settings, deadline)
+                    chunk = os.read(
+                        descriptor,
+                        min(64 * 1024, _MAX_KICAD_EXECUTABLE_BYTES + 1 - total),
+                    )
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    digest.update(chunk)
+                after = os.fstat(descriptor)
+                before_state = (
+                    before.st_dev,
+                    before.st_ino,
+                    before.st_mode,
+                    before.st_size,
+                    before.st_mtime_ns,
+                    before.st_ctime_ns,
+                )
+                after_state = (
+                    after.st_dev,
+                    after.st_ino,
+                    after.st_mode,
+                    after.st_size,
+                    after.st_mtime_ns,
+                    after.st_ctime_ns,
+                )
+                if (
+                    total > _MAX_KICAD_EXECUTABLE_BYTES
+                    or total != before.st_size
+                    or before_state != after_state
+                ):
+                    failed = True
+                else:
+                    identity = _PinnedExecutable(
+                        path,
+                        before.st_dev,
+                        before.st_ino,
+                        before.st_mode,
+                        before.st_size,
+                        before.st_mtime_ns,
+                        before.st_ctime_ns,
+                        "sha256:" + digest.hexdigest(),
+                    )
+    except (OSError, OverflowError, ValueError):
+        failed = True
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                failed = True
+    _candidate_drc_deadline_settings(settings, deadline)
+    if failed or identity is None:
+        raise KiCadCliError(error_message) from None
+    return identity
+
+
+def _capture_kicad_cli_executable(settings: Settings, deadline: float) -> _PinnedExecutable:
+    """Resolve the operation's executable once and capture its bounded identity."""
+
+    _candidate_drc_deadline_settings(settings, deadline)
+    executable = discover_kicad_cli(settings)
+    _candidate_drc_deadline_settings(settings, deadline)
+    return _read_kicad_cli_executable(
+        executable,
+        settings,
+        deadline,
+        error_message="KiCad CLI executable identity could not be established",
+    )
+
+
+def _verify_kicad_cli_executable(
+    expected: _PinnedExecutable, settings: Settings, deadline: float
+) -> None:
+    """Reject an observable path, inode, metadata, or content identity change."""
+
+    observed = _read_kicad_cli_executable(
+        expected.path,
+        settings,
+        deadline,
+        error_message="KiCad CLI executable changed during DRC",
+    )
+    if observed != expected:
+        raise KiCadCliError("KiCad CLI executable changed during DRC") from None
 
 
 def _revision(payload: bytes) -> str:
@@ -888,6 +1019,7 @@ def _run_captured_drc_pass(
     *,
     board_relative: str,
     settings: Settings,
+    executable: _PinnedExecutable,
     deadline: float | None = None,
     witness: RuleLivenessWitness | None = None,
 ) -> DrcSummary:
@@ -898,7 +1030,6 @@ def _run_captured_drc_pass(
         raise KiCadCliError("captured KiCad DRC context is missing its source board")
     base_revision = _revision(context[board_relative])
     drc_context_revision = _context_revision(context)
-    executable = discover_kicad_cli(settings)
     if os.name != "posix":
         raise KiCadCliError("bounded KiCad DRC execution is unsupported on this platform")
     python_executable = _validated_executable(Path(sys.executable))
@@ -930,7 +1061,7 @@ def _run_captured_drc_pass(
         except OSError as error:
             raise KiCadCliError("private KiCad process state could not be created") from error
         kicad_command = [
-            str(executable),
+            str(executable.path),
             "pcb",
             "drc",
             "--format",
@@ -1071,14 +1202,19 @@ def _run_captured_drc(
         admission_failed = True
     if admission_failed:
         raise KiCadCliError("KiCad custom-rule context is malformed") from None
+    executable = _capture_kicad_cli_executable(settings, active_deadline)
     rules_present = has_custom_rules(context, board_relative)
     if not rules_present:
-        return _run_captured_drc_pass(
+        _verify_kicad_cli_executable(executable, settings, active_deadline)
+        single_summary = _run_captured_drc_pass(
             context,
             board_relative=board_relative,
             settings=settings,
-            deadline=deadline,
+            executable=executable,
+            deadline=active_deadline,
         )
+        _verify_kicad_cli_executable(executable, settings, active_deadline)
+        return single_summary
     settings = _candidate_drc_deadline_settings(settings, active_deadline)
     original_revision = _context_revision(context)
     derivative_refused = False
@@ -1120,10 +1256,12 @@ def _run_captured_drc(
             raise KiCadCliError("KiCad custom-rule source store could not be secured") from None
         context.clear()
         _validate_rule_source_store(original_root, expected_files, settings)
+        _verify_kicad_cli_executable(executable, settings, active_deadline)
         _run_captured_drc_pass(
             derivative,
             board_relative=board_relative,
             settings=settings,
+            executable=executable,
             deadline=active_deadline,
             witness=witness,
         )
@@ -1142,10 +1280,12 @@ def _run_captured_drc(
             raise KiCadCliError("KiCad custom-rule source store changed") from None
         if _context_revision(original_context) != original_revision:
             raise KiCadCliError("KiCad custom-rule source store changed")
+        _verify_kicad_cli_executable(executable, settings, active_deadline)
         summary = _run_captured_drc_pass(
             original_context,
             board_relative=board_relative,
             settings=settings,
+            executable=executable,
             deadline=active_deadline,
         )
         settings = _candidate_drc_deadline_settings(settings, active_deadline)
@@ -1162,6 +1302,7 @@ def _run_captured_drc(
         cleanup_failed = True
     if cleanup_failed:
         raise KiCadCliError("KiCad custom-rule source store cleanup failed") from None
+    _verify_kicad_cli_executable(executable, settings, active_deadline)
     _candidate_drc_deadline_settings(settings, active_deadline)
     assert summary is not None
     return summary
