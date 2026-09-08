@@ -754,6 +754,17 @@ isolated-stage evidence after the parent cleanup correction, not the older pre-P
 Main2cbf2df is verified green. Exact-head hosted checks and resulting main verification remain
 required before further publication; no physics, execution or apply authority is claimed here.
 
+2026-09-08 SEC-212 review correction: PR301 identified caller-created model pins whose native
+reference differed from their enclosing bound component. Nine regression cases reproduced
+acceptance before the fix: renamed owner, renamed selected pin, and unused no-connect foreign
+pin, each through source admission, expected export rows and operating-point case resolution.
+Both shared admission boundaries now require exact reference equality before optional-pin
+selection. The nine regressions pass; related focused controls passed124 tests with three
+environment-gated skips. All21 case controls passed on Python3.11 and3.13; format and Ruff passed.
+The prior5,700-test full and hosted CI34186402701 succeeded on the pre-correction source only.
+Independent review and fresh corrected-source full/hosted/main validation remain required.
+No source authentication, numerical, physics, engineering or apply authority is added.
+
 | SEC-213 | 2026-09-08 | Conservative operating-point topology preflight | Fresh bounded captured-model parsing; positive R/C/L admission; iterative expansion and node/work/path limits; case-folded hierarchy-collision refusal before renaming; grounded-incidence and voltage/inductor-loop checks. | Malformed, unavailable, unsupported and expired input refuses. No source authentication, deck/backend execution, convergence, physical correctness, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), D-280 |
 
 2026-09-08 SEC-213 isolated controls passed32 tests on each of Python3.11,3.12 and3.13.
@@ -771,6 +782,16 @@ sha256:104e9bd2b86f21f1a830ec903708524a3b4da239ac167bebb79c7a8d89f77d45.
 The shared container/P1 correction has since been propagated from the reviewed executor stage;
 topology logic and its original assertions remain unchanged. That correction requires new
 exact-source validation. The historical full result is not a pass for the current source.
+
+2026-09-08 SEC-213 complete serial validation passed 5,732 tests with one skip and 90% code
+coverage in 1847.52 seconds. All format, lint, strict type, security and build gates passed.
+Tested commit 92cfafe17448496ea02ae90e9b59a997372c233d; tree
+c70c6976498807fd0c4b65c45ba16109908d7b7f; source/input fingerprint
+sha256:1fdef2ffd51228d341351a89ee98a1509daf9287d8af425fbe58d4d8ac6cbd93.
+No test selection, authentication or work/time limit was relaxed. This source includes the
+container cleanup correction but precedes PR301's foreign-pin admission correction. Integrating
+that correction requires fresh exact-source validation; this result must not be attributed to
+the later source. No convergence, physics, application, hosted or release acceptance is claimed.
 
 | SEC-214 | 2026-09-08 | Bounded project nominal-DC observation | One internally verified export acquisition; explicit case/topology/deck admission; exact captured models; fixed-image two-run case replay; bounded diagnostics/raw-vector/numeric checks; final artifact recapture and source freshness. | Supported passive/diode nominal DC is not SI/PI/thermal/EMC, calibration, model accuracy, convergence or engineering authority. No new MCP, provider or apply surface is introduced. Protected-hosted, main and release verification remain required. | [ADR-0156](../adr/0156-project-operating-point-is-bounded-observation.md), D-281 |
 

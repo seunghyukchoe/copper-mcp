@@ -275,3 +275,49 @@ def test_document_hash_rechecks_deadline(monkeypatch: pytest.MonkeyPatch) -> Non
         module._document_digest(parsed, 1.0)
     assert error.value.__cause__ is None and error.value.__context__ is None
     assert result.case_document_digest
+
+
+@pytest.mark.parametrize("boundary", ("source", "export", "cases"))
+@pytest.mark.parametrize("mismatch", ("owner", "pin", "unused-nc-pin"))
+def test_rejects_pin_owned_by_another_bound_reference(boundary: str, mismatch: str) -> None:
+    from copper_mcp.engineering.project_spice_source import ProjectSpiceSourceError, _admit_binding
+    from copper_mcp.engineering.spice_export import SpiceExportError, expected_spice_rows
+
+    declaration = _declaration()
+    binding = _binding(declaration)
+    first = binding.references[0]
+    case = json.loads(_case(declaration))
+    if mismatch == "owner":
+        first = replace(first, reference="R99")
+    elif mismatch == "pin":
+        foreign = replace(first.pins[0], node=replace(first.pins[0].node, reference="R99"))
+        first = replace(first, pins=(foreign, first.pins[1]))
+        case["cases"][0]["rail_nodes"][1]["positive"]["reference"] = "R99"
+    else:
+        foreign = replace(
+            first.pins[0],
+            node=replace(first.pins[0].node, reference="R99", pin_number="3", no_connect=True),
+            port=None,
+        )
+        first = replace(first, pins=(*first.pins, foreign))
+    binding = replace(binding, references=(first, binding.references[1]))
+    deadline = time.monotonic() + 10
+    expected_error = {
+        "source": ProjectSpiceSourceError,
+        "export": SpiceExportError,
+        "cases": OperatingPointCasesError,
+    }[boundary]
+    with pytest.raises(expected_error) as error:
+        if boundary == "source":
+            _admit_binding(binding, deadline)
+        elif boundary == "export":
+            expected_spice_rows(binding, deadline=deadline)
+        else:
+            resolve_operating_point_cases(
+                json.dumps(case, separators=(",", ":")).encode(),
+                declaration,
+                binding,
+                deadline=deadline,
+            )
+    assert error.value.__cause__ is None and error.value.__context__ is None
+    assert "R99" not in str(error.value)
