@@ -744,6 +744,16 @@ original assertions are unchanged. The earlier full result is pre-correction evi
 does not establish a corrected-source full pass. Parent full/hosted/main validation and this
 stage's updated exact-source gates remain required.
 
+2026-09-08 SEC-212 corrected full validation passed5,700 tests with one skip and90% coverage
+in1759.34s of serial pytest. All format, lint, strict type, security and build gates passed.
+Tested commitac45173c25d3e56b19a7255a09fded1f402ae27a; tree
+6fa848fc31ef0fbbd1b3be5df55b6d75f0c6b587; source/input fingerprint
+sha256:278e96ed0bfcb2e1b826374033c6e95a3663a9970dde0a53ddca7af002da1214.
+The complete test selection, authentication and all limits were unchanged. This is current
+isolated-stage evidence after the parent cleanup correction, not the older pre-P1 result.
+Main2cbf2df is verified green. Exact-head hosted checks and resulting main verification remain
+required before further publication; no physics, execution or apply authority is claimed here.
+
 | SEC-213 | 2026-09-08 | Conservative operating-point topology preflight | Fresh bounded captured-model parsing; positive R/C/L admission; iterative expansion and node/work/path limits; case-folded hierarchy-collision refusal before renaming; grounded-incidence and voltage/inductor-loop checks. | Malformed, unavailable, unsupported and expired input refuses. No source authentication, deck/backend execution, convergence, physical correctness, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), D-280 |
 
 2026-09-08 SEC-213 isolated controls passed32 tests on each of Python3.11,3.12 and3.13.
