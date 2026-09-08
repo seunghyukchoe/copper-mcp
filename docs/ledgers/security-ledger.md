@@ -646,6 +646,16 @@ scope. The79 combined non-effectful controls passed Python3.12,3.11 and3.13, wit
 cases explicitly deselected in that selection. Metadata/type checks pass. Parent-main and
 exact-tip publication gates remain; no future cleanup/executor behavior is included here.
 
+2026-09-08 SEC-210 complete validation: make check passed5,654 tests, one intentional skip
+and90% code coverage, with634.47 seconds of pytest on three workers. Every format, lint,
+type, security and build gate passed. Tested commit19ae88db7099d5741af591d34fa7ac005d38f1c3;
+tree d3e0ceee8aa9ae612bb51b7257470be73ec12e81; source/input fingerprint
+sha256:d5167b041dcedb678279549387b30f0b0d6936e1c3351a44413b4d44145c321b.
+PR298's merge be772770703c26e9f3e34c4cbf2321d455e1c9b6 has the exact reviewed joint-acquisition
+tree and introduces no new content in this stage's parent synchronization. Its main checks
+and this stage's protected publication remain separate gates. No simulator, cleanup fix,
+engineering verdict or application authority is introduced by this extraction.
+
 | SEC-211 | 2026-09-08 | Fixed-image ngspice executor and cleanup | Fixed image/version/driver identity; exact byte/frame ceilings; default denial for malformed, nonzero, stderr, cancelled, expired and cleanup-failed runs; read-only no-network non-root confinement; forced removal and confirmed reap. | Raw designs, models and logs remain private and uncommitted. This isolated control neither binds cases/source nor proves convergence, model accuracy, physics, engineering, approval or apply authority. Full-suite, protected-hosted and main verification remain required. | [ADR-0153](../adr/0153-confined-ngspice-execution-confirms-cleanup.md), D-278 |
 
 2026-09-08 SEC-211 isolated validation: the39 focused container/probe/executor controls passed
