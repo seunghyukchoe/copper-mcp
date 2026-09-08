@@ -694,3 +694,12 @@ Independent isolation and metadata review accepted the unchanged source/assertio
 parent ledger prefixes and private non-authority interpretation. Ponytail found no justified
 cuts in this binding stage. These results do not claim fresh isolated-full, native execution,
 physics, hosted publication or main verification; those remain separate gates.
+
+2026-09-08 SEC-212 complete isolated validation: make check passed5,692 tests, one skip,
+90% code coverage and every format, lint, type, security and build gate. Pytest completed
+in619.68 seconds on three workers. Tested commit388768a32138f70404b32c163b1863ce9fd9b667;
+tree663eb5055ed2341ad5f57af9ccafcb913c81b74a; source/input fingerprint
+sha256:6d583420728ca02d564c4dfa6e6a0fbf871a8749ca40383c1dc83ba83b04bfbc.
+Independent source/isolation and metadata reviews accepted. This establishes the isolated
+binding stage's validation, not a simulator, calibrated authority or completed readiness goal.
+Parent-publication, protected hosted checks and resulting main verification remain required.
