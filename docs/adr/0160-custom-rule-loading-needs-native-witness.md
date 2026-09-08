@@ -38,6 +38,12 @@ fixed arguments and zero diagnostic disclosure. Share one absolute deadline acro
 and final execution. No-rule contexts retain the single-pass path. Missing, malformed, excluded
 or unrelated witnesses, private-tree drift and expired work refuse rather than use defaults.
 
+Resolve the native executable once for the operation and bind both passes to that path and its
+bounded content/file identity. Check for drift before each pass and after final cleanup. This is
+cross-pass consistency, not publisher authentication, shared-library verification or an atomic
+pathname-execution guarantee. The PR302 follow-up implementing these checks requires fresh review
+and validation; earlier full results predate it.
+
 This restores the existing authoritative-rule intent of D-005 and SEC-003; it does not create a
 new engineering authority or weaken any gate. A handwritten subset parser and blanket rejection
 of legitimate custom rules are not substitutes for native compilation.

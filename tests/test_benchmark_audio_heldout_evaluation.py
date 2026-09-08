@@ -127,6 +127,36 @@ def test_heldout_evaluation_replays_exactly_with_placement_route_and_inspection_
     assert metrics["kicad_invoked"] is False
 
 
+@pytest.mark.parametrize(
+    "status,evaluations",
+    [
+        ("deadline_exhausted", 40),
+        ("deadline_exhausted", 96),
+        ("legalizer_exhausted", 96),
+        ("cancelled", 96),
+        ("work_exhausted", 95),
+        ("work_exhausted", 97),
+    ],
+)
+def test_incomplete_placement_never_reaches_heldout_metrics(
+    monkeypatch: pytest.MonkeyPatch, status: str, evaluations: int
+) -> None:
+    class PartialPlacement:
+        @property
+        def initial_score(self):
+            pytest.fail("incomplete placement reached retained-score admission")
+
+    result = PartialPlacement()
+    result.status = status
+    result.evaluations = evaluations
+    monkeypatch.setattr(benchmark, "solve_placement", lambda *_args, **_kwargs: result)
+    with pytest.raises(
+        benchmark.HeldoutEvaluationError,
+        match=f"deterministic work ceiling: {status}, {evaluations}/96 evaluations",
+    ):
+        benchmark._placement_metrics(benchmark.load_protocol())
+
+
 def test_evaluator_never_reads_the_declared_training_fixture(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

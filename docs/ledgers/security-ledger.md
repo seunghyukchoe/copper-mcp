@@ -840,3 +840,33 @@ No test selection, authentication or work/time limit was relaxed. This source in
 container cleanup correction but precedes PR301's foreign-pin admission correction. Integrating
 that correction requires fresh exact-source validation; this result must not be attributed to
 the later source. No convergence, physics, application, hosted or release acceptance is claimed.
+
+2026-09-08 SEC-003 PR302 follow-up: review found that each native pass independently resolves
+the executable. A changed PATH, configured alias or executable can separate the loading witness
+from the original report's backend. The prior full run is successful evidence for its recorded
+source, but does not close this finding. A single resolved executable identity with bounded
+content/stat checks before both passes and after cleanup is being implemented. It will require
+new scoped/full/hosted validation; no atomic-exec, vendor or shared-library assurance is implied.
+Dependent topology validation was intentionally interrupted, exit130, after322 passing tests
+and442.61 seconds. Its partial log remains non-successful evidence; it will not be reused as a pass.
+
+2026-09-08 SEC-003 executable-binding correction: one resolved path and bounded descriptor-backed
+content/stat identity now bind the operation. Drift checks cover both passes and final cleanup,
+including no-rule execution. A new mocked outbound-timeout control reproduced 10 seconds being
+granted after seven seconds of a ten-second budget; the corrected no-rule path grants three.
+Independent review accepted the implementation and this final deadline correction. Integrated
+checks passed 137 tests and 25 subtests on Python 3.11, 3.12 and 3.13; four native cases were
+deselected in those runs. A separate controlled native group passed 18 cases in 39.14 seconds.
+An earlier worker command accidentally selected one native unittest and failed its workspace
+assertion; that run is not acceptance evidence, and no installed executable was modified.
+Fresh complete and exact-tip hosted validation remain required. Executable consistency does not
+establish atomic pathname execution, publisher authentication or shared-library integrity.
+
+2026-09-08 SEC-003 portable-test correction: hosted CI run 34209815291 rejected three legacy
+DRC mock cases on all supported interpreters because `/trusted/kicad-cli` does not exist.
+Those tests now use the existing inert executable-fixture helper in their pytest-owned
+temporary area, outside the workspace whose contents they assert. Subprocesses remain mocked;
+production executable discovery, identity admission and drift checks are unchanged. The three
+cases failed before correction (43.80 seconds) and passed afterward on Python 3.12 (149.43
+seconds on a heavily contended host). This is mock-contract evidence, not native execution.
+The new exact-tip hosted matrix and complete integration validation remain pending.
