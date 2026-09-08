@@ -753,3 +753,14 @@ The complete test selection, authentication and all limits were unchanged. This 
 isolated-stage evidence after the parent cleanup correction, not the older pre-P1 result.
 Main2cbf2df is verified green. Exact-head hosted checks and resulting main verification remain
 required before further publication; no physics, execution or apply authority is claimed here.
+
+2026-09-08 SEC-212 review correction: PR301 identified caller-created model pins whose native
+reference differed from their enclosing bound component. Nine regression cases reproduced
+acceptance before the fix: renamed owner, renamed selected pin, and unused no-connect foreign
+pin, each through source admission, expected export rows and operating-point case resolution.
+Both shared admission boundaries now require exact reference equality before optional-pin
+selection. The nine regressions pass; related focused controls passed124 tests with three
+environment-gated skips. All21 case controls passed on Python3.11 and3.13; format and Ruff passed.
+The prior5,700-test full and hosted CI34186402701 succeeded on the pre-correction source only.
+Independent review and fresh corrected-source full/hosted/main validation remain required.
+No source authentication, numerical, physics, engineering or apply authority is added.
