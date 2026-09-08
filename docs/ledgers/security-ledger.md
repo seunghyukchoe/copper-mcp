@@ -655,3 +655,14 @@ PR298's merge be772770703c26e9f3e34c4cbf2321d455e1c9b6 has the exact reviewed jo
 tree and introduces no new content in this stage's parent synchronization. Its main checks
 and this stage's protected publication remain separate gates. No simulator, cleanup fix,
 engineering verdict or application authority is introduced by this extraction.
+
+| SEC-215 | 2026-09-08 | Purpose-bound host confirmation across MCP protocols | Default-off verified-host gating; owner/purpose/job-record/package/judge-bound, expiring one-use challenges; 128-entry retention; replacement/replay refusal; pre-prompt and post-acceptance delivery checks; unchanged approval source checks and fixed resolver errors. | Private board bytes, credentials and issued capabilities remain server-side. SDK continuation protection alone proves neither one use nor human consent. No apply, physics, new tool or provider authority is added; full/native and verified-human validation remain open. | [ADR-0157](../adr/0157-verified-host-delivery-consent-is-challenge-bound.md), D-282 |
+
+2026-09-08 SEC-215 focused validation:36 consent controls pass with installed MCP2.0.0 and2.1.1,
+including actual legacy/current protocol clients. The same36 controls pass Python3.11 and3.13.
+Independent review accepted the replacement/replay controls after a P2 correction: expected
+resolver failures now return fixed ToolError rather than UnexpectedToolError. Both exact-class
+regressions failed before the correction. The five normalized input/output schemas match the
+clean6244fdb/8a4bbce baseline (60,042 bytes; sha256:b6f0bc2d53d688bf4922ef17ca6c88cb9f8dbcc3eddf8b1bc4e474d3fb86627f).
+Ponytail found no safe cut without removing load-bearing checks. These synthetic client results
+do not prove a human UI, native application or full-repository acceptance.

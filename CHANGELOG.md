@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Existing geometry disclosure and review approval use purpose-bound, one-use host challenges
+  across legacy and current MCP connections, with unchanged public schemas and default-off
+  verified-host gating. This adds no board application, physics or human-verification authority.
 - Shared internal container process ownership preserves existing router requests, resource
   bounds, statuses and result identities. This mechanical change adds no simulator or authority.
 - Joint native component/pin acquisition removes duplicated XML execution contexts from model

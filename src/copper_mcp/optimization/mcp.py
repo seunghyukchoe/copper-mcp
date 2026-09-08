@@ -10,17 +10,25 @@ import secrets
 import threading
 import time
 from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeVar
 
-from mcp.server.mcpserver import MCPServer
-from mcp.server.mcpserver.context import Context
+from mcp.server.elicitation import (
+    AcceptedElicitation,
+    ElicitationResult,
+)
+from mcp.server.mcpserver import Elicit, MCPServer, Resolve
 from mcp.server.mcpserver.exceptions import ResourceError, ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field, WithJsonSchema
 
 from copper_mcp.config import Settings
 from copper_mcp.mcp_contracts import _inline_json_schema
+from copper_mcp.optimization._host_consent import (
+    _ConsentBinding,
+    _PendingHostConsents,
+)
 from copper_mcp.optimization.contracts import (
     ClosedModel,
     Counter,
@@ -107,6 +115,17 @@ class _Artifact:
     source: bytes
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class _ResolvedConsent:
+    binding: _ConsentBinding | None
+    challenge: str | None
+    action: Literal["accept", "decline", "cancel", "skip"]
+    approved: bool
+
+    def __repr__(self) -> str:
+        return "<_ResolvedConsent redacted>"
+
+
 def _decode(payload: object, model: type[_Model]) -> _Model:
     try:
         encoded = json.dumps(payload, allow_nan=False, ensure_ascii=True).encode("ascii")
@@ -125,6 +144,7 @@ class OptimizationGateway:
         self._owner: str | None = None
         self._lock = threading.RLock()
         self._artifacts: dict[str, _Artifact] = {}
+        self._consents = _PendingHostConsents()
 
     def _purge_artifacts(self) -> None:
         expired = [
@@ -255,6 +275,140 @@ def register_optimization_tools(
     change = ToolAnnotations(
         read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False
     )
+    export_observed: ContextVar[tuple[_ConsentBinding, str] | None] = ContextVar(
+        "optimization_export_consent", default=None
+    )
+    approval_observed: ContextVar[tuple[_ConsentBinding, str] | None] = ContextVar(
+        "optimization_approval_consent", default=None
+    )
+
+    def export_state(
+        request: object,
+    ) -> tuple[
+        Export,
+        OptimizationService,
+        str,
+        OptimizationPackage,
+        _ConsentBinding | None,
+    ]:
+        command = _decode(request, Export)
+        service, owner = gateway.service()
+        package = service.export(command.job_id, owner, command.expected_package_digest)
+        record, _ = service.get(command.job_id, owner)
+        if record.revision != command.expected_record_revision:
+            raise OptimizationError("optimization export revision is stale")
+        binding = None
+        if command.include_geometry:
+            if not service.allow_host_confirmation:
+                raise OptimizationError("trusted geometry disclosure is not configured")
+            service.ensure_review_ready(command.job_id, owner)
+            binding = _ConsentBinding(
+                owner,
+                "geometry",
+                command.job_id,
+                command.expected_record_revision,
+                command.expected_package_digest,
+                package.judge.digest,
+            )
+        return command, service, owner, package, binding
+
+    async def ask_export_consent(request: ExportArgument) -> Elicit[HumanDecision] | HumanDecision:
+        try:
+            _command, _service, _owner, package, binding = export_state(request)
+            if binding is None:
+                export_observed.set(None)
+                return HumanDecision()
+            challenge = gateway._consents.issue(binding)
+            export_observed.set((binding, challenge))
+            return Elicit(
+                "Disclose the complete candidate KiCad board, "
+                "including original design content, "
+                "to this MCP client for package "
+                + package.digest
+                + "? This does not apply or approve the board. Confirmation challenge: "
+                + challenge,
+                HumanDecision,
+            )
+        except (OptimizationError, OSError):
+            raise ToolError("optimization package is unavailable") from None
+
+    async def resolve_export_consent(
+        request: ExportArgument,
+        decision: Annotated[ElicitationResult[HumanDecision], Resolve(ask_export_consent)],
+    ) -> _ResolvedConsent:
+        _ = request
+        observed = export_observed.get()
+        if observed is None:
+            return _ResolvedConsent(None, None, "skip", False)
+        binding, challenge = observed
+        approved = isinstance(decision, AcceptedElicitation) and decision.data.decision == "approve"
+        return _ResolvedConsent(binding, challenge, decision.action, approved)
+
+    def approval_state(
+        request: object,
+    ) -> tuple[Approve, OptimizationService, str, OptimizationPackage, _ConsentBinding]:
+        command = _decode(request, Approve)
+        service, owner = gateway.service()
+        if not service.allow_host_confirmation:
+            raise OptimizationError("trusted human confirmation is not configured")
+        service.ensure_review_ready(command.job_id, owner)
+        package = service.export(command.job_id, owner, command.expected_package_digest)
+        record, _ = service.get(command.job_id, owner)
+        if (
+            record.revision != command.expected_record_revision
+            or package.judge.digest != command.expected_judge_digest
+        ):
+            raise OptimizationError("optimization confirmation is stale")
+        binding = _ConsentBinding(
+            owner,
+            "approval",
+            command.job_id,
+            command.expected_record_revision,
+            command.expected_package_digest,
+            command.expected_judge_digest,
+        )
+        return command, service, owner, package, binding
+
+    async def ask_approval_consent(request: ApproveArgument) -> Elicit[HumanDecision]:
+        try:
+            _command, _service, _owner, package, binding = approval_state(request)
+            challenge = gateway._consents.issue(binding)
+            approval_observed.set((binding, challenge))
+            return Elicit(
+                "Review this CopperMCP optimization package: "
+                + package.digest
+                + ". Judge: "
+                + package.judge.digest
+                + ". Unresolved domains: "
+                + ", ".join(package.judge.inconclusive_domains)
+                + ". Approving acknowledges the package. "
+                + "Board application remains separately authorized. Confirmation challenge: "
+                + challenge,
+                HumanDecision,
+            )
+        except (OptimizationError, OSError):
+            raise ToolError("optimization approval was refused") from None
+
+    async def resolve_approval_consent(
+        request: ApproveArgument,
+        decision: Annotated[ElicitationResult[HumanDecision], Resolve(ask_approval_consent)],
+    ) -> _ResolvedConsent:
+        _ = request
+        observed = approval_observed.get()
+        if observed is None:
+            raise ToolError("optimization approval was refused")
+        binding, challenge = observed
+        approved = isinstance(decision, AcceptedElicitation) and decision.data.decision == "approve"
+        return _ResolvedConsent(binding, challenge, decision.action, approved)
+
+    # Materialize closure-backed Resolve markers before CopperMCPServer copies annotations
+    # onto its refusal wrapper; postponed local names cannot be evaluated in that wrapper module.
+    resolve_export_consent.__annotations__["decision"] = Annotated[
+        ElicitationResult[HumanDecision], Resolve(ask_export_consent)
+    ]
+    resolve_approval_consent.__annotations__["decision"] = Annotated[
+        ElicitationResult[HumanDecision], Resolve(ask_approval_consent)
+    ]
 
     @mcp.tool(annotations=change, structured_output=True)
     def start_optimization(request: LaunchArgument) -> OptimizationStatus:
@@ -284,32 +438,19 @@ def register_optimization_tools(
         except (OptimizationError, OSError):
             raise ToolError("optimization cancellation was refused") from None
 
-    @mcp.tool(annotations=change, structured_output=True)
     async def export_optimization_package(
-        request: ExportArgument, ctx: Context[None, Any]
+        request: ExportArgument,
+        consent: _ResolvedConsent,
     ) -> PackageExport:
         """Export metadata; full candidate-board disclosure additionally requires host consent."""
         try:
-            command = _decode(request, Export)
-            service, owner = gateway.service()
-            package = service.export(command.job_id, owner, command.expected_package_digest)
-            record, _ = service.get(command.job_id, owner)
-            if record.revision != command.expected_record_revision:
-                raise OptimizationError("optimization export revision is stale")
+            command, service, owner, package, binding = export_state(request)
             uri = None
             if command.include_geometry:
-                if not service.allow_host_confirmation:
-                    raise OptimizationError("trusted geometry disclosure is not configured")
-                service.ensure_review_ready(command.job_id, owner)
-                decision = await ctx.elicit(
-                    "Disclose the complete candidate KiCad board, "
-                    "including original design content, "
-                    "to this MCP client for package "
-                    + package.digest
-                    + "? This does not apply or approve the board.",
-                    HumanDecision,
-                )
-                if decision.action != "accept" or decision.data.decision != "approve":
+                if binding is None or consent.binding != binding or consent.challenge is None:
+                    raise OptimizationError("optimization host consent is unavailable")
+                gateway._consents.consume(binding, consent.challenge)
+                if not consent.approved:
                     raise OptimizationError("optimization geometry disclosure was declined")
                 source = service.private_candidate(
                     command.job_id,
@@ -318,6 +459,8 @@ def register_optimization_tools(
                     command.expected_package_digest,
                 )
                 uri = gateway.retain_artifact(source, command.job_id, owner, package.digest)
+            elif consent.action != "skip" or consent.binding is not None:
+                raise OptimizationError("optimization host consent is unavailable")
             return PackageExport(
                 package=package,
                 package_digest=package.digest,
@@ -332,36 +475,17 @@ def register_optimization_tools(
         except (OptimizationError, OSError):
             raise ToolError("optimization package is unavailable") from None
 
-    @mcp.tool(annotations=change, structured_output=True)
     async def approve_optimization_job(
-        request: ApproveArgument, ctx: Context[None, Any]
+        request: ApproveArgument,
+        consent: _ResolvedConsent,
     ) -> OptimizationStatus:
         """Request confirmation through the configured trusted human channel."""
         try:
-            command = _decode(request, Approve)
-            service, owner = gateway.service()
-            if not service.allow_host_confirmation:
-                raise OptimizationError("trusted human confirmation is not configured")
-            service.ensure_review_ready(command.job_id, owner)
-            package = service.export(command.job_id, owner, command.expected_package_digest)
-            record, _ = service.get(command.job_id, owner)
-            if (
-                record.revision != command.expected_record_revision
-                or package.judge.digest != command.expected_judge_digest
-            ):
-                raise OptimizationError("optimization confirmation is stale")
-            decision = await ctx.elicit(
-                "Review this CopperMCP optimization package: "
-                + package.digest
-                + ". Judge: "
-                + package.judge.digest
-                + ". Unresolved domains: "
-                + ", ".join(package.judge.inconclusive_domains)
-                + ". Approving acknowledges the package. "
-                + "Board application remains separately authorized.",
-                HumanDecision,
-            )
-            if decision.action != "accept" or decision.data.decision != "approve":
+            command, service, owner, _package, binding = approval_state(request)
+            if consent.binding != binding or consent.challenge is None:
+                raise OptimizationError("optimization host consent is unavailable")
+            gateway._consents.consume(binding, consent.challenge)
+            if not consent.approved:
                 return gateway.status(command.job_id)
             service.approve_from_host(
                 command.job_id,
@@ -373,6 +497,17 @@ def register_optimization_tools(
             return gateway.status(command.job_id)
         except (OptimizationError, OSError):
             raise ToolError("optimization approval was refused") from None
+
+    # Register after attaching the runtime marker so the hidden resolver value never enters
+    # the visible request schema, including through CopperMCPServer's wrapper.
+    export_optimization_package.__annotations__["consent"] = Annotated[
+        _ResolvedConsent, Resolve(resolve_export_consent)
+    ]
+    mcp.tool(annotations=change, structured_output=True)(export_optimization_package)
+    approve_optimization_job.__annotations__["consent"] = Annotated[
+        _ResolvedConsent, Resolve(resolve_approval_consent)
+    ]
+    mcp.tool(annotations=change, structured_output=True)(approve_optimization_job)
 
     if settings().transport == "stdio":
 
