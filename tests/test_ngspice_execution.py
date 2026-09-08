@@ -4,6 +4,7 @@ import time
 
 import pytest
 from test_optimization_container_runner import FakeProcess, runtime
+from test_optimization_container_runner import close_fake_processes as close_fake_processes
 
 from copper_mcp.engineering import _ngspice_execution as execution
 

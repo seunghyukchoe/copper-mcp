@@ -182,8 +182,12 @@ class ContainerRouterRunner(ContainerProcessOwner):
                 return self._result(
                     ContainerRunStatus.LAUNCH_FAILED, request.engine, image, command, input_digest
                 )
-            output, status = self._exchange(process, request.input_bytes, work_deadline, cancelled)
-            cleanup_ok = self._cleanup(name, process, environment)
+            try:
+                output, status = self._exchange(
+                    process, request.input_bytes, work_deadline, cancelled
+                )
+            finally:
+                cleanup_ok = self._cleanup(name, process, environment)
             if not cleanup_ok:
                 status = ContainerRunStatus.CLEANUP_FAILED
             elif status is None:

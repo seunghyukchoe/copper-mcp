@@ -703,3 +703,9 @@ sha256:6d583420728ca02d564c4dfa6e6a0fbf871a8749ca40383c1dc83ba83b04bfbc.
 Independent source/isolation and metadata reviews accepted. This establishes the isolated
 binding stage's validation, not a simulator, calibrated authority or completed readiness goal.
 Parent-publication, protected hosted checks and resulting main verification remain required.
+
+2026-09-08 SEC-212 parent correction: the six shared container/P1 test files now match the
+independently reviewed nonblocking correction in the executor stage. Case binding and its
+original assertions are unchanged. The earlier full result is pre-correction evidence; it
+does not establish a corrected-source full pass. Parent full/hosted/main validation and this
+stage's updated exact-source gates remain required.
