@@ -801,3 +801,14 @@ Independent final implementation review repeated 124 tests and 25 subtests and f
 findings in scope. Fresh full validation, protected hosted/main checks and final evidence review
 remain pending. This is loading/fallback detection, not static rule-expression certification;
 inactive invalid assertion expressions remain a distinct unresolved native limitation.
+
+2026-09-08 SEC-003 complete validation of the loading/fallback correction passed 5,781 tests
+with one skip and 90% code coverage in 1765.24 seconds of serial pytest. Format, lint/metadata,
+strict typecheck, secret/dependency audit and source/wheel builds all passed. Tested commit
+68a811b067b0c81af6aaa80b8256b4794b691cc2; tree 1bc3e5dc623df889e69f97698f0d9e928a553311;
+source/input fingerprint sha256:0fb075b0f78365db1bca07a7154dd99d235b2b6cb1303fad5c58b4b2ad9c5563.
+The run enabled the new native rule-loading controls and existing real-router/native settings,
+without removing tests, relaxing limits or replacing native checks with mocks. This record changes
+no implementation or test bytes. Final record review, exact-tip hosted validation and resulting
+main verification remain required. The static-expression limitation above and full five-area
+readiness, physics and human-approval gates remain open.
