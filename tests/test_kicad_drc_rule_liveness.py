@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+from kicad_drc_mock import make_fake_kicad_cli
 
 from copper_mcp import kicad_cli
 from copper_mcp.config import Settings
@@ -180,7 +181,11 @@ def test_captured_runner_consumes_derivative_then_untouched_original(
     result = kicad_cli._run_captured_drc(
         context,
         board_relative="board.kicad_pcb",
-        settings=Settings(workspace=tmp_path, kicad_timeout_seconds=10),
+        settings=Settings(
+            workspace=tmp_path,
+            kicad_cli=make_fake_kicad_cli(tmp_path),
+            kicad_timeout_seconds=10,
+        ),
     )
     assert result == _summary(kicad_cli._context_revision(original))
     assert context == {}
@@ -191,7 +196,9 @@ def test_captured_runner_consumes_derivative_then_untouched_original(
     assert calls[1][0]["board.kicad_pro"] == original["board.kicad_pro"]
 
 
-def test_context_without_custom_rule_companion_keeps_single_pass(monkeypatch) -> None:
+def test_context_without_custom_rule_companion_keeps_single_pass(
+    tmp_path: Path, monkeypatch
+) -> None:
     context = _context()
     del context["board.kicad_dru"]
     calls = 0
@@ -207,6 +214,6 @@ def test_context_without_custom_rule_companion_keeps_single_pass(monkeypatch) ->
     kicad_cli._run_captured_drc(
         context,
         board_relative="board.kicad_pcb",
-        settings=Settings(workspace=Path.cwd()),
+        settings=Settings(workspace=tmp_path, kicad_cli=make_fake_kicad_cli(tmp_path)),
     )
     assert calls == 1 and context == {}

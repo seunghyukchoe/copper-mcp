@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from kicad_drc_mock import rule_liveness_report
+from kicad_drc_mock import make_fake_kicad_cli, rule_liveness_report
 
 import copper_mcp.kicad_cli as kicad_cli
 from copper_mcp.adapters import (
@@ -180,12 +180,16 @@ def _fake_completed_run(
 
 def _install_fake_kicad(
     monkeypatch: pytest.MonkeyPatch,
+    root: Path,
     run: Callable[..., subprocess.CompletedProcess[str]],
 ) -> None:
+    executable_root = root.parent / f"{root.name}-kicad-bin"
+    executable_root.mkdir(exist_ok=True)
+    executable = make_fake_kicad_cli(executable_root, "trusted-kicad-cli")
     monkeypatch.setattr(
         kicad_cli,
         "discover_kicad_cli",
-        lambda settings: Path("/trusted/kicad-cli"),
+        lambda settings: executable,
     )
     monkeypatch.setattr(subprocess, "run", run)
 
@@ -228,6 +232,7 @@ def test_binds_candidate_source_patched_board_and_context_revisions(
     capture: dict[str, Any] = {}
     _install_fake_kicad(
         monkeypatch,
+        tmp_path,
         _fake_completed_run(_report(board.name), capture=capture),
     )
 
@@ -250,11 +255,11 @@ def test_binds_candidate_source_patched_board_and_context_revisions(
 
     command = capture["command"]
     assert isinstance(command, list)
-    kicad_index = command.index("/trusted/kicad-cli")
+    kicad_index = command.index("pcb") - 1
     report_path = Path(command[command.index("--output") + 1])
     snapshot_path = Path(command[-1])
     assert command[kicad_index:] == [
-        "/trusted/kicad-cli",
+        command[kicad_index],
         "pcb",
         "drc",
         "--format",
@@ -304,6 +309,7 @@ def test_violation_exit_is_valid_negative_candidate_evidence(
     )
     _install_fake_kicad(
         monkeypatch,
+        tmp_path,
         _fake_completed_run(report, returncode=5),
     )
 
@@ -364,7 +370,7 @@ def test_rejects_stale_tampered_forged_and_malformed_inputs_before_kicad(
         calls += 1
         return subprocess.CompletedProcess([], 0)
 
-    _install_fake_kicad(monkeypatch, unexpected_run)
+    _install_fake_kicad(monkeypatch, tmp_path, unexpected_run)
     forged = _rehash(
         replace(candidate, candidate_id=EMPTY_DIGEST, router_version="forged-router-v1")
     )
@@ -403,7 +409,7 @@ def test_rechecks_patched_board_and_cumulative_context_budgets(
         calls += 1
         return subprocess.CompletedProcess([], 0)
 
-    _install_fake_kicad(monkeypatch, unexpected_run)
+    _install_fake_kicad(monkeypatch, tmp_path, unexpected_run)
     monkeypatch.setattr(
         kicad_cli,
         "render_kicad_candidate_board",
@@ -469,6 +475,7 @@ def test_discards_candidate_evidence_when_original_context_changes(
     capture: dict[str, Any] = {}
     _install_fake_kicad(
         monkeypatch,
+        tmp_path,
         _fake_completed_run(
             _report(board.name),
             after_report=lambda command: mutate(),
@@ -518,7 +525,7 @@ def test_candidate_path_fails_closed_on_process_and_report_errors(
         capture["temporary_root"] = report_path.parent
         derivative_report = rule_liveness_report(Path(command[-1]))
         passes.append(derivative_report is not None)
-        assert command[command.index("/trusted/kicad-cli") - 1] == "1024"
+        assert command[command.index("pcb") - 2] == "1024"
         if derivative_report is not None:
             payload = json.dumps(derivative_report).encode()
             assert len(payload) <= 1024
@@ -545,7 +552,7 @@ def test_candidate_path_fails_closed_on_process_and_report_errors(
             report_path.write_bytes(b"x" * 1025)
         return subprocess.CompletedProcess(command, 0)
 
-    _install_fake_kicad(monkeypatch, run)
+    _install_fake_kicad(monkeypatch, tmp_path, run)
     with pytest.raises(KiCadCliError, match=message):
         run_route_candidate_drc(
             board.name,
@@ -592,6 +599,7 @@ def test_rejects_private_candidate_context_mutation(
     capture: dict[str, Any] = {}
     _install_fake_kicad(
         monkeypatch,
+        tmp_path,
         _fake_completed_run(
             _report(board.name), after_report=mutate_private_context, capture=capture
         ),
@@ -665,7 +673,7 @@ def test_replay_rejects_a_candidate_whose_net_is_already_connected(
         calls += 1
         return subprocess.CompletedProcess([], 0)
 
-    _install_fake_kicad(monkeypatch, unexpected_run)
+    _install_fake_kicad(monkeypatch, tmp_path, unexpected_run)
     # The already-connected board produces no candidate at all, so replaying the two-pad
     # candidate against it must fail closed rather than dereference a missing proposal.
     connected = FIXTURE.parent / "connected-net.kicad_pcb"

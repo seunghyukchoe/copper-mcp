@@ -811,3 +811,44 @@ The real KiCad circular-pad comparison passed three cases in 1.34 seconds after 
 replaced the incorrect unitless fixture value. Earlier parser-admission and wrong-unit attempts
 remain failed evidence, not native validation passes. New shared rule-loading integration still
 needs current-source native/full verification. No production ranking or readiness gain is claimed.
+
+2026-09-08 SEC-003 complete validation of the loading/fallback correction passed 5,781 tests
+with one skip and 90% code coverage in 1765.24 seconds of serial pytest. Format, lint/metadata,
+strict typecheck, secret/dependency audit and source/wheel builds all passed. Tested commit
+68a811b067b0c81af6aaa80b8256b4794b691cc2; tree 1bc3e5dc623df889e69f97698f0d9e928a553311;
+source/input fingerprint sha256:0fb075b0f78365db1bca07a7154dd99d235b2b6cb1303fad5c58b4b2ad9c5563.
+The run enabled the new native rule-loading controls and existing real-router/native settings,
+without removing tests, relaxing limits or replacing native checks with mocks. This record changes
+no implementation or test bytes. Final record review, exact-tip hosted validation and resulting
+main verification remain required. The static-expression limitation above and full five-area
+readiness, physics and human-approval gates remain open.
+
+2026-09-08 SEC-003 PR302 follow-up: review found that each native pass independently resolves
+the executable. A changed PATH, configured alias or executable can separate the loading witness
+from the original report's backend. The prior full run is successful evidence for its recorded
+source, but does not close this finding. A single resolved executable identity with bounded
+content/stat checks before both passes and after cleanup is being implemented. It will require
+new scoped/full/hosted validation; no atomic-exec, vendor or shared-library assurance is implied.
+Dependent topology validation was intentionally interrupted, exit130, after322 passing tests
+and442.61 seconds. Its partial log remains non-successful evidence; it will not be reused as a pass.
+
+2026-09-08 SEC-003 executable-binding correction: one resolved path and bounded descriptor-backed
+content/stat identity now bind the operation. Drift checks cover both passes and final cleanup,
+including no-rule execution. A new mocked outbound-timeout control reproduced 10 seconds being
+granted after seven seconds of a ten-second budget; the corrected no-rule path grants three.
+Independent review accepted the implementation and this final deadline correction. Integrated
+checks passed 137 tests and 25 subtests on Python 3.11, 3.12 and 3.13; four native cases were
+deselected in those runs. A separate controlled native group passed 18 cases in 39.14 seconds.
+An earlier worker command accidentally selected one native unittest and failed its workspace
+assertion; that run is not acceptance evidence, and no installed executable was modified.
+Fresh complete and exact-tip hosted validation remain required. Executable consistency does not
+establish atomic pathname execution, publisher authentication or shared-library integrity.
+
+2026-09-08 SEC-003 portable-test correction: hosted CI run 34209815291 rejected three legacy
+DRC mock cases on all supported interpreters because `/trusted/kicad-cli` does not exist.
+Those tests now use the existing inert executable-fixture helper in their pytest-owned
+temporary area, outside the workspace whose contents they assert. Subprocesses remain mocked;
+production executable discovery, identity admission and drift checks are unchanged. The three
+cases failed before correction (43.80 seconds) and passed afterward on Python 3.12 (149.43
+seconds on a heavily contended host). This is mock-contract evidence, not native execution.
+The new exact-tip hosted matrix and complete integration validation remain pending.
