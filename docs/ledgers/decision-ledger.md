@@ -297,3 +297,13 @@ does not certify every assertion expression; that distinct native compiler limit
 | D-281 | 2026-09-08 | Proposed | Coordinate one internally retained verified SPICE export across explicit passive/diode nominal-DC cases. Require topology before naming, exact captured models, two fixed-runtime replays per case, bounded diagnostics/vector/numeric checks and final source/artifact freshness. Preserve v1 export identities; duration/calibration/model accuracy remain not_run and engineering is inconclusive. | [ADR-0156](../adr/0156-project-operating-point-is-bounded-observation.md), SEC-214 |
 
 | D-282 | 2026-09-08 | Proposed | Preserve v1 geometry-disclosure and review-approval semantics using default-off verified-host challenges bound to owner, purpose, job record, package and judge. Use SDK Resolve/Elicit across protocol versions, fixed expected refusals and pre-prompt/post-acceptance delivery checks; keep approval's source checks and no-apply boundary. Continuation integrity is neither single-use consent nor proof of a human. | [ADR-0157](../adr/0157-verified-host-delivery-consent-is-challenge-bound.md), SEC-215 |
+
+2026-09-08 D-254 corrective follow-up: the held-out audio evaluator also requires
+`work_exhausted` and exactly its declared 96 placement evaluations before reading retained
+scores. A controlled scheduling pause reproduced partial-versus-complete replay divergence;
+the original failing log did not retain both metric objects, so that mechanism is not claimed
+as its proven historical cause. Six regression cases refuse interrupted or mismatched work
+counts. No solver setting, timer, fixture, signature or historical artifact is changed.
+The first covered module validation failed four routing targets and one historical replay
+timeout, not this new placement guard; those failures remain unsuccessful validation evidence.
+Full integrated validation remains required.

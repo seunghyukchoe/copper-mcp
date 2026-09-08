@@ -342,9 +342,14 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Held-out audio placement measurements now require the complete deterministic evaluation
+  ceiling; retained candidates from interrupted searches cannot become successful evidence.
+  Operational deadlines, production settings and historical reports are unchanged.
 - Custom-rule DRC checks use a private native loading witness to detect silent fallback to
   default rules, then report only the untouched original context. The witness does not certify
   every rule expression; that separate native compiler limitation remains explicit.
+- DRC operations bind one resolved executable and reject observable content/file-identity drift
+  across native passes and cleanup. This is not an atomic-exec or publisher-authentication claim.
 - Private SPICE source admission and expected export rows reject pins owned by a different
   bound component, including unused no-connect pins, before case endpoints can be selected.
 - Router and simulator clients use nonblocking local pipe I/O, preserving abort-time process-group
