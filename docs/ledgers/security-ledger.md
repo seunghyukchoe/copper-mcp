@@ -628,3 +628,30 @@ The isolated62-test selection passed all supported interpreters, and real v1 rep
 equivalence passed. Independent implementation, admission-order correction, isolation and
 publication-record reviews accepted. Protected exact-head hosted checks and resulting main
 verification remain required; no physics, approval, application or whole-goal authority follows.
+
+| SEC-210 | 2026-09-08 | Mechanical shared container-process extraction | Original declarations and process methods are preserved by AST comparison; router constructor signature and public compatibility aliases remain. | No new execution profile, request selection, cleanup behavior or authority is introduced. Cleanup corrections and simulator execution remain separately reviewed stages. | Primary comparison and independent review |
+
+2026-09-08 SEC-210 focused validation: all17 original local router controls pass on Python3.11,
+3.12 and3.13. The two original real FreeRouting/SimpleRouteJson smokes passed in7.27s.
+Strict mypy passes163 source files. Independent review confirmed unchanged original tests,
+direct compatibility aliases, no circular/future-simulator dependency and no behavior fixes
+mixed into the extraction. Separate Ponytail review found no justified cuts. Exact-tip hosted
+validation, parent-main verification and the complete simulator program remain required.
+
+2026-09-08 SEC-210 parent synchronization: process code and original router tests remain
+identical to6406d67; all six joint-acquisition files match1738756. The complete parent ledger
+prefix is preserved, and the mechanical stage's provisional entry is SEC210 to avoid the
+joint publication's SEC209. Independent integration review accepted these identities and
+scope. The79 combined non-effectful controls passed Python3.12,3.11 and3.13, with twelve real
+cases explicitly deselected in that selection. Metadata/type checks pass. Parent-main and
+exact-tip publication gates remain; no future cleanup/executor behavior is included here.
+
+2026-09-08 SEC-210 complete validation: make check passed5,654 tests, one intentional skip
+and90% code coverage, with634.47 seconds of pytest on three workers. Every format, lint,
+type, security and build gate passed. Tested commit19ae88db7099d5741af591d34fa7ac005d38f1c3;
+tree d3e0ceee8aa9ae612bb51b7257470be73ec12e81; source/input fingerprint
+sha256:d5167b041dcedb678279549387b30f0b0d6936e1c3351a44413b4d44145c321b.
+PR298's merge be772770703c26e9f3e34c4cbf2321d455e1c9b6 has the exact reviewed joint-acquisition
+tree and introduces no new content in this stage's parent synchronization. Its main checks
+and this stage's protected publication remain separate gates. No simulator, cleanup fix,
+engineering verdict or application authority is introduced by this extraction.

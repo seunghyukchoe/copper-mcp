@@ -8,6 +8,8 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Shared internal container process ownership preserves existing router requests, resource
+  bounds, statuses and result identities. This mechanical change adds no simulator or authority.
 - Joint native component/pin acquisition removes duplicated XML execution contexts from model
   binding while preserving v1 report identities, pre-native BOM admission and authentication/
   freshness checks. No authentication cache, larger budget or new authority is introduced.
