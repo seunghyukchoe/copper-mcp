@@ -243,16 +243,26 @@ class ContainerProcessOwner:
         self._clock = clock
 
     def _preflight(
-        self, arguments: tuple[str, ...], environment: dict[str, str], deadline: float
+        self,
+        arguments: tuple[str, ...],
+        environment: dict[str, str],
+        deadline: float,
+        cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         try:
             process = self._spawn(arguments, subprocess.DEVNULL, environment)
         except OSError:
             return False
-        _output, status = self._exchange(process, None, deadline, None)
-        return status is None and process.returncode == 0 and _reap(process, deadline)
+        _output, successful = self._probe(process, deadline, cancelled)
+        return successful
 
-    def _image_available(self, image: str, environment: dict[str, str], deadline: float) -> bool:
+    def _image_available(
+        self,
+        image: str,
+        environment: dict[str, str],
+        deadline: float,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
         try:
             template = "{{.Id}}" if _LOCAL_IMAGE.fullmatch(image) else "{{json .RepoDigests}}"
             process = self._spawn(
@@ -262,10 +272,13 @@ class ContainerProcessOwner:
             )
         except OSError:
             return False
-        output, status = self._exchange(process, None, deadline, None)
-        if status is not None or process.returncode != 0 or not _reap(process, deadline):
+        output, successful = self._probe(process, deadline, cancelled)
+        if not successful:
             return False
-        observed = bytes(output).strip().decode("ascii", errors="ignore")
+        try:
+            observed = output.strip().decode("ascii")
+        except UnicodeError:
+            return False
         if _LOCAL_IMAGE.fullmatch(image):
             return observed == image
         try:
@@ -273,6 +286,30 @@ class ContainerProcessOwner:
         except json.JSONDecodeError:
             return False
         return type(repo_digests) is list and image in repo_digests
+
+    def _probe(
+        self,
+        process: _Process,
+        deadline: float,
+        cancelled: Callable[[], bool] | None = None,
+        *,
+        cleanup_deadline: float | None = None,
+    ) -> tuple[bytes, bool]:
+        """Always terminate/reap utility clients, including timed-out or cancelled probes."""
+        try:
+            output, status = self._exchange(process, None, deadline, cancelled)
+            successful = status is None and process.returncode == 0
+        finally:
+            _kill_process(process)
+            reaped = _reap(
+                process,
+                cleanup_deadline
+                if cleanup_deadline is not None
+                else self._clock() + _CLEANUP_GRACE_SECONDS,
+            )
+            if reaped:
+                _close_streams(process)
+        return bytes(output), successful and reaped
 
     def _spawn(
         self, arguments: tuple[str, ...], stdin: int, environment: dict[str, str]
@@ -305,13 +342,14 @@ class ContainerProcessOwner:
                 remover = self._spawn(("rm", "--force", name), subprocess.DEVNULL, environment)
             except OSError:
                 continue
-            _output, status = self._exchange(remover, None, deadline, None)
-            removed = status is None and remover.returncode == 0 and _reap(remover, deadline)
+            _output, removed = self._probe(remover, deadline, cleanup_deadline=deadline)
             if removed:
                 break
-        _close_streams(process)
         _kill_process(process)
-        return removed and _reap(process, deadline)
+        reaped = _reap(process, deadline)
+        if reaped:
+            _close_streams(process)
+        return removed and reaped
 
     def _exchange(
         self,

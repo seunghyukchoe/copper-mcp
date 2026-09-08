@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private fixed-image ngspice execution confines one bounded deck to the pinned ngspice 45.2
+  runtime, captures only bounded raw/diagnostic bytes, and confirms container cleanup. It does
+  not select caller programs or establish convergence, physics, engineering, approval or apply authority.
 - Shared internal container process ownership preserves existing router requests, resource
   bounds, statuses and result identities. This mechanical change adds no simulator or authority.
 - Joint native component/pin acquisition removes duplicated XML execution contexts from model

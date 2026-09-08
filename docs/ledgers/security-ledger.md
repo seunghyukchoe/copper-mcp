@@ -645,3 +645,33 @@ joint publication's SEC209. Independent integration review accepted these identi
 scope. The79 combined non-effectful controls passed Python3.12,3.11 and3.13, with twelve real
 cases explicitly deselected in that selection. Metadata/type checks pass. Parent-main and
 exact-tip publication gates remain; no future cleanup/executor behavior is included here.
+
+| SEC-211 | 2026-09-08 | Fixed-image ngspice executor and cleanup | Fixed image/version/driver identity; exact byte/frame ceilings; default denial for malformed, nonzero, stderr, cancelled, expired and cleanup-failed runs; read-only no-network non-root confinement; forced removal and confirmed reap. | Raw designs, models and logs remain private and uncommitted. This isolated control neither binds cases/source nor proves convergence, model accuracy, physics, engineering, approval or apply authority. Full-suite, protected-hosted and main verification remain required. | [ADR-0153](../adr/0153-confined-ngspice-execution-confirms-cleanup.md), D-278 |
+
+2026-09-08 SEC-211 isolated validation: the39 focused container/probe/executor controls passed
+with two existing skips and one worker on Python3.11 in1.01s, Python3.12 in0.99s and Python3.13
+in1.11s wall time. Format, Ruff, strict source typecheck and build passed. Full-suite, real-native,
+protected-hosted and main verification remain required.
+
+2026-09-08 SEC-211 final-delivery correction: independent review found that cancellation during
+frame decoding or successful workspace cleanup was not polled before result delivery. Four
+regressions failed before the fix: late cancellation, callback failure, deadline expiry inside
+the final callback, and cancellation during cleanup. The executor now polls after cleanup and
+checks its deadline afterward. All43 focused controls passed on Python3.11,3.12 and3.13, with
+two real-router cases skipped in that selection; format, Ruff and strict type checks passed.
+Fresh actual execution of119-byte and300119-byte owned divider inputs produced identical
+operating-point digests with confirmed cleanup in1.424 seconds. Both real router smokes passed
+in5.15 seconds. Source/input fingerprint:
+sha256:d104e8b006b7fc385cd89e2929e327fa827d9d3fd2dfc4f22caa6a4e68ce47e3.
+These observations do not establish physics or full-suite completion. Corrected-source review,
+full validation and protected publication/main verification remain required.
+
+2026-09-08 SEC-211 corrected full validation: independent review closed the final-cancellation
+finding. Fresh make check passed5,680 tests, one intentional skip and90% code coverage, with
+647.44 seconds of pytest on three workers. All format, lint, type, security and build gates
+passed. Tested staged tree414109f2e17dca0ac5365d871c0d5ce57bdb1716; source/input fingerprint
+sha256:d104e8b006b7fc385cd89e2929e327fa827d9d3fd2dfc4f22caa6a4e68ce47e3.
+This source includes the four late-stop regressions and supersedes pre-correction validation
+for this isolated stage. Parent-history synchronization and protected hosted/main validation
+remain required before later publication. Complete project composition and all calibrated
+physics, engineering and application requirements remain separate; this executor grants none.
