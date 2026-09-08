@@ -55,10 +55,16 @@ class PrivateRouteComposition:
 
 
 def _reserve_search(
-    prepared: PreparedOptimization, probe: OptimizationExecutionProbe
+    prepared: PreparedOptimization, probe: OptimizationExecutionProbe, *, attempts: int = 1
 ) -> AStarSettings:
     """Reserve both proposal and serializer replay before either executes."""
 
+    if prepared.request.schema_version == "optimization/v2":
+        from copper_mcp.optimization.evaluation_v2 import SlotProbe
+
+        if not isinstance(probe, SlotProbe):
+            raise OptimizationExecutionError("invalid_candidate")
+        return probe.reserve_search(prepared.routing_settings, attempts)
     usage = probe.checkpoint().usage
     limits = prepared.request.limits
     expansions = min(
@@ -108,8 +114,9 @@ def route_targets(
         )
         routed_source: bytes | None = None
         for layer in common:
-            routing_settings = _reserve_search(prepared, probe)
-            probes += 1
+            routing_settings = _reserve_search(prepared, probe, attempts=len(pads) - 1)
+            if prepared.request.schema_version == "optimization/v1":
+                probes += 1
             result = AStarRouter().propose(
                 snapshot,
                 RouteRequest(
@@ -130,6 +137,8 @@ def route_targets(
             routed_source = render_kicad_candidate_board(
                 source, snapshot, result.candidate, prepared.profile, limits=limits
             )
+            if prepared.request.schema_version == "optimization/v2":
+                probes += 2 * len(result.candidate.patch.paths)
             candidate_ids.append(result.candidate.candidate_id)
             length += result.candidate.metrics.wire_length_nm
             vias += result.candidate.metrics.vias
@@ -163,7 +172,8 @@ def route_targets(
                 ),
             )
             layered = LayeredBoardRouter().propose(snapshot, request, cancelled=probe.cancelled)
-            probes += 1
+            if prepared.request.schema_version == "optimization/v1":
+                probes += 1
             probe.checkpoint()
             if layered.candidate is not None:
                 routed_source = render_kicad_layered_candidate_board(
@@ -174,11 +184,13 @@ def route_targets(
                     request=request,
                     limits=limits,
                 )
+                if prepared.request.schema_version == "optimization/v2":
+                    probes += 2
                 candidate_ids.append(layered.candidate.candidate_id)
                 length += layered.candidate.metrics.wire_length_nm
                 vias += layered.candidate.metrics.vias
         if routed_source is None and len(pads) > 2:
-            routing_settings = _reserve_search(prepared, probe)
+            routing_settings = _reserve_search(prepared, probe, attempts=len(pads) - 1)
             ordered_pads = tuple(sorted(pads, key=lambda pad: pad.id))
             terminals: list[LayeredTreeTerminal] = []
             for pad in ordered_pads:
@@ -209,7 +221,8 @@ def route_targets(
             tree = LayeredTreeRouter().propose(snapshot, tree_request, cancelled=probe.cancelled)
             probe.checkpoint()
             if tree.candidate is not None:
-                probes += tree.candidate.metrics.branch_count
+                if prepared.request.schema_version == "optimization/v1":
+                    probes += tree.candidate.metrics.branch_count
                 routed_source = render_kicad_layered_tree_candidate_board(
                     source,
                     snapshot,
@@ -219,6 +232,10 @@ def route_targets(
                     limits=limits,
                     cancelled=probe.cancelled,
                 )
+                if prepared.request.schema_version == "optimization/v2":
+                    probes += 2 * sum(
+                        not branch.attachment_only for branch in tree.candidate.branches
+                    )
                 candidate_ids.append(tree.candidate.candidate_id)
                 length += tree.candidate.metrics.wire_length_nm
                 vias += tree.candidate.metrics.vias

@@ -129,9 +129,12 @@ def test_child_cannot_exit_leaving_a_well_formed_running_record(launch, tmp_path
     "corruption",
     ["missing_source", "missing_field", "not_object", "wrong_bytes", "extra", "bad_judge"],
 )
+@pytest.mark.parametrize("version", ["v1", "v2"])
 def test_invalid_child_delivery_fences_published_metadata_before_callbacks(
-    launch, tmp_path, monkeypatch, synthetic_authority, corruption
+    launch, tmp_path, monkeypatch, synthetic_authority, corruption, version
 ):
+    if version == "v2":
+        launch = {**launch, "schema_version": "optimization/v2"}
     from copper_mcp.optimization import isolated
     from copper_mcp.optimization.coordinator import coordinate_optimization
     from copper_mcp.optimization.worker import execute_optimization_job
@@ -207,9 +210,12 @@ def test_invalid_child_delivery_fences_published_metadata_before_callbacks(
         None,
     ],
 )
+@pytest.mark.parametrize("version", ["v1", "v2"])
 def test_parent_deadline_covers_decoding_and_callback_delivery(
-    launch, tmp_path, monkeypatch, synthetic_authority, late_stage
+    launch, tmp_path, monkeypatch, synthetic_authority, late_stage, version
 ):
+    if version == "v2":
+        launch = {**launch, "schema_version": "optimization/v2"}
     from copper_mcp.optimization import isolated
     from copper_mcp.optimization.coordinator import coordinate_optimization
     from copper_mcp.optimization.worker import execute_optimization_job

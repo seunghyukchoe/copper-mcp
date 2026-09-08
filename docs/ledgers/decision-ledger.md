@@ -311,3 +311,16 @@ counts. No solver setting, timer, fixture, signature or historical artifact is c
 The first covered module validation failed four routing targets and one historical replay
 timeout, not this new placement guard; those failures remain unsuccessful validation evidence.
 Full integrated validation remains required.
+
+| D-285 | 2026-09-08 | Proposed | Deliver measured optimization through the complete versioned MCP, isolated execution, comparison, persistence and review path. Preserve v1 interpretation, derive project evidence internally, reserve equal identity/candidate budgets and disclose unavailable comparison data. No standalone helper, new apply authority or uncalibrated physics pass counts as delivery. | [ADR-0161](../adr/0161-measured-optimization-is-an-end-to-end-versioned-workflow.md) |
+
+2026-09-09 D-285 integration checkpoint: the actual SDK MCP dispatcher, isolated child, layered
+routing, KiCad 10.0.5 and metadata export passed all three owned-fixture cases (v1 routing, v2
+routing and v2 placement-plus-routing) in 180.57 seconds. The movement case selects a displaced
+candidate with strictly shorter copper than its reviewable unchanged baseline; both retain full
+target connectivity and zero hard DRC errors. Original board bytes/inode/mtime remain unchanged.
+Independent review closed the renderer's modern-field rotation defect and verified-zero-search
+identity finding. The corrected source also passed 36 renderer/identity controls and 376 focused
+optimization controls, with mypy and Ruff. This is a reproducible native feature checkpoint, not
+full-suite, ordinary-project, held-out, human-consent, physics, main-landing or release evidence.
+The invocation and exact scope are documented in [native optimization](../integrations/native-optimization.md).

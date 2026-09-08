@@ -17,9 +17,10 @@ from copper_mcp.optimization.evaluation import (
     verify_original_context,
 )
 from copper_mcp.optimization.inputs import PreparedOptimization
-from copper_mcp.optimization.judge import JudgeReport
+from copper_mcp.optimization.judge import AnyJudgeReport, JudgeReport
 from copper_mcp.optimization.lifecycle import ResourceUsage
 from copper_mcp.optimization.package import (
+    AnyOptimizationPackage,
     BackendProvenance,
     CandidateBinding,
     ObjectiveMetrics,
@@ -38,7 +39,7 @@ def _package(
     routed: PrivateRouteComposition,
     settings: Settings,
     probe: OptimizationExecutionProbe,
-    observe_judge: Callable[[JudgeReport], None],
+    observe_judge: Callable[[AnyJudgeReport], None],
 ) -> OptimizationPackage:
     if tuple(sorted(routed.connected_targets)) != prepared.target_net_refs:
         raise OptimizationExecutionError("invalid_candidate")
@@ -54,6 +55,8 @@ def _package(
         rule_context_digest=_context_revision(context),
     )
     judge = judge_composition(prepared, binding, routed.source, settings, probe)
+    if not isinstance(judge, JudgeReport):
+        raise OptimizationExecutionError("invalid_candidate")
     observe_judge(judge)
     if not judge.reviewable:
         raise OptimizationExecutionError(
@@ -106,11 +109,21 @@ def coordinate_optimization(
     settings: Settings,
     probe: OptimizationExecutionProbe,
     *,
-    retain_private_result: Callable[[OptimizationPackage, bytes], None],
-    observe_judge: Callable[[JudgeReport], None] = lambda _report: None,
-) -> OptimizationPackage:
+    retain_private_result: Callable[[AnyOptimizationPackage, bytes], None],
+    observe_judge: Callable[[AnyJudgeReport], None] = lambda _report: None,
+) -> AnyOptimizationPackage:
     """Return a verified package for host review, without invoking any apply surface."""
 
+    if prepared.request.schema_version == "optimization/v2":
+        from copper_mcp.optimization.evaluation_v2 import coordinate_v2
+
+        return coordinate_v2(
+            prepared,
+            settings,
+            probe,
+            retain_private_result=retain_private_result,
+            observe_judge=observe_judge,
+        )
     if prepared.request.allowed_backends != ("internal-layered-v1",):
         # External engines require the operator-installed container runtime plus conversion.
         # Never silently substitute a native run for a requested hybrid experiment.

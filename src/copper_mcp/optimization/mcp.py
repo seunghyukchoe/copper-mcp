@@ -37,10 +37,10 @@ from copper_mcp.optimization.contracts import (
     Verdict,
     bounded_json,
 )
-from copper_mcp.optimization.inputs import OptimizationLaunch
-from copper_mcp.optimization.judge import JudgeReport
-from copper_mcp.optimization.lifecycle import OptimizationJobRecord
-from copper_mcp.optimization.package import OptimizationPackage
+from copper_mcp.optimization.inputs import OptimizationLaunch, OptimizationLaunchV2
+from copper_mcp.optimization.judge import AnyJudgeReport
+from copper_mcp.optimization.lifecycle import AnyOptimizationJobRecord
+from copper_mcp.optimization.package import AnyOptimizationPackage
 from copper_mcp.security import read_workspace_file
 
 if TYPE_CHECKING:
@@ -72,21 +72,21 @@ class HumanDecision(ClosedModel):
 
 
 class JudgementView(ClosedModel):
-    report: JudgeReport
+    report: AnyJudgeReport
     report_digest: Digest
     aggregate_status: Verdict
     required_status: Verdict
 
 
 class OptimizationStatus(ClosedModel):
-    record: OptimizationJobRecord
+    record: AnyOptimizationJobRecord
     judge_reports: Annotated[tuple[JudgementView, ...], Field(max_length=32)]
     private_retention_seconds: Literal[900] = 900
     apply_authority: Literal["none"] = "none"
 
 
 class PackageExport(ClosedModel):
-    package: OptimizationPackage
+    package: AnyOptimizationPackage
     package_digest: Digest
     candidate_digest: Digest
     judge_digest: Digest
@@ -98,7 +98,17 @@ class PackageExport(ClosedModel):
     apply_authority: Literal["none"] = "none"
 
 
-LaunchArgument = Annotated[Any, WithJsonSchema(_inline_json_schema(OptimizationLaunch))]
+LaunchArgument = Annotated[
+    Any,
+    WithJsonSchema(
+        {
+            "oneOf": [
+                _inline_json_schema(OptimizationLaunch),
+                _inline_json_schema(OptimizationLaunchV2),
+            ]
+        }
+    ),
+]
 LookupArgument = Annotated[Any, WithJsonSchema(_inline_json_schema(Lookup))]
 CancelArgument = Annotated[Any, WithJsonSchema(_inline_json_schema(Cancel))]
 ExportArgument = Annotated[Any, WithJsonSchema(_inline_json_schema(Export))]
@@ -288,7 +298,7 @@ def register_optimization_tools(
         Export,
         OptimizationService,
         str,
-        OptimizationPackage,
+        AnyOptimizationPackage,
         _ConsentBinding | None,
     ]:
         command = _decode(request, Export)
@@ -346,7 +356,7 @@ def register_optimization_tools(
 
     def approval_state(
         request: object,
-    ) -> tuple[Approve, OptimizationService, str, OptimizationPackage, _ConsentBinding]:
+    ) -> tuple[Approve, OptimizationService, str, AnyOptimizationPackage, _ConsentBinding]:
         command = _decode(request, Approve)
         service, owner = gateway.service()
         if not service.allow_host_confirmation:

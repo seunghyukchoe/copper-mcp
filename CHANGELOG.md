@@ -8,6 +8,13 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Explicit `optimization/v2` MCP jobs compare unchanged and proposed placements under equal
+  routing budgets, route complete multilayer candidates in the isolated worker, and export
+  immutable measured-clearance review packages. Declared projects add native ERC and separate
+  schematic/PCB parity; unavailable required evidence blocks selection. V1 interpretation and
+  review-only approval remain unchanged. Real KiCad placement-and-routing is demonstrated on an
+  owned development fixture; ordinary-project intake, fresh fill, external-router composition,
+  held-out quality and live application remain unfinished.
 - Existing geometry disclosure and review approval use purpose-bound, one-use host challenges
   across legacy and current MCP connections, with unchanged public schemas and default-off
   verified-host gating. This adds no board application, physics or human-verification authority.

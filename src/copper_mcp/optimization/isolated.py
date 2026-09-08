@@ -21,15 +21,15 @@ from pydantic import Field
 from copper_mcp.config import Settings
 from copper_mcp.optimization.contracts import ClosedModel, OptimizationError
 from copper_mcp.optimization.inputs import PreparedOptimization
-from copper_mcp.optimization.judge import JudgeReport
-from copper_mcp.optimization.lifecycle import TERMINAL, OptimizationJobRecord
-from copper_mcp.optimization.package import OptimizationPackage
+from copper_mcp.optimization.judge import AnyJudgeReport
+from copper_mcp.optimization.lifecycle import TERMINAL, AnyOptimizationJobRecord
+from copper_mcp.optimization.package import AnyOptimizationPackage
 from copper_mcp.optimization.repository import OptimizationJobRepository
 
 
 class _Response(ClosedModel):
-    record: OptimizationJobRecord
-    judges: Annotated[tuple[JudgeReport, ...], Field(max_length=32)]
+    record: AnyOptimizationJobRecord
+    judges: Annotated[tuple[AnyJudgeReport, ...], Field(max_length=32)]
     source: Annotated[str, Field(min_length=1, max_length=64 * 1024 * 1024)] | None
 
 
@@ -104,9 +104,9 @@ def run_isolated_job(
     owner: str,
     settings: Settings,
     launch: object,
-    retain: Callable[[OptimizationPackage, bytes], None],
-    observe: Callable[[JudgeReport], None],
-) -> OptimizationJobRecord:
+    retain: Callable[[AnyOptimizationPackage, bytes], None],
+    observe: Callable[[AnyJudgeReport], None],
+) -> AnyOptimizationJobRecord:
     repository_path = repository.path
     if repository_path is None:
         raise OptimizationError("isolated native execution requires a file-backed repository")
@@ -147,6 +147,8 @@ def run_isolated_job(
         result = _Response.model_validate_json(response)
         checkpoint()
         record = result.record
+        if record.schema_version != prepared.request.schema_version:
+            raise OptimizationError("isolated native version binding is inconsistent")
         if record != repository.get(job_id, owner):
             raise OptimizationError("isolated native record binding is inconsistent")
         if record.status not in TERMINAL and record.status != "awaiting_approval":
@@ -169,6 +171,18 @@ def run_isolated_job(
                 raise OptimizationError("isolated candidate byte binding is inconsistent")
         checkpoint()
         # Nothing reaches the parent callbacks until the entire response is validated.
+        if prepared.request.schema_version == "optimization/v2":
+            if any(
+                report.schema_version != "optimization/v2"
+                or report.board_revision != prepared.request.board_revision
+                or report.settings_digest != prepared.request.judge_profile_digest
+                or report.required_domains != prepared.request.required_domains
+                or report.electrical_inputs_digest != prepared.request.electrical_inputs_digest
+                for report in result.judges
+            ):
+                raise OptimizationError("isolated judge binding is inconsistent")
+            if package is not None and package.judge not in result.judges:
+                raise OptimizationError("isolated selected judge is missing")
         for report in result.judges:
             checkpoint()
             observe(report)

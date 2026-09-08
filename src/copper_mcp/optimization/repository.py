@@ -19,18 +19,24 @@ from typing import Final, cast
 from pydantic import ValidationError
 
 from copper_mcp.optimization import lifecycle
-from copper_mcp.optimization.contracts import OptimizationError, OptimizationRequest
+from copper_mcp.optimization.contracts import (
+    AnyOptimizationRequest,
+    OptimizationError,
+    validate_request,
+)
 from copper_mcp.optimization.lifecycle import (
     TERMINAL,
+    AnyOptimizationJobRecord,
     ApprovalConsumer,
     FailureCode,
-    OptimizationJobRecord,
     advance_job,
     approve_job,
     create_job,
+    decode_record,
     fail_job,
+    validate_record,
 )
-from copper_mcp.optimization.package import OptimizationPackage
+from copper_mcp.optimization.package import AnyOptimizationPackage, decode_package, validate_package
 
 _MAX_SAFE_INT: Final = (1 << 53) - 1
 _MAX_RECORDS: Final = 4_096
@@ -137,7 +143,7 @@ class OptimizationJobLease:
 
 @dataclass(frozen=True, slots=True)
 class _StoredJob:
-    record: OptimizationJobRecord
+    record: AnyOptimizationJobRecord
     created_at_ms: int
     updated_at_ms: int
     expires_at_ms: int
@@ -236,15 +242,15 @@ class OptimizationJobRepository:
         if self._connection.in_transaction:
             self._connection.commit()
 
-    def _record_bytes(self, record: OptimizationJobRecord) -> bytes:
-        validated = OptimizationJobRecord.model_validate(record)
+    def _record_bytes(self, record: AnyOptimizationJobRecord) -> bytes:
+        validated = validate_record(record)
         payload = _canonical_bytes(validated.model_dump(mode="json"))
         if len(payload) > self.max_record_bytes:
             raise OptimizationJobLimitError("optimization record exceeds its byte limit")
         return payload
 
-    def _package_bytes(self, package: OptimizationPackage) -> bytes:
-        validated = OptimizationPackage.model_validate(package)
+    def _package_bytes(self, package: AnyOptimizationPackage) -> bytes:
+        validated = validate_package(package)
         payload = _canonical_bytes(validated.model_dump(mode="json"))
         if len(payload) > self.max_package_bytes:
             raise OptimizationJobLimitError("optimization package exceeds its byte limit")
@@ -288,7 +294,7 @@ class OptimizationJobRepository:
         if len(raw) > self.max_record_bytes:
             raise OptimizationRepositoryError("stored optimization job is oversized")
         try:
-            record = OptimizationJobRecord.model_validate_json(raw)
+            record = decode_record(raw)
         except (ValidationError, ValueError) as error:
             raise OptimizationRepositoryError("stored optimization job is malformed") from error
         if (
@@ -393,12 +399,12 @@ class OptimizationJobRepository:
 
     def create(
         self,
-        request: OptimizationRequest,
+        request: AnyOptimizationRequest,
         owner_binding: str,
         *,
         now_ms: int | None = None,
-    ) -> OptimizationJobRecord:
-        request = OptimizationRequest.model_validate(request)
+    ) -> AnyOptimizationJobRecord:
+        request = validate_request(request)
         record = create_job(request, owner_binding=owner_binding)
         timestamp = self._time(now_ms)
         expiry = timestamp + self.ttl_ms
@@ -457,7 +463,7 @@ class OptimizationJobRepository:
         owner_binding: str,
         *,
         now_ms: int | None = None,
-    ) -> OptimizationJobRecord:
+    ) -> AnyOptimizationJobRecord:
         timestamp = self._time(now_ms)
         with self._lock:
             self._transaction_after_maintenance(timestamp)
@@ -501,13 +507,13 @@ class OptimizationJobRepository:
     def claim(
         self,
         job_id: str,
-        request: OptimizationRequest,
+        request: AnyOptimizationRequest,
         owner_binding: str,
         *,
         lease_ms: int = 30_000,
         now_ms: int | None = None,
     ) -> OptimizationJobLease:
-        request = OptimizationRequest.model_validate(request)
+        request = validate_request(request)
         requested_lease = _integer(
             "optimization lease duration", lease_ms, minimum=1, maximum=_MAX_LEASE_MS
         )
@@ -589,7 +595,7 @@ class OptimizationJobRepository:
 
     def lease_record(
         self, lease: OptimizationJobLease, *, now_ms: int | None = None
-    ) -> OptimizationJobRecord:
+    ) -> AnyOptimizationJobRecord:
         timestamp = self._time(now_ms)
         with self._lock:
             self._transaction_after_maintenance(timestamp)
@@ -640,16 +646,16 @@ class OptimizationJobRepository:
 
     def compare_and_swap(
         self,
-        current: OptimizationJobRecord,
-        replacement: OptimizationJobRecord,
+        current: AnyOptimizationJobRecord,
+        replacement: AnyOptimizationJobRecord,
         *,
         owner_binding: str,
         lease: OptimizationJobLease | None = None,
-        package: OptimizationPackage | None = None,
+        package: AnyOptimizationPackage | None = None,
         now_ms: int | None = None,
-    ) -> OptimizationJobRecord:
-        current = OptimizationJobRecord.model_validate(current)
-        replacement = OptimizationJobRecord.model_validate(replacement)
+    ) -> AnyOptimizationJobRecord:
+        current = validate_record(current)
+        replacement = validate_record(replacement)
         if (
             current.job_id != replacement.job_id
             or current.owner_binding != owner_binding
@@ -767,16 +773,16 @@ class OptimizationJobRepository:
     def cancel(
         self,
         job_id: str,
-        request: OptimizationRequest,
+        request: AnyOptimizationRequest,
         owner_binding: str,
         *,
         expected_revision: int,
         now_ms: int | None = None,
         failure_code: FailureCode = "cancelled",
-    ) -> OptimizationJobRecord:
+    ) -> AnyOptimizationJobRecord:
         if failure_code not in {"cancelled", "budget_exhausted", "interrupted"}:
             raise OptimizationError("optimization stop cause is invalid")
-        request = OptimizationRequest.model_validate(request)
+        request = validate_request(request)
         _integer("expected optimization revision", expected_revision)
         timestamp = self._time(now_ms)
         with self._lock:
@@ -827,7 +833,7 @@ class OptimizationJobRepository:
         *,
         expected_revision: int | None = None,
         now_ms: int | None = None,
-    ) -> OptimizationJobRecord:
+    ) -> AnyOptimizationJobRecord:
         """Close a non-terminal job when its caller-owned private inputs no longer exist."""
 
         if expected_revision is not None:
@@ -882,7 +888,7 @@ class OptimizationJobRepository:
         owner_binding: str,
         *,
         now_ms: int | None = None,
-    ) -> OptimizationPackage:
+    ) -> AnyOptimizationPackage:
         timestamp = self._time(now_ms)
         with self._lock:
             self._transaction_after_maintenance(timestamp)
@@ -908,13 +914,25 @@ class OptimizationJobRepository:
                 if len(raw) > self.max_package_bytes:
                     raise OptimizationRepositoryError("stored optimization package is oversized")
                 try:
-                    package = OptimizationPackage.model_validate_json(raw)
+                    package = decode_package(raw)
                 except (ValidationError, ValueError) as error:
                     raise OptimizationRepositoryError(
                         "stored optimization package is malformed"
                     ) from error
                 if package.digest != row[1]:
                     raise OptimizationRepositoryError("stored optimization package is inconsistent")
+                if package.schema_version != stored.record.schema_version:
+                    raise OptimizationRepositoryError(
+                        "stored optimization package version is inconsistent"
+                    )
+                if package.schema_version == "optimization/v2" and (
+                    stored.record.schema_version != "optimization/v2"
+                    or package.comparison != stored.record.comparison
+                    or package.comparison.allocation.limits.digest != stored.record.limits_digest
+                ):
+                    raise OptimizationRepositoryError(
+                        "stored optimization comparison is inconsistent"
+                    )
                 self._commit()
                 return package
             except OptimizationJobUnavailableError:
@@ -927,24 +945,24 @@ class OptimizationJobRepository:
     def approve(
         self,
         job_id: str,
-        request: OptimizationRequest,
+        request: AnyOptimizationRequest,
         owner_binding: str,
         *,
         expected_revision: int,
-        package: OptimizationPackage,
+        package: AnyOptimizationPackage,
         capability: str,
         authority: ApprovalConsumer,
         observed_board_revision: str,
         observed_snapshot_digest: str,
         now_ms: int | None = None,
         complete: bool = False,
-    ) -> OptimizationJobRecord:
+    ) -> AnyOptimizationJobRecord:
         """Consume exact human consent and CAS-persist approval under one write lock."""
 
         if type(complete) is not bool:
             raise OptimizationError("optimization completion mode is invalid")
-        request = OptimizationRequest.model_validate(request)
-        package = OptimizationPackage.model_validate(package)
+        request = validate_request(request)
+        package = validate_package(package)
         _integer("expected optimization revision", expected_revision)
         if (
             type(observed_board_revision) is not str

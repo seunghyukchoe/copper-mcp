@@ -105,11 +105,11 @@ def main() -> None:
             0, _SourceOnlyFinder(frozenset(str(root / path) for path, _ in before))
         )
         from copper_mcp.config import Settings
-        from copper_mcp.optimization.contracts import OptimizationRequest
+        from copper_mcp.optimization.contracts import decode_request
         from copper_mcp.optimization.coordinator import coordinate_optimization
         from copper_mcp.optimization.inputs import prepare_optimization
-        from copper_mcp.optimization.judge import JudgeReport
-        from copper_mcp.optimization.package import OptimizationPackage
+        from copper_mcp.optimization.judge import AnyJudgeReport
+        from copper_mcp.optimization.package import AnyOptimizationPackage
         from copper_mcp.optimization.repository import OptimizationJobRepository
         from copper_mcp.optimization.worker import (
             OptimizationExecutionError,
@@ -130,11 +130,11 @@ def main() -> None:
             optimization_host_confirmation=False,
         )
         settings = Settings(**values)
-        request = OptimizationRequest.model_validate_json(json.dumps(document["request"]))
-        retained: list[tuple[OptimizationPackage, bytes]] = []
-        reports: list[JudgeReport] = []
+        request = decode_request(json.dumps(document["request"]))
+        retained: list[tuple[AnyOptimizationPackage, bytes]] = []
+        reports: list[AnyJudgeReport] = []
 
-        def execute(probe: OptimizationExecutionProbe) -> OptimizationPackage:
+        def execute(probe: OptimizationExecutionProbe) -> AnyOptimizationPackage:
             prepared = prepare_optimization(document["launch"], settings)
             if prepared.request != request:
                 raise OptimizationExecutionError("stale_revision")

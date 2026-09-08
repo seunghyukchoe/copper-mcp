@@ -12,12 +12,12 @@ from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import _context_revision, _drc_context
 from copper_mcp.optimization.approval import HumanApprovalAuthority
-from copper_mcp.optimization.contracts import OptimizationError, OptimizationRequest
-from copper_mcp.optimization.inputs import prepare_optimization
+from copper_mcp.optimization.contracts import AnyOptimizationRequest, OptimizationError
+from copper_mcp.optimization.inputs import ProjectDeclaration, prepare_optimization
 from copper_mcp.optimization.isolated import run_isolated_job
-from copper_mcp.optimization.judge import JudgeReport
-from copper_mcp.optimization.lifecycle import OptimizationJobRecord
-from copper_mcp.optimization.package import OptimizationPackage
+from copper_mcp.optimization.judge import AnyJudgeReport
+from copper_mcp.optimization.lifecycle import AnyOptimizationJobRecord
+from copper_mcp.optimization.package import AnyOptimizationPackage
 from copper_mcp.optimization.repository import OptimizationJobRepository
 from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.security import read_workspace_file
@@ -29,15 +29,16 @@ _MAX_PRIVATE_BYTES = 64 * 1024 * 1024
 @dataclass
 class _PrivateJob:
     owner: str
-    request: OptimizationRequest
+    request: AnyOptimizationRequest
     board_path: str
     context_digest: str
     expires_at: float
     reserved_bytes: int
     profile: KiCadConstraintProfile
     artifact_bindings: tuple[tuple[str, str], ...] = ()
-    future: Future[OptimizationJobRecord] | None = None
-    judges: list[JudgeReport] = field(default_factory=list)
+    project: ProjectDeclaration | None = None
+    future: Future[AnyOptimizationJobRecord] | None = None
+    judges: list[AnyJudgeReport] = field(default_factory=list)
     source: bytes | None = None
 
 
@@ -88,7 +89,7 @@ class OptimizationService:
             raise OptimizationError("optimization private inputs are unavailable")
         return private
 
-    def start(self, payload: object, owner: str) -> OptimizationJobRecord:
+    def start(self, payload: object, owner: str) -> AnyOptimizationJobRecord:
         with self._lock:
             self._purge()
             if (
@@ -133,12 +134,13 @@ class OptimizationService:
                 reserved,
                 prepared.profile,
                 artifact_bindings=prepared.input_artifact_bindings,
+                project=prepared.project,
             )
             self._jobs[record.job_id] = private
             pending_source: bytes | None = None
-            pending_reports: list[JudgeReport] = []
+            pending_reports: list[AnyJudgeReport] = []
 
-            def retain(package: OptimizationPackage, source: bytes) -> None:
+            def retain(package: AnyOptimizationPackage, source: bytes) -> None:
                 nonlocal pending_source
                 with self._lock:
                     if len(source) > self.settings.max_board_bytes:
@@ -155,7 +157,7 @@ class OptimizationService:
                     pending_source = source
                     private.reserved_bytes += len(source)
 
-            def observe(report: JudgeReport) -> None:
+            def observe(report: AnyJudgeReport) -> None:
                 with self._lock:
                     if len(pending_reports) >= private.request.limits.max_candidates:
                         raise OptimizationError(
@@ -176,7 +178,7 @@ class OptimizationService:
             )
             private.future = future
 
-            def finished(completed: Future[OptimizationJobRecord]) -> None:
+            def finished(completed: Future[AnyOptimizationJobRecord]) -> None:
                 nonlocal pending_source, pending_reports
                 with self._lock:
                     try:
@@ -213,7 +215,9 @@ class OptimizationService:
             future.add_done_callback(finished)
             return record
 
-    def get(self, job_id: str, owner: str) -> tuple[OptimizationJobRecord, tuple[JudgeReport, ...]]:
+    def get(
+        self, job_id: str, owner: str
+    ) -> tuple[AnyOptimizationJobRecord, tuple[AnyJudgeReport, ...]]:
         with self._lock:
             self._purge()
             record = self.repository.get(job_id, owner)
@@ -223,7 +227,7 @@ class OptimizationService:
             )
             return record, reports
 
-    def cancel(self, job_id: str, owner: str, expected_revision: int) -> OptimizationJobRecord:
+    def cancel(self, job_id: str, owner: str, expected_revision: int) -> AnyOptimizationJobRecord:
         with self._lock:
             private = self._private(job_id, owner)
             result = self.repository.cancel(
@@ -237,7 +241,9 @@ class OptimizationService:
                 private.future.cancel()
             return result
 
-    def export(self, job_id: str, owner: str, expected_package_digest: str) -> OptimizationPackage:
+    def export(
+        self, job_id: str, owner: str, expected_package_digest: str
+    ) -> AnyOptimizationPackage:
         with self._lock:
             self._private(job_id, owner)
             package = self.repository.get_package(job_id, owner)
@@ -252,7 +258,7 @@ class OptimizationService:
         expected_revision: int,
         expected_package_digest: str,
         expected_judge_digest: str,
-    ) -> OptimizationJobRecord:
+    ) -> AnyOptimizationJobRecord:
         """Call only after the configured trusted host has confirmed this exact package."""
 
         with self._lock:
@@ -292,6 +298,19 @@ class OptimizationService:
                 )
                 if "sha256:" + hashlib.sha256(artifact.content).hexdigest() != expected_digest:
                     raise OptimizationError("optimization intent changed before approval")
+            if private.project is not None and private.request.schema_version == "optimization/v2":
+                from copper_mcp.optimization.project_evidence import capture_project_inputs
+
+                capture, _libraries, libraries_digest = capture_project_inputs(
+                    private.project,
+                    self.settings,
+                    time.monotonic() + self.settings.max_drc_context_scan_seconds,
+                )
+                if (
+                    capture.digest != private.request.project_capture_digest
+                    or libraries_digest != private.request.project_libraries_digest
+                ):
+                    raise OptimizationError("optimization project changed before approval")
             capability = self.authority.issue_from_human_channel(
                 record, package, owner_binding=owner
             )

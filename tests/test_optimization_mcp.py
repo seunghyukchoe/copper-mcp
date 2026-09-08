@@ -613,10 +613,72 @@ def test_five_closed_tools_have_no_model_approval_capability(app):
     for tool in tools.values():
         assert tool.input_schema["additionalProperties"] is False
         assert set(tool.input_schema["properties"]) == {"request"}
-        assert tool.input_schema["properties"]["request"]["additionalProperties"] is False
+        request_schema = tool.input_schema["properties"]["request"]
+        if tool.name == "start_optimization":
+            assert len(request_schema["oneOf"]) == 2
+            assert all(
+                branch["additionalProperties"] is False for branch in request_schema["oneOf"]
+            )
+            assert "schema_version" not in request_schema["oneOf"][0]["properties"]
+            assert (
+                request_schema["oneOf"][1]["properties"]["schema_version"]["const"]
+                == "optimization/v2"
+            )
+        else:
+            assert request_schema["additionalProperties"] is False
     assert "human_confirmation_capability" not in str(
         tools["approve_optimization_job"].input_schema
     )
+
+
+def _v1_projection(schema):
+    """Select only the advertised v1 branches; preserve every remaining schema field."""
+
+    def walk(value):
+        if isinstance(value, list):
+            return [walk(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        output = {key: walk(item) for key, item in value.items() if key != "$defs"}
+        for union in ("anyOf", "oneOf"):
+            if union not in output:
+                continue
+            branches = [
+                branch
+                for branch in output[union]
+                if not branch.get("$ref", "").endswith("V2")
+                and branch.get("properties", {}).get("schema_version", {}).get("const")
+                != "optimization/v2"
+            ]
+            if len(branches) == 1:
+                # Pydantic adds a title to the new union wrapper; the original branch
+                # retains its own title (or its untitled reference) verbatim.
+                output = {
+                    **branches[0],
+                    **{key: item for key, item in output.items() if key not in {union, "title"}},
+                }
+            else:
+                output[union] = branches
+        return output
+
+    output = walk(schema)
+    definitions = schema.get("$defs", {})
+    needed = {}
+    pending = [output]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, list):
+            pending.extend(value)
+        elif isinstance(value, dict):
+            ref = value.get("$ref", "")
+            if ref.startswith("#/$defs/") and ref[8:] not in needed:
+                name = ref[8:]
+                needed[name] = walk(definitions[name])
+                pending.append(needed[name])
+            pending.extend(value.values())
+    if needed:
+        output["$defs"] = needed
+    return output
 
 
 def test_five_tool_schema_digest_matches_clean_6244_and_8a4_baselines(app):
@@ -626,8 +688,8 @@ def test_five_tool_schema_digest_matches_clean_6244_and_8a4_baselines(app):
         [
             {
                 "name": tool.name,
-                "input_schema": tool.input_schema,
-                "output_schema": tool.output_schema,
+                "input_schema": _v1_projection(tool.input_schema),
+                "output_schema": _v1_projection(tool.output_schema),
             }
             for tool in tools
         ],

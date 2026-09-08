@@ -7,9 +7,9 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from types import MappingProxyType
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from pydantic import Field, StringConstraints, ValidationError
+from pydantic import BaseModel, Field, StringConstraints, ValidationError
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.board_ir import BoardIRSnapshot
@@ -17,18 +17,24 @@ from copper_mcp.circuit_ir import decode_snapshot_json as decode_circuit_intent
 from copper_mcp.config import Settings
 from copper_mcp.kicad_cli import _context_revision, _drc_context
 from copper_mcp.optimization.contracts import (
+    DOMAINS,
+    AnyOptimizationRequest,
     Backend,
     ClosedModel,
     Digest,
+    Domain,
     FootprintRef,
     ObjectiveWeights,
     OptimizationError,
     OptimizationRequest,
+    OptimizationRequestV2,
     PlacementScope,
     ResourceLimits,
+    ResourceLimitsV2,
     bounded_json,
     digest_document,
 )
+from copper_mcp.optimization.drc_profile import DrcProfileBinding, prepare_drc_profile
 from copper_mcp.optimization.provenance import native_implementation_digest
 from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.placement.contracts import PlacementIntent, parse_placement_intent
@@ -73,11 +79,41 @@ class OptimizationLaunch(ClosedModel):
     limits: ResourceLimits = Field(default_factory=default_limits)
 
 
+class ProjectFileDeclaration(BaseModel):
+    model_config = ClosedModel.model_config
+    path: WorkspacePath
+    digest: Digest
+
+
+class ProjectLibraryDeclaration(ProjectFileDeclaration):
+    name: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+
+
+class ProjectDeclaration(ClosedModel):
+    root_path: WorkspacePath
+    files: Annotated[tuple[ProjectFileDeclaration, ...], Field(min_length=1, max_length=129)]
+    libraries: Annotated[tuple[ProjectLibraryDeclaration, ...], Field(max_length=128)]
+
+
+def default_limits_v2() -> ResourceLimitsV2:
+    return ResourceLimitsV2(
+        **{**default_limits().model_dump(), "max_candidates": 4, "max_route_attempts": 256}
+    )
+
+
+class OptimizationLaunchV2(OptimizationLaunch):
+    identity_namespace = "copper-mcp/optimization/v2/launch"
+    schema_version: Literal["optimization/v2"]
+    limits: ResourceLimitsV2 = Field(default_factory=default_limits_v2)
+    required_domains: Annotated[tuple[Domain, ...], Field(max_length=7)] = ()
+    project: ProjectDeclaration | None = None
+
+
 @dataclass(frozen=True)
 class PreparedOptimization:
     """Private input capture held only for this execution; metadata uses request digests."""
 
-    request: OptimizationRequest
+    request: AnyOptimizationRequest
     board_path: str
     source: bytes
     snapshot: BoardIRSnapshot
@@ -91,13 +127,20 @@ class PreparedOptimization:
     implementation_digest: str
     electrical_source: bytes | None = None
     input_artifact_bindings: tuple[tuple[str, str], ...] = ()
+    project: ProjectDeclaration | None = None
+    drc_profile: DrcProfileBinding | None = None
 
 
 def parse_launch(payload: object) -> OptimizationLaunch:
     try:
         raw = json.dumps(payload, allow_nan=False, ensure_ascii=True).encode("ascii")
         bounded_json(raw)
-        return OptimizationLaunch.model_validate_json(raw)
+        model = (
+            OptimizationLaunchV2
+            if type(payload) is dict and payload.get("schema_version") == "optimization/v2"
+            else OptimizationLaunch
+        )
+        return model.model_validate_json(raw)
     except (ValueError, TypeError, RecursionError, UnicodeError):
         raise OptimizationError("optimization launch is malformed") from None
 
@@ -204,7 +247,7 @@ def prepare_optimization(payload: object, settings: Settings) -> PreparedOptimiz
                 )
             )
         context = _drc_context(board.path, settings, board)
-        limits = ResourceLimits.model_validate(
+        limits = type(launch.limits).model_validate(
             {
                 **launch.limits.model_dump(),
                 "max_runtime_ms": min(
@@ -213,11 +256,11 @@ def prepare_optimization(payload: object, settings: Settings) -> PreparedOptimiz
             }
         )
         implementation_digest = native_implementation_digest()
-        request = OptimizationRequest(
-            schema_version="optimization/v1",
-            board_revision=revision,
-            snapshot_digest=snapshot.snapshot_digest,
-            placement_scope=PlacementScope(
+        fields: dict[str, Any] = {
+            "schema_version": "optimization/v1",
+            "board_revision": revision,
+            "snapshot_digest": snapshot.snapshot_digest,
+            "placement_scope": PlacementScope(
                 movable_footprint_refs=movable,
                 intent_digest=digest_document(
                     "optimization-placement-input/v1", placement_document
@@ -226,9 +269,9 @@ def prepare_optimization(payload: object, settings: Settings) -> PreparedOptimiz
                 cardinal_rotations=(0, 90, 180, 270),
                 preserve_existing_side=True,
             ),
-            target_net_scope_digest=digest_document("optimization-targets/v1", targets),
-            target_net_count=len(targets),
-            routing_profile_digest=digest_document(
+            "target_net_scope_digest": digest_document("optimization-targets/v1", targets),
+            "target_net_count": len(targets),
+            "routing_profile_digest": digest_document(
                 "optimization-routing-profile/v1",
                 {
                     "constraints": launch.constraints,
@@ -236,7 +279,7 @@ def prepare_optimization(payload: object, settings: Settings) -> PreparedOptimiz
                     "implementation": implementation_digest,
                 },
             ),
-            judge_profile_digest=digest_document(
+            "judge_profile_digest": digest_document(
                 "optimization-judge-profile/v1",
                 {
                     "drc": "kicad-drc-v1",
@@ -245,23 +288,71 @@ def prepare_optimization(payload: object, settings: Settings) -> PreparedOptimiz
                     "source_context_digest": _context_revision(context),
                 },
             ),
-            electrical_inputs_digest=electrical_digest,
-            required_domains=("DRC", "ERC", "DFM")
+            "electrical_inputs_digest": electrical_digest,
+            "required_domains": ("DRC", "ERC", "DFM")
             if electrical_digest is not None
             else ("DRC", "DFM"),
-            allowed_backends=tuple(sorted(launch.allowed_backends)),
-            objective_weights=ObjectiveWeights.model_validate(
+            "allowed_backends": tuple(sorted(launch.allowed_backends)),
+            "objective_weights": ObjectiveWeights.model_validate(
                 dict.fromkeys(ObjectiveWeights.model_fields, 1)
             ),
-            seed=launch.seed,
-            limits=limits,
-            human_approval_required=True,
-            policy_profile="deterministic-v1",
-        )
+            "seed": launch.seed,
+            "limits": limits,
+            "human_approval_required": True,
+            "policy_profile": "deterministic-v1",
+        }
+        effective_request: AnyOptimizationRequest
+        drc_profile = None
+        if isinstance(launch, OptimizationLaunchV2):
+            from copper_mcp.optimization.project_evidence import capture_project_inputs
+
+            if launch.project is not None and electrical_source is not None:
+                raise OptimizationError("optimization electrical inputs are ambiguous")
+            _effective_context, drc_profile = prepare_drc_profile(
+                context, relative, settings, started_at + limits.max_runtime_ms / 1000
+            )
+            capture_digest = library_digest = None
+            if launch.project is not None:
+                captured, _libraries, library_digest = capture_project_inputs(
+                    launch.project, settings, started_at + limits.max_runtime_ms / 1000
+                )
+                capture_digest = captured.digest
+            required = set(fields["required_domains"]) | set(launch.required_domains)
+            if capture_digest is not None:
+                required.add("ERC")
+            fields.update(
+                schema_version="optimization/v2",
+                policy_profile="deterministic-v2",
+                limits=limits.model_dump(),
+                project_capture_digest=capture_digest,
+                project_libraries_digest=library_digest,
+                drc_profile_digest=drc_profile.digest,
+                electrical_inputs_digest=capture_digest or electrical_digest,
+                required_domains=tuple(domain for domain in DOMAINS if domain in required),
+                routing_profile_digest=digest_document(
+                    "optimization-routing-profile/v2",
+                    {
+                        "v1": fields["routing_profile_digest"],
+                        "allocation": "equal-slots-half-checks/v2",
+                    },
+                ),
+                judge_profile_digest=digest_document(
+                    "optimization-judge-profile/v2",
+                    {
+                        "v1": fields["judge_profile_digest"],
+                        "project": capture_digest,
+                        "libraries": library_digest,
+                        "drc_profile": drc_profile.digest,
+                    },
+                ),
+            )
+            effective_request = OptimizationRequestV2.model_validate(fields)
+        else:
+            effective_request = OptimizationRequest.model_validate(fields)
         if (time.monotonic() - started_at) * 1000 >= limits.max_runtime_ms:
             raise OptimizationError("optimization preparation exhausted its time budget")
         return PreparedOptimization(
-            request,
+            effective_request,
             relative,
             board.content,
             snapshot,
@@ -275,6 +366,8 @@ def prepare_optimization(payload: object, settings: Settings) -> PreparedOptimiz
             implementation_digest,
             electrical_source,
             tuple(artifact_bindings),
+            launch.project if isinstance(launch, OptimizationLaunchV2) else None,
+            drc_profile,
         )
     except OptimizationError:
         raise

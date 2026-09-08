@@ -14,14 +14,15 @@ from pydantic import Field, model_validator
 
 from copper_mcp.optimization.contracts import (
     DOMAINS,
+    AnyOptimizationRequest,
     BackendVersion,
     ClosedModel,
     Counter,
     Digest,
     Domain,
-    OptimizationRequest,
     Verdict,
 )
+from copper_mcp.optimization.drc_profile import DrcProfileBinding
 
 Authority = Literal["kicad-drc-v1", "kicad-erc-v1", "kicad-drc-dfm-v1"]
 Reason = Literal[
@@ -118,9 +119,9 @@ def aggregate_verdict(results: tuple[DomainResult, ...]) -> Verdict:
     return "pass"
 
 
-class JudgeReport(ClosedModel):
+class _JudgeReportFields(ClosedModel):
     identity_namespace = "copper-mcp/optimization/v1/judge"
-    schema_version: Literal["optimization/v1"]
+    schema_version: Literal["optimization/v1", "optimization/v2"]
     candidate_id: Digest
     board_revision: Digest
     input_digest: Digest
@@ -131,7 +132,7 @@ class JudgeReport(ClosedModel):
     domains: Annotated[tuple[DomainResult, ...], Field(min_length=7, max_length=7)]
 
     @model_validator(mode="after")
-    def complete_and_bound(self) -> JudgeReport:
+    def complete_and_bound(self) -> _JudgeReportFields:
         if tuple(result.domain for result in self.domains) != DOMAINS:
             raise ValueError("judge must contain every domain exactly once in canonical order")
         if "DRC" not in self.required_domains:
@@ -185,13 +186,71 @@ class JudgeReport(ClosedModel):
         }
 
 
+class JudgeReport(_JudgeReportFields):
+    schema_version: Literal["optimization/v1"]
+
+
+class ProjectEvidence(ClosedModel):
+    capture_digest: Digest
+    libraries_digest: Digest
+    candidate_board_revision: Digest
+    erc_status: Literal["pass", "fail", "inconclusive"]
+    parity_status: Literal["pass", "fail", "inconclusive"]
+    erc_report_digest: Digest
+    parity_report_digest: Digest
+    erc_profile_id: Literal["kicad-project-connectivity/v1"]
+    parity_profile_id: Literal["kicad-project-board-parity/v1"]
+    erc_authentication_digest: Digest
+    parity_authentication_digest: Digest
+
+
+class JudgeReportV2(_JudgeReportFields):
+    identity_namespace = "copper-mcp/optimization/v2/judge"
+    schema_version: Literal["optimization/v2"]
+    project_required: bool
+    project_evidence: ProjectEvidence | None
+    drc_profile_digest: Digest
+    drc_profile: DrcProfileBinding | None
+
+    @model_validator(mode="after")
+    def project_binding(self) -> JudgeReportV2:
+        if self.drc_profile is not None and self.drc_profile.digest != self.drc_profile_digest:
+            raise ValueError("DRC profile binding is inconsistent")
+        evidence = self.project_evidence
+        if evidence is not None and (
+            not self.project_required
+            or evidence.capture_digest != self.electrical_inputs_digest
+            or evidence.candidate_board_revision != self.input_digest
+        ):
+            raise ValueError("project evidence describes another composition")
+        return self
+
+    @property
+    def reviewable(self) -> bool:
+        return (
+            super().reviewable
+            and self.drc_profile is not None
+            and (
+                not self.project_required
+                or (
+                    self.project_evidence is not None
+                    and self.project_evidence.erc_status == "pass"
+                    and self.project_evidence.parity_status == "pass"
+                )
+            )
+        )
+
+
+AnyJudgeReport = JudgeReport | JudgeReportV2
+
+
 def unavailable_report(
-    request: OptimizationRequest,
+    request: AnyOptimizationRequest,
     *,
     candidate_id: str,
     candidate_input_digest: str,
     rule_context_digest: str,
-) -> JudgeReport:
+) -> AnyJudgeReport:
     """An honest initial envelope; never manufactures a successful DRC/ERC invocation."""
 
     results: list[DomainResult] = []
@@ -204,14 +263,25 @@ def unavailable_report(
         else:
             status, reason = "not_run", "not_run"
         results.append(DomainResult(domain=domain, status=status, reason=reason, evidence=None))
-    return JudgeReport(
-        schema_version="optimization/v1",
-        candidate_id=candidate_id,
-        board_revision=request.board_revision,
-        input_digest=candidate_input_digest,
-        settings_digest=request.judge_profile_digest,
-        electrical_inputs_digest=request.electrical_inputs_digest,
-        rule_context_digest=rule_context_digest,
-        required_domains=request.required_domains,
-        domains=tuple(results),
-    )
+    fields = {
+        "schema_version": request.schema_version,
+        "candidate_id": candidate_id,
+        "board_revision": request.board_revision,
+        "input_digest": candidate_input_digest,
+        "settings_digest": request.judge_profile_digest,
+        "electrical_inputs_digest": request.electrical_inputs_digest,
+        "rule_context_digest": rule_context_digest,
+        "required_domains": request.required_domains,
+        "domains": tuple(results),
+    }
+    if request.schema_version == "optimization/v2":
+        return JudgeReportV2.model_validate(
+            {
+                **fields,
+                "project_required": request.project_capture_digest is not None,
+                "project_evidence": None,
+                "drc_profile_digest": request.drc_profile_digest,
+                "drc_profile": None,
+            }
+        )
+    return JudgeReport.model_validate(fields)

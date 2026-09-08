@@ -1,6 +1,6 @@
 # Native supervised optimization
 
-This is the implemented native slice of the [v0.13 plan](../plans/v0.13-supervised-optimization.md),
+This is the implemented native workflow of the [v0.13 plan](../plans/v0.13-supervised-optimization.md),
 not the completed general hybrid-router release. The package version remains 0.12.0 pending release.
 
 ## Start and observe
@@ -18,13 +18,16 @@ net references, and any explicitly movable footprint references into the launch 
 
 | Field | Meaning |
 |---|---|
+| `schema_version` | Set `optimization/v2` for measured comparison and project input. Omit it for unchanged v1 behavior. |
 | `board` | Workspace board path ending in `.kicad_pcb`. |
 | `expect_board_revision`, `expect_snapshot_digest` | Both observed identities are mandatory. |
 | `constraints` | The existing integer `clearance_nm`, `track_width_nm`, `via_diameter_nm`, `via_drill_nm` object. |
 | `target_net_refs` | Explicit distinct net references. Targets are never silently truncated. |
 | `movable_footprint_refs` | Optional explicit scope; the empty default means a verified identity placement. Locked footprints refuse. |
 | `placement_intent_path` | Optional bounded JSON sidecar with only `rules` and `proposals`, using the existing placement language. It cannot override the board, scope, side or capabilities. |
-| `electrical_intent_path` | Optional bounded, self-digesting Circuit Intent JSON snapshot. Supplying it makes ERC mandatory. Ordinary `.kicad_sch` intake is not implemented in this slice. |
+| `electrical_intent_path` | Optional bounded, self-digesting Circuit Intent JSON snapshot. Supplying it makes ERC mandatory. It cannot be combined with v2 `project`. |
+| `project` | V2 only: declared schematic `root_path`, digest-bound `files` (`path`, `digest`) and `libraries` (`name`, `path`, `digest`). Captured project ERC and separate candidate-bound PCB parity are mandatory. Unsupported projects refuse. |
+| `required_domains` | V2 only: additional required judge domains. The caller cannot remove mandatory DRC/DFM or project-required ERC. Missing authorities block review. |
 | `placement_grid_nm`, `routing_settings`, `seed` | Bounded existing native search parameters. Manhattan distance may guide the search, never final evidence. |
 | `limits` | Cumulative runtime, candidate, placement, route-attempt, repair, expansion, obstacle-check and output ceilings. Server ceilings may tighten them. |
 | `allowed_backends` | The implemented path is `internal-layered-v1`. External selections currently refuse until the production format bridge is integrated. The [local runtime setup](local-router-runtime.md) is separate. |
@@ -59,8 +62,38 @@ authority prevent package selection.
 
 Final ranking uses successful hard gates, target completion, coarse straight-track/via occupancy,
 clearance headroom, vias, copper length, intent residual/displacement and a deterministic identity
-tie-break. The current headroom value is a conservative zero lower bound. It is not a measured
-placement-quality or clearance-optimality claim.
+tie-break. V1 retains its zero placeholder; it is not a measurement. V2 binds a signed clearance
+measurement to the complete final snapshot, constraints, method and charged work. If any compared
+candidate lacks the measurement, clearance is omitted from the entire comparison and disclosed as
+unavailable. Neither value establishes native-rule or physics authority.
+
+V2 retains unchanged placement before heuristic screening and freezes the candidate population
+before routing. Each slot gets equal, nontransferable routing/evaluation budgets and seed schedules;
+failed slots remain visible. A moved candidate is not an improvement over an unmeasured baseline.
+Private v2 placement supports ordinary front/back orthogonal poses without side flips; unchanged
+expressions remain intact. The older file-apply serializer's supported subset is not widened.
+
+V2 enables five native-default suppressed checks as warnings in a bound private DRC profile,
+without changing the source project or weakening stronger explicit severities. Any remaining
+suppression still blocks review. See [the versioned workflow contract](../adr/0161-measured-optimization-is-an-end-to-end-versioned-workflow.md).
+
+## Reproduce the native placement-and-routing control
+
+From this checkout, configure `COPPER_MCP_TEST_PROJECT_ERC_CLI` to the reviewed KiCad executable
+and use the canonical Python environment with the test dependencies installed:
+
+```sh
+PYTHONPATH=src python -m pytest --no-cov -n 0 \
+  'tests/test_optimization_workflow_native.py::test_mcp_routes_complete_multilayer_tree_and_exports_without_apply[v2-placement-and-routing]'
+```
+
+The test sends an SDK MCP request through the real isolated worker, compares unchanged and moved
+placement on an owned four-layer fixture, and requires a moved result with shorter copper, a
+complete three-pad target connection, vias and zero hard KiCad DRC errors. It exports metadata,
+keeps optional physics inconclusive, and verifies the source board's bytes, inode and timestamp
+are unchanged. It neither applies nor saves, and creates no project file beside the v2 source.
+This controlled test does not prove held-out quality, ordinary-project coverage or real-human
+consent; the synthetic-CLI tests are not substitutes for this native execution.
 
 ## Export and confirm
 
@@ -86,8 +119,8 @@ old route tokens cannot be reused. Re-observe and re-verify before obtaining fre
 
 ## Remaining release gates
 
-Zoned compositions refuse until fresh candidate fill is integrated. Cross-layer multi-pin trees,
-production FreeRouting/SRJ conversion and disposal, normal-workspace schematic ERC, bounded repair
+Zoned compositions refuse until fresh candidate fill is integrated. Production FreeRouting/SRJ
+conversion and disposal, older-format project intake, broader project ERC/parity coverage, bounded repair
 coordination, Orca advisory scheduling and quality measurement, before/after rendering, the
 held-out corpus, real host UI validation and hosted calibration are unfinished. No 90% routing,
 3x speedup, unqualified ordinary-board coverage or v0.13 release acceptance follows from these
