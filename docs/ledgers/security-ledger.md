@@ -704,3 +704,25 @@ and conservative non-authority claims. Ponytail's optional unread _Model.name fi
 is recorded but not applied; _Element.name remains necessary for hierarchical identity.
 Fresh isolated-full and composed/native/publication evidence remain separate gates. None of
 these controls establishes complete singularity detection, convergence or physical accuracy.
+
+| SEC-214 | 2026-09-08 | Bounded project nominal-DC observation | One internally verified export acquisition; explicit case/topology/deck admission; exact captured models; fixed-image two-run case replay; bounded diagnostics/raw-vector/numeric checks; final artifact recapture and source freshness. | Supported passive/diode nominal DC is not SI/PI/thermal/EMC, calibration, model accuracy, convergence or engineering authority. No new MCP, provider or apply surface is introduced. Protected-hosted, main and release verification remain required. | [ADR-0156](../adr/0156-project-operating-point-is-bounded-observation.md), D-281 |
+
+2026-09-08 SEC-214 isolated validation: 22 non-real controls passed on Python3.11,3.12 and3.13,
+with six real cases deselected; format, lint, type, security and build gates passed. Reused complete
+evidence belongs only to original checkpoint45b42f1, tree5bb8bd4, where the full suite recorded
+5,740 tests, one skip and676.10 seconds with source/input fingerprint
+sha256:a105ad63bc33af20b266add5d77c7efdd839269070bc8bca564ee58906717b72. It is not a
+fresh full-validation claim for this publication tip. Historical unsuccessful a6 evidence, if
+encountered, remains unsuccessful and is not substituted for this checkpoint.
+
+2026-09-08 SEC-214 publication hold: the matched45b42f1/tree5bb8bd4 full result predates the
+PR300 shared-container cleanup P1. It remains historical source evidence only and does not close
+corrected-source validation. P1 remediation, fresh full validation and protected publication/main
+verification remain pending; this note neither changes prior evidence nor claims the finding closed.
+
+2026-09-08 SEC-214 parent correction is propagated: shared container source and tests match
+the reviewed executor correction. Current complete source/config/test equality with the
+development reference is preserved at fingerprint
+sha256:18793b02532f865d42ccb978f945ced1a895bae52ffeeb59ed17f08e54a16f27.
+The earlier a105 fingerprint and its full run remain historical. Corrected-source full and
+protected publication/main validation are still required before this stage can land.

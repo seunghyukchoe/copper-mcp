@@ -8,6 +8,11 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private nominal-DC operating-point coordination reuses one internally verified SPICE export
+  across explicit cases, runs each case twice in the fixed executor, and rechecks source/model
+  freshness. Results remain inconclusive engineering observations with no SI/PI/thermal/EMC,
+  calibration, model-accuracy, approval, MCP, or apply authority. Corrected shared-container
+  source validation remains pending after the PR300 cleanup P1.
 - Private operating-point topology preflight reparses captured model bytes and conservatively
   rejects unsupported nominal-DC graphs before any simulator work. It grants no execution,
   convergence, physics, engineering, approval or apply authority.
@@ -334,6 +339,9 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Router and simulator clients use nonblocking local pipe I/O, preserving abort-time process-group
+  ownership and bounded closure when an exited leader leaves inherited pipes open. Exchange and
+  remover exceptions still clean up; failed or uncertain work cannot return a candidate/result.
 - B-141's committed artifact is rebound to the squash-merge commit
   `86634180e5a3f0956cf2ede4168710f1fce8fbcb` that the default branch carries, replacing the
   branch commit `b7c71d4d643df155c7bdcee5bac25e7d943b7031` that squash-merging discarded. In

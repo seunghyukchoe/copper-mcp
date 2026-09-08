@@ -98,6 +98,18 @@ class ProjectSpiceExport:
         }
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class _RetainedProjectSpiceExport:
+    """Private verified export inputs retained for the following simulator-case stage only."""
+
+    report: ProjectSpiceExport
+    binding: ProjectSpiceModelBinding
+    prepared: PreparedSpiceSource
+
+    def __repr__(self) -> str:
+        return "<_RetainedProjectSpiceExport redacted>"
+
+
 def _execute(
     prepared: PreparedSpiceSource,
     binding: ProjectSpiceModelBinding,
@@ -181,7 +193,7 @@ def _execute(
         )
 
 
-def run_project_spice_export(
+def _run_project_spice_export_retained(
     project_capture: SchematicProjectCapture,
     libraries: tuple[SymbolLibraryInput, ...],
     declaration_json: bytes,
@@ -192,8 +204,8 @@ def run_project_spice_export(
     *,
     deadline: float | None = None,
     limits: CaptureLimits | None = None,
-) -> ProjectSpiceExport:
-    """Derive all inputs internally and deliver only after final source/model freshness."""
+) -> _RetainedProjectSpiceExport:
+    """Retain one verified export and confined inputs for the next private stage."""
     result = None
     try:
         copied, active_limits, active = _copy_controls(settings, limits, time.monotonic(), deadline)
@@ -241,7 +253,7 @@ def run_project_spice_export(
             raise ProjectSpiceExportError("project SPICE export artifacts changed")
         execution._verify_workspace_source(copied.workspace, source_files, active)
         _check(active)
-        result = completed
+        result = _RetainedProjectSpiceExport(completed, binding, prepared)
     except (
         ValueError,
         TypeError,
@@ -256,3 +268,30 @@ def run_project_spice_export(
             "project SPICE export could not produce complete bound observations"
         )
     return result
+
+
+def run_project_spice_export(
+    project_capture: SchematicProjectCapture,
+    libraries: tuple[SymbolLibraryInput, ...],
+    declaration_json: bytes,
+    artifact_paths_json: bytes,
+    bom_bindings_json: bytes,
+    terminal_bindings_json: bytes,
+    settings: Settings,
+    *,
+    deadline: float | None = None,
+    limits: CaptureLimits | None = None,
+) -> ProjectSpiceExport:
+    """Derive all inputs internally and return only the existing public export report."""
+
+    return _run_project_spice_export_retained(
+        project_capture,
+        libraries,
+        declaration_json,
+        artifact_paths_json,
+        bom_bindings_json,
+        terminal_bindings_json,
+        settings,
+        deadline=deadline,
+        limits=limits,
+    ).report
