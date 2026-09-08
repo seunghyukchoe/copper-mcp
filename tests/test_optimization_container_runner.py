@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import io
 import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -25,13 +25,62 @@ from copper_mcp.optimization.container_runner import (
 
 IMAGE = "local/copper-router@sha256:" + "a" * 64
 LOCAL_IMAGE = "sha256:" + "b" * 64
+_FAKE_PROCESSES: list[FakeProcess] = []
+
+
+def _write_pipe(descriptor: int, payload: bytes) -> None:
+    try:
+        with os.fdopen(descriptor, "wb", buffering=0) as stream:
+            offset = 0
+            while offset < len(payload):
+                offset += stream.write(payload[offset:])
+    except OSError:
+        pass
+
+
+def _read_pipe(descriptor: int) -> None:
+    try:
+        with os.fdopen(descriptor, "rb", buffering=0) as stream:
+            while stream.read(8192):
+                pass
+    except OSError:
+        pass
+
+
+def _output_pipe(payload: bytes):
+    reader, writer = os.pipe()
+    worker = None
+    if len(payload) <= os.fpathconf(writer, "PC_PIPE_BUF"):
+        _write_pipe(writer, payload)
+    else:
+        worker = threading.Thread(target=_write_pipe, args=(writer, payload), daemon=True)
+        worker.start()
+    return os.fdopen(reader, "rb", buffering=0), worker
 
 
 class FakeProcess:
     def __init__(self, returncode: int = 0, stdout: bytes = b"", stderr: bytes = b"") -> None:
         self.pid = 0
-        self.stdin, self.stdout, self.stderr = io.BytesIO(), io.BytesIO(stdout), io.BytesIO(stderr)
+        reader, writer = os.pipe()
+        input_worker = threading.Thread(target=_read_pipe, args=(reader,), daemon=True)
+        input_worker.start()
+        self.stdin = os.fdopen(writer, "wb", buffering=0)
+        self.stdout, output_worker = _output_pipe(stdout)
+        self.stderr, error_worker = _output_pipe(stderr)
+        self._workers = tuple(
+            worker for worker in (input_worker, output_worker, error_worker) if worker is not None
+        )
+        self._owned_streams = (self.stdin, self.stdout, self.stderr)
         self.returncode: int | None = returncode
+        _FAKE_PROCESSES.append(self)
+
+    def close(self) -> None:
+        for stream in self._owned_streams:
+            stream.close()
+        deadline = time.perf_counter() + 1
+        for worker in self._workers:
+            worker.join(max(0, deadline - time.perf_counter()))
+        assert not any(worker.is_alive() for worker in self._workers), "test pipe worker leaked"
 
     def poll(self) -> int | None:
         return self.returncode
@@ -42,6 +91,22 @@ class FakeProcess:
 
     def kill(self) -> None:
         self.returncode = -9
+
+
+@pytest.fixture(autouse=True)
+def close_fake_processes():
+    try:
+        yield
+    finally:
+        processes = tuple(_FAKE_PROCESSES)
+        _FAKE_PROCESSES.clear()
+        failures = 0
+        for process in processes:
+            try:
+                process.close()
+            except (AssertionError, OSError):
+                failures += 1
+        assert not failures, "test pipe cleanup did not complete"
 
 
 class RunningFakeProcess(FakeProcess):
@@ -148,6 +213,24 @@ def test_empty_successful_stdout_is_not_a_router_success(tmp_path: Path) -> None
     value, _ = runner(tmp_path, [FakeProcess(), image_inspect(), FakeProcess(), FakeProcess()])
     result = value.run(request())
     assert result.record.status is ContainerRunStatus.EMPTY_OUTPUT and result.output is None
+
+
+def test_router_exchange_exception_still_runs_cleanup(tmp_path, monkeypatch):
+    process = RunningFakeProcess()
+    value, calls = runner(tmp_path, [FakeProcess(), image_inspect(), process, FakeProcess()])
+    original = value._exchange
+
+    def exchange(current, *args):
+        if current is process:
+            raise RuntimeError("controlled exchange interruption")
+        return original(current, *args)
+
+    monkeypatch.setattr(value, "_exchange", exchange)
+    with pytest.raises(RuntimeError, match="controlled exchange interruption"):
+        value.run(request())
+    assert process.returncode == -9
+    assert all(stream.closed for stream in (process.stdin, process.stdout, process.stderr))
+    assert calls[-1][0][-3:-1] == ("rm", "--force")
 
 
 def test_non_boolean_cancellation_fails_closed(tmp_path: Path) -> None:

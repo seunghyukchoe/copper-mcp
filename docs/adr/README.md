@@ -229,6 +229,7 @@ never silently widens it.
 | [0150](0150-confined-spice-source-preserves-declared-settings.md) | Confined SPICE source preserves declared settings | Proposed |
 | [0151](0151-operating-point-numbers-are-not-physics-authority.md) | Operating-point numbers are not physics authority | Proposed |
 | [0152](0152-joint-native-views-share-acquisition-not-authority.md) | Joint native views share acquisition, not authority | Proposed |
+| [0153](0153-confined-ngspice-execution-confirms-cleanup.md) | Confined ngspice execution confirms cleanup | Proposed |
 | [0157](0157-verified-host-delivery-consent-is-challenge-bound.md) | Verified-host confirmation is challenge-bound | Proposed |
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and

@@ -656,6 +656,70 @@ tree and introduces no new content in this stage's parent synchronization. Its m
 and this stage's protected publication remain separate gates. No simulator, cleanup fix,
 engineering verdict or application authority is introduced by this extraction.
 
+| SEC-211 | 2026-09-08 | Fixed-image ngspice executor and cleanup | Fixed image/version/driver identity; exact byte/frame ceilings; default denial for malformed, nonzero, stderr, cancelled, expired and cleanup-failed runs; read-only no-network non-root confinement; forced removal and confirmed reap. | Raw designs, models and logs remain private and uncommitted. This isolated control neither binds cases/source nor proves convergence, model accuracy, physics, engineering, approval or apply authority. Full-suite, protected-hosted and main verification remain required. | [ADR-0153](../adr/0153-confined-ngspice-execution-confirms-cleanup.md), D-278 |
+
+2026-09-08 SEC-211 isolated validation: the39 focused container/probe/executor controls passed
+with two existing skips and one worker on Python3.11 in1.01s, Python3.12 in0.99s and Python3.13
+in1.11s wall time. Format, Ruff, strict source typecheck and build passed. Full-suite, real-native,
+protected-hosted and main verification remain required.
+
+2026-09-08 SEC-211 final-delivery correction: independent review found that cancellation during
+frame decoding or successful workspace cleanup was not polled before result delivery. Four
+regressions failed before the fix: late cancellation, callback failure, deadline expiry inside
+the final callback, and cancellation during cleanup. The executor now polls after cleanup and
+checks its deadline afterward. All43 focused controls passed on Python3.11,3.12 and3.13, with
+two real-router cases skipped in that selection; format, Ruff and strict type checks passed.
+Fresh actual execution of119-byte and300119-byte owned divider inputs produced identical
+operating-point digests with confirmed cleanup in1.424 seconds. Both real router smokes passed
+in5.15 seconds. Source/input fingerprint:
+sha256:d104e8b006b7fc385cd89e2929e327fa827d9d3fd2dfc4f22caa6a4e68ce47e3.
+These observations do not establish physics or full-suite completion. Corrected-source review,
+full validation and protected publication/main verification remain required.
+
+2026-09-08 SEC-211 corrected full validation: independent review closed the final-cancellation
+finding. Fresh make check passed5,680 tests, one intentional skip and90% code coverage, with
+647.44 seconds of pytest on three workers. All format, lint, type, security and build gates
+passed. Tested staged tree414109f2e17dca0ac5365d871c0d5ce57bdb1716; source/input fingerprint
+sha256:d104e8b006b7fc385cd89e2929e327fa827d9d3fd2dfc4f22caa6a4e68ce47e3.
+This source includes the four late-stop regressions and supersedes pre-correction validation
+for this isolated stage. Parent-history synchronization and protected hosted/main validation
+remain required before later publication. Complete project composition and all calibrated
+physics, engineering and application requirements remain separate; this executor grants none.
+
+2026-09-08 SEC-211 hosted P1 correction: an exited leader could be reaped while a descendant
+held its pipe open, after which buffered stream closure could hang. Four real, externally guarded
+probe/cleanup regressions (same-group and escaped descendants) fail against the published source
+in32.19 seconds. The correction uses unbuffered nonblocking selectors, retains leader identity
+until pipe completion or abort, signals the owned group before reaping, and closes local pipes
+without I/O workers. Already-reaped handles do not signal stale groups. Exchange/removal exception
+paths also clean up; their two regressions failed before adding finally ownership.
+All51 focused controls pass on Python3.11,3.12 and3.13, with two real-router cases skipped in
+that selection. Fresh actual small/300KB ngspice checks passed1.594s; both real router smokes
+passed4.62s. Format, Ruff and strict mypy pass. Independent review accepted scoped P1 closure,
+including the stronger unconfirmed-reap refusal/closure control and retained original assertions.
+Source/input fingerprint: sha256:6e031f8b1d0cab3e4303e06873ae1d68d0beea2c4408ef9edc463bbef024ed7b.
+The earlier full run is pre-P1 evidence. A new corrected-source full run, updated PR review/checks
+and main verification remain mandatory; no descendant-containment, physics or apply claim follows.
+
+2026-09-08 SEC-211 parallel full validation was unsuccessful: four native authority controls
+failed while5,684 passed and one skipped in970.40s on three workers. Two SPICE controls expose
+exit-time deep bundle-signature verification timeouts with about8s and5s remaining. Two project
+ERC failures deliberately suppress internal context, so their exact original cause is not
+asserted. The selector/cleanup controls passed in that run. The same four native cases passed
+serially with coverage in51.44s and unchanged authentication/deadline limits; diagnostic timing
+was limited to elapsed time, remaining budget, exit status and exception type. That observation
+does not establish a causal contention result or replace full validation. The next full attempt
+uses standard serial test execution, retaining every test, coverage and all original limits.
+
+2026-09-08 SEC-211 corrected serial full validation passed5,688 tests with one skip and90%
+code coverage in1658.22s of pytest. All format, lint, strict type, security and build gates
+passed. Tested staged treedc4bf17d3960de2a91957c14de0def13422fe150; source/input fingerprint
+sha256:6e031f8b1d0cab3e4303e06873ae1d68d0beea2c4408ef9edc463bbef024ed7b.
+This is a complete serial run of unchanged tests, limits and authentication, not a subset or
+budget relaxation. The earlier parallel run remains unsuccessful evidence and its contention
+hypothesis remains unproven. Independent review accepted the actual P1 implementation; updated
+protected hosted validation and resulting main verification are still required before landing.
+
 | SEC-215 | 2026-09-08 | Purpose-bound host confirmation across MCP protocols | Default-off verified-host gating; owner/purpose/job-record/package/judge-bound, expiring one-use challenges; 128-entry retention; replacement/replay refusal; pre-prompt and post-acceptance delivery checks; unchanged approval source checks and fixed resolver errors. | Private board bytes, credentials and issued capabilities remain server-side. SDK continuation protection alone proves neither one use nor human consent. No apply, physics, new tool or provider authority is added; full/native and verified-human validation remain open. | [ADR-0157](../adr/0157-verified-host-delivery-consent-is-challenge-bound.md), D-282 |
 
 2026-09-08 SEC-215 focused validation:36 consent controls pass with installed MCP2.0.0 and2.1.1,
