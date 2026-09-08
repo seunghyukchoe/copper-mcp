@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0157**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0161**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -233,6 +233,7 @@ never silently widens it.
 | [0154](0154-operating-point-cases-bind-explicit-inputs.md) | Operating-point cases bind explicit inputs | Proposed |
 | [0155](0155-operating-point-topology-is-conservative-preflight.md) | Operating-point topology is conservative preflight | Proposed |
 | [0156](0156-project-operating-point-is-bounded-observation.md) | Project operating point is bounded observation | Proposed |
+| [0160](0160-custom-rule-loading-needs-native-witness.md) | Custom-rule loading needs a native witness | Proposed |
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
@@ -392,3 +393,7 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 
 2026-09-05 integration: the reserved ADR-0131 from PR #265 is included, and ADR-0133
 records execution above the existing ADR-0132 foundation. No spent identifier is recycled.
+
+2026-09-08 corrective increment: ADR-0155 through ADR-0159 remain held by the topology,
+project-execution, host-consent, layered-tree and measured-clearance lanes. The urgent DRC
+correction takes ADR-0160 and amends existing D-005/SEC-003; no held number is recycled.

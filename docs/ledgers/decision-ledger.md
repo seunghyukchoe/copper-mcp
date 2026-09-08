@@ -285,6 +285,13 @@
 
 | D-279 | 2026-09-08 | Proposed | Bind only explicit bounded nominal-DC case declarations to internally admitted model pins and declared rails/load cases. Require native ground, complete rail maps, explicit energization, directed load endpoints and declared temperature limits; do not derive voltage sources, execute a simulator or promote caller-created records to source/physics authority. | [ADR-0154](../adr/0154-operating-point-cases-bind-explicit-inputs.md), SEC-212 |
 
+2026-09-08 D-005 corrective follow-up: a native DRC report alone does not prove custom-rule
+loading when KiCad silently falls back to defaults. [ADR-0160](../adr/0160-custom-rule-loading-needs-native-witness.md)
+requires a separate private native witness before the original-context summary may be accepted.
+This restores the existing authoritative-rule contract; it does not add a public authority surface.
+Complete validation and independent integrated review remain pending at this record. The witness
+does not certify every assertion expression; that distinct native compiler limitation remains open.
+
 | D-280 | 2026-09-08 | Proposed | Preflight only conservative bounded nominal-DC topology from freshly parsed captured model bytes. Require positive passive values, collision-free hierarchy, minimum grounded incidence and no voltage/inductor constraint loop. Unsupported or unavailable topology refuses; no source authentication, backend execution, convergence, physics, engineering, approval or apply authority follows. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), SEC-213 |
 
 | D-281 | 2026-09-08 | Proposed | Coordinate one internally retained verified SPICE export across explicit passive/diode nominal-DC cases. Require topology before naming, exact captured models, two fixed-runtime replays per case, bounded diagnostics/vector/numeric checks and final source/artifact freshness. Preserve v1 export identities; duration/calibration/model accuracy remain not_run and engineering is inconclusive. | [ADR-0156](../adr/0156-project-operating-point-is-bounded-observation.md), SEC-214 |

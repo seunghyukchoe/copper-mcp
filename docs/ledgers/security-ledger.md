@@ -765,6 +765,43 @@ The prior5,700-test full and hosted CI34186402701 succeeded on the pre-correctio
 Independent review and fresh corrected-source full/hosted/main validation remain required.
 No source authentication, numerical, physics, engineering or apply authority is added.
 
+2026-09-08 SEC-212 pin-owner correction complete validation: 5,709 tests passed with one skip
+and 90% code coverage in 1764.40 seconds of serial pytest. All format, lint, strict type,
+security and source/wheel build gates passed. Tested commit
+43afebcdea5f9ad2699b6cbbaa690f3de9148a34; tree 31718671f11f8927892ec5bece57abcaec1a99cb;
+source/input fingerprint sha256:10ac9630ef8851c4b303ef98d50f9ec88e9d7665e650841e10cfe3ad4f8fcee0.
+Independent correction review accepted the shared pin-owner guards and reproduced 21 passing
+case controls. Hosted CI34187753206 passed on the same implementation. This record changes no
+source or test bytes; final metadata and exact-tip hosted checks, followed by resulting main
+verification, remain required before the next milestone publishes. No physics or apply claim.
+
+2026-09-08 SEC-003 corrective finding: an owned KiCad 10.0.5 fixture with a missing-unit custom
+clearance constraint returned a schema-valid default-rule DRC report. The intended 0.5 mm
+negative control did not fail until the rule was corrected to explicit `0.5mm`. A matching
+project file alone did not change that outcome. Native source confirms rule-initialization
+failure clears the complete custom set and the board loader catches the exception.
+The original authority claim is therefore incomplete for malformed custom-rule input.
+
+A separate owned native experiment produced the exact probe item's unexcluded error assertion
+for two valid rule files and none for missing units, an unknown constraint or an invalid
+condition property. This supports the [ADR-0160](../adr/0160-custom-rule-loading-needs-native-witness.md)
+design, not implementation acceptance. Full original-context preservation, witness spoofing,
+deadlines, ceilings, cleanup, native integration and independent review remain required.
+SEC-113's zero diagnostic-capture budget and the existing file/apply boundaries are unchanged.
+
+2026-09-08 SEC-003 scoped implementation review accepted the loading/fallback correction after
+case-preserving paths, pre-hash input admission, projected-size admission, post-cleanup deadlines
+and context-free original-store failure handling were corrected. Four primary path/privacy
+regressions failed before correction and pass afterward. Integrated controls passed 124 tests
+and 25 subtests on Python 3.11, 3.12 and 3.13; four real cases were deselected in those runs.
+The separate real KiCad group passed 18 cases in 12.01 seconds, including the 14 new loading
+controls and existing native DRC integrations. Counts are overlapping, not additive coverage.
+Format, lint/metadata, strict type, secret/dependency audit and source/wheel builds passed.
+Independent final implementation review repeated 124 tests and 25 subtests and found no remaining
+findings in scope. Fresh full validation, protected hosted/main checks and final evidence review
+remain pending. This is loading/fallback detection, not static rule-expression certification;
+inactive invalid assertion expressions remain a distinct unresolved native limitation.
+
 | SEC-213 | 2026-09-08 | Conservative operating-point topology preflight | Fresh bounded captured-model parsing; positive R/C/L admission; iterative expansion and node/work/path limits; case-folded hierarchy-collision refusal before renaming; grounded-incidence and voltage/inductor-loop checks. | Malformed, unavailable, unsupported and expired input refuses. No source authentication, deck/backend execution, convergence, physical correctness, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), D-280 |
 
 2026-09-08 SEC-213 isolated controls passed32 tests on each of Python3.11,3.12 and3.13.

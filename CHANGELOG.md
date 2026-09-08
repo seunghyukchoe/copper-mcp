@@ -339,6 +339,9 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Custom-rule DRC checks use a private native loading witness to detect silent fallback to
+  default rules, then report only the untouched original context. The witness does not certify
+  every rule expression; that separate native compiler limitation remains explicit.
 - Private SPICE source admission and expected export rows reject pins owned by a different
   bound component, including unused no-connect pins, before case endpoints can be selected.
 - Router and simulator clients use nonblocking local pipe I/O, preserving abort-time process-group

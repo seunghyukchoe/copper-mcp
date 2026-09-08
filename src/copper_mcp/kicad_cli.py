@@ -16,6 +16,7 @@ import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -41,6 +42,14 @@ from copper_mcp.attestation import (
 )
 from copper_mcp.board_ir import ParseLimits
 from copper_mcp.config import Settings
+from copper_mcp.kicad_drc_rule_liveness import (
+    KiCadDrcRuleLivenessError,
+    RuleLivenessWitness,
+    admit_rule_liveness_context,
+    build_rule_liveness_context,
+    has_custom_rules,
+    require_rule_liveness_witness,
+)
 from copper_mcp.models import DrcSummary, ErcSummary
 from copper_mcp.parse_budgets import parse_limits_for
 from copper_mcp.routing import (
@@ -874,12 +883,13 @@ def _candidate_drc_deadline_settings(settings: Settings, deadline: float | None)
     )
 
 
-def _run_captured_drc(
+def _run_captured_drc_pass(
     context: dict[str, bytes],
     *,
     board_relative: str,
     settings: Settings,
     deadline: float | None = None,
+    witness: RuleLivenessWitness | None = None,
 ) -> DrcSummary:
     """Consume one bounded context through the sole fixed KiCad DRC command path."""
 
@@ -990,6 +1000,19 @@ def _run_captured_drc(
                 raise KiCadCliError("KiCad DRC did not create a report") from error
             raise KiCadCliError("KiCad DRC report exceeds the configured limit") from error
 
+    if witness is not None:
+        try:
+            require_rule_liveness_witness(
+                report,
+                witness,
+                deadline=(
+                    deadline
+                    if deadline is not None
+                    else time.monotonic() + settings.kicad_timeout_seconds
+                ),
+            )
+        except KiCadDrcRuleLivenessError:
+            raise KiCadCliError("KiCad custom rules were not proven live") from None
     summary = _parse_drc_report(
         report,
         return_code=completed.returncode,
@@ -998,6 +1021,149 @@ def _run_captured_drc(
         expected_source=Path(board_relative).name,
     )
     _candidate_drc_deadline_settings(settings, deadline)
+    return summary
+
+
+def _validate_rule_source_store(
+    original_root: Path, expected_files: frozenset[str], settings: Settings
+) -> None:
+    failed = False
+    try:
+        _validate_snapshot_tree(original_root, expected_files, settings)
+    except (KiCadCliError, OSError, ValueError):
+        failed = True
+    if failed:
+        raise KiCadCliError("KiCad custom-rule source store validation failed")
+
+
+def _run_captured_drc(
+    context: dict[str, bytes],
+    *,
+    board_relative: str,
+    settings: Settings,
+    deadline: float | None = None,
+) -> DrcSummary:
+    """Run one pass without rules, or prove custom rules live before the untouched pass."""
+
+    if deadline is not None:
+        finite_deadline = False
+        if type(deadline) in (int, float):
+            try:
+                finite_deadline = math.isfinite(deadline)
+            except (OverflowError, TypeError):
+                pass
+        if not finite_deadline:
+            raise KiCadCliError("KiCad DRC deadline is malformed")
+    active_deadline = (
+        deadline if deadline is not None else time.monotonic() + settings.kicad_timeout_seconds
+    )
+    admission_failed = False
+    try:
+        admit_rule_liveness_context(
+            context,
+            board_relative,
+            max_file_bytes=settings.max_board_bytes,
+            max_context_files=settings.max_drc_context_files,
+            max_context_bytes=settings.max_drc_context_bytes,
+            deadline=active_deadline,
+        )
+    except KiCadDrcRuleLivenessError:
+        admission_failed = True
+    if admission_failed:
+        raise KiCadCliError("KiCad custom-rule context is malformed") from None
+    rules_present = has_custom_rules(context, board_relative)
+    if not rules_present:
+        return _run_captured_drc_pass(
+            context,
+            board_relative=board_relative,
+            settings=settings,
+            deadline=deadline,
+        )
+    settings = _candidate_drc_deadline_settings(settings, active_deadline)
+    original_revision = _context_revision(context)
+    derivative_refused = False
+    try:
+        derivative, witness = build_rule_liveness_context(
+            context,
+            board_relative,
+            max_file_bytes=settings.max_board_bytes,
+            max_context_files=settings.max_drc_context_files,
+            max_context_bytes=settings.max_drc_context_bytes,
+            deadline=active_deadline,
+        )
+    except KiCadDrcRuleLivenessError:
+        derivative_refused = True
+    if derivative_refused:
+        raise KiCadCliError("KiCad custom-rule liveness derivative was refused") from None
+
+    temporary = None
+    creation_failed = False
+    try:
+        temporary = tempfile.TemporaryDirectory(prefix="copper-mcp-drc-rules-")
+    except OSError:
+        creation_failed = True
+    if creation_failed or temporary is None:
+        raise KiCadCliError("KiCad custom-rule source store could not be secured") from None
+
+    summary: DrcSummary | None = None
+    try:
+        original_root = Path(temporary.name) / "original"
+        store_failed = False
+        try:
+            _write_drc_snapshot(context, original_root)
+            expected_files = frozenset(context)
+            _make_snapshot_read_only(original_root)
+            original_root = original_root.resolve(strict=True)
+        except OSError:
+            store_failed = True
+        if store_failed:
+            raise KiCadCliError("KiCad custom-rule source store could not be secured") from None
+        context.clear()
+        _validate_rule_source_store(original_root, expected_files, settings)
+        _run_captured_drc_pass(
+            derivative,
+            board_relative=board_relative,
+            settings=settings,
+            deadline=active_deadline,
+            witness=witness,
+        )
+        settings = _candidate_drc_deadline_settings(settings, active_deadline)
+        _validate_rule_source_store(original_root, expected_files, settings)
+        restore_failed = False
+        try:
+            original_board = (original_root / board_relative).resolve(strict=True)
+            original_context = _drc_context(
+                original_board,
+                replace(settings, workspace=original_root),
+            )
+        except (KiCadCliError, OSError):
+            restore_failed = True
+        if restore_failed:
+            raise KiCadCliError("KiCad custom-rule source store changed") from None
+        if _context_revision(original_context) != original_revision:
+            raise KiCadCliError("KiCad custom-rule source store changed")
+        summary = _run_captured_drc_pass(
+            original_context,
+            board_relative=board_relative,
+            settings=settings,
+            deadline=active_deadline,
+        )
+        settings = _candidate_drc_deadline_settings(settings, active_deadline)
+        _validate_rule_source_store(original_root, expected_files, settings)
+    except BaseException:
+        with suppress(Exception):
+            temporary.cleanup()
+        raise
+
+    cleanup_failed = False
+    try:
+        temporary.cleanup()
+    except Exception:
+        cleanup_failed = True
+    if cleanup_failed:
+        raise KiCadCliError("KiCad custom-rule source store cleanup failed") from None
+    _candidate_drc_deadline_settings(settings, active_deadline)
+    assert summary is not None
     return summary
 
 
