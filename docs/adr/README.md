@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0155**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0156**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -231,6 +231,7 @@ never silently widens it.
 | [0152](0152-joint-native-views-share-acquisition-not-authority.md) | Joint native views share acquisition, not authority | Proposed |
 | [0153](0153-confined-ngspice-execution-confirms-cleanup.md) | Confined ngspice execution confirms cleanup | Proposed |
 | [0154](0154-operating-point-cases-bind-explicit-inputs.md) | Operating-point cases bind explicit inputs | Proposed |
+| [0155](0155-operating-point-topology-is-conservative-preflight.md) | Operating-point topology is conservative preflight | Proposed |
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read

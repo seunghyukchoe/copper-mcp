@@ -694,3 +694,13 @@ Independent isolation and metadata review accepted the unchanged source/assertio
 parent ledger prefixes and private non-authority interpretation. Ponytail found no justified
 cuts in this binding stage. These results do not claim fresh isolated-full, native execution,
 physics, hosted publication or main verification; those remain separate gates.
+
+| SEC-213 | 2026-09-08 | Conservative operating-point topology preflight | Fresh bounded captured-model parsing; positive R/C/L admission; iterative expansion and node/work/path limits; case-folded hierarchy-collision refusal before renaming; grounded-incidence and voltage/inductor-loop checks. | Malformed, unavailable, unsupported and expired input refuses. No source authentication, deck/backend execution, convergence, physical correctness, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), D-280 |
+
+2026-09-08 SEC-213 isolated controls passed32 tests on each of Python3.11,3.12 and3.13.
+Format, Ruff, complete lint/metadata, strict typecheck, security and build passed. Independent
+isolation and metadata reviews accepted unchanged source/assertions, complete parent history
+and conservative non-authority claims. Ponytail's optional unread _Model.name field finding
+is recorded but not applied; _Element.name remains necessary for hierarchical identity.
+Fresh isolated-full and composed/native/publication evidence remain separate gates. None of
+these controls establishes complete singularity detection, convergence or physical accuracy.

@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private operating-point topology preflight reparses captured model bytes and conservatively
+  rejects unsupported nominal-DC graphs before any simulator work. It grants no execution,
+  convergence, physics, engineering, approval or apply authority.
 - Private operating-point case binding validates complete explicit rail/load/ground mappings
   against declared inputs and bound native pins. It creates no deck, execution, convergence,
   physics, engineering, approval or apply authority.
