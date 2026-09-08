@@ -331,6 +331,9 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Held-out audio placement measurements now require the complete deterministic evaluation
+  ceiling; retained candidates from interrupted searches cannot become successful evidence.
+  Operational deadlines, production settings and historical reports are unchanged.
 - Custom-rule DRC checks use a private native loading witness to detect silent fallback to
   default rules, then report only the untouched original context. The witness does not certify
   every rule expression; that separate native compiler limitation remains explicit.

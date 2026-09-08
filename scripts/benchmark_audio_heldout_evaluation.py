@@ -259,6 +259,15 @@ def _placement_metrics(protocol: HeldoutProtocol) -> dict[str, Any]:
         }
     )
     result = solve_placement(intent, snapshot, view, settings=PLACEMENT_SETTINGS)
+    if (
+        result.status != "work_exhausted"
+        or result.evaluations != PLACEMENT_SETTINGS.max_evaluations
+    ):
+        raise HeldoutEvaluationError(
+            "held-out placement did not reach its deterministic work ceiling: "
+            f"{result.status}, "
+            f"{result.evaluations}/{PLACEMENT_SETTINGS.max_evaluations} evaluations"
+        )
     if result.initial_score is None or not result.ranked:
         raise HeldoutEvaluationError("placement baseline did not retain a legal candidate")
     best = min(result.ranked, key=lambda item: (item.score, item.candidate.candidate_id))

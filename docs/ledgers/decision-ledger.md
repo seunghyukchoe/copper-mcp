@@ -291,3 +291,13 @@ requires a separate private native witness before the original-context summary m
 This restores the existing authoritative-rule contract; it does not add a public authority surface.
 Complete validation and independent integrated review remain pending at this record. The witness
 does not certify every assertion expression; that distinct native compiler limitation remains open.
+
+2026-09-08 D-254 corrective follow-up: the held-out audio evaluator also requires
+`work_exhausted` and exactly its declared 96 placement evaluations before reading retained
+scores. A controlled scheduling pause reproduced partial-versus-complete replay divergence;
+the original failing log did not retain both metric objects, so that mechanism is not claimed
+as its proven historical cause. Six regression cases refuse interrupted or mismatched work
+counts. No solver setting, timer, fixture, signature or historical artifact is changed.
+The first covered module validation failed four routing targets and one historical replay
+timeout, not this new placement guard; those failures remain unsuccessful validation evidence.
+Full integrated validation remains required.
