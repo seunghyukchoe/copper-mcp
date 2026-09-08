@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Private fixed-image ngspice execution confines one bounded deck to the pinned ngspice 45.2
+  runtime, captures only bounded raw/diagnostic bytes, and confirms container cleanup. It does
+  not select caller programs or establish convergence, physics, engineering, approval or apply authority.
 - Shared internal container process ownership preserves existing router requests, resource
   bounds, statuses and result identities. This mechanical change adds no simulator or authority.
 - Joint native component/pin acquisition removes duplicated XML execution contexts from model
@@ -325,6 +328,9 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Router and simulator clients use nonblocking local pipe I/O, preserving abort-time process-group
+  ownership and bounded closure when an exited leader leaves inherited pipes open. Exchange and
+  remover exceptions still clean up; failed or uncertain work cannot return a candidate/result.
 - B-141's committed artifact is rebound to the squash-merge commit
   `86634180e5a3f0956cf2ede4168710f1fce8fbcb` that the default branch carries, replacing the
   branch commit `b7c71d4d643df155c7bdcee5bac25e7d943b7031` that squash-merging discarded. In
