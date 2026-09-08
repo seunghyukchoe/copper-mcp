@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from kicad_drc_mock import make_fake_kicad_cli
 
 import copper_mcp.kicad_cli as kicad_cli
 from copper_mcp.adapters import (
@@ -122,13 +123,13 @@ def _fake_completed_run(
 
 def _install_fake_kicad(
     monkeypatch: pytest.MonkeyPatch,
+    workspace: Path,
     run: Any,
 ) -> None:
-    monkeypatch.setattr(
-        kicad_cli,
-        "discover_kicad_cli",
-        lambda settings: Path("/trusted/kicad-cli"),
-    )
+    executable_root = workspace.parent / f"{workspace.name}-layered-kicad-bin"
+    executable_root.mkdir(exist_ok=True)
+    executable = make_fake_kicad_cli(executable_root)
+    monkeypatch.setattr(kicad_cli, "discover_kicad_cli", lambda settings: executable)
     monkeypatch.setattr(subprocess, "run", run)
 
 
@@ -140,7 +141,7 @@ def test_binds_layered_candidate_to_private_drc_context(
     board = tmp_path / FIXTURE.name
     shutil.copy2(FIXTURE, board)
     capture: dict[str, Any] = {}
-    _install_fake_kicad(monkeypatch, _fake_completed_run(capture))
+    _install_fake_kicad(monkeypatch, tmp_path, _fake_completed_run(capture))
 
     evidence = run_layered_route_candidate_drc(
         board.name,
@@ -192,7 +193,7 @@ def test_warning_only_authority_is_bound_but_not_advertised_as_clean(
         )
         return subprocess.CompletedProcess(command, 5)
 
-    _install_fake_kicad(monkeypatch, warning_run)
+    _install_fake_kicad(monkeypatch, tmp_path, warning_run)
     evidence = run_layered_route_candidate_drc(
         board.name,
         candidate,
@@ -221,7 +222,7 @@ def test_rejects_stale_or_malformed_layered_candidates_before_kicad(
         calls += 1
         return subprocess.CompletedProcess([], 0)
 
-    _install_fake_kicad(monkeypatch, unexpected_run)
+    _install_fake_kicad(monkeypatch, tmp_path, unexpected_run)
     stale = candidate.__class__(
         candidate_id=candidate.candidate_id,
         base_revision=f"sha256:{'1' * 64}",

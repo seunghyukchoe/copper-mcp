@@ -833,3 +833,12 @@ An earlier worker command accidentally selected one native unittest and failed i
 assertion; that run is not acceptance evidence, and no installed executable was modified.
 Fresh complete and exact-tip hosted validation remain required. Executable consistency does not
 establish atomic pathname execution, publisher authentication or shared-library integrity.
+
+2026-09-08 SEC-003 portable-test correction: hosted CI run 34209815291 rejected three legacy
+DRC mock cases on all supported interpreters because `/trusted/kicad-cli` does not exist.
+Those tests now use the existing inert executable-fixture helper in their pytest-owned
+temporary area, outside the workspace whose contents they assert. Subprocesses remain mocked;
+production executable discovery, identity admission and drift checks are unchanged. The three
+cases failed before correction (43.80 seconds) and passed afterward on Python 3.12 (149.43
+seconds on a heavily contended host). This is mock-contract evidence, not native execution.
+The new exact-tip hosted matrix and complete integration validation remain pending.
