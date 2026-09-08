@@ -774,3 +774,30 @@ Independent correction review accepted the shared pin-owner guards and reproduce
 case controls. Hosted CI34187753206 passed on the same implementation. This record changes no
 source or test bytes; final metadata and exact-tip hosted checks, followed by resulting main
 verification, remain required before the next milestone publishes. No physics or apply claim.
+
+2026-09-08 SEC-003 corrective finding: an owned KiCad 10.0.5 fixture with a missing-unit custom
+clearance constraint returned a schema-valid default-rule DRC report. The intended 0.5 mm
+negative control did not fail until the rule was corrected to explicit `0.5mm`. A matching
+project file alone did not change that outcome. Native source confirms rule-initialization
+failure clears the complete custom set and the board loader catches the exception.
+The original authority claim is therefore incomplete for malformed custom-rule input.
+
+A separate owned native experiment produced the exact probe item's unexcluded error assertion
+for two valid rule files and none for missing units, an unknown constraint or an invalid
+condition property. This supports the [ADR-0160](../adr/0160-custom-rule-loading-needs-native-witness.md)
+design, not implementation acceptance. Full original-context preservation, witness spoofing,
+deadlines, ceilings, cleanup, native integration and independent review remain required.
+SEC-113's zero diagnostic-capture budget and the existing file/apply boundaries are unchanged.
+
+2026-09-08 SEC-003 scoped implementation review accepted the loading/fallback correction after
+case-preserving paths, pre-hash input admission, projected-size admission, post-cleanup deadlines
+and context-free original-store failure handling were corrected. Four primary path/privacy
+regressions failed before correction and pass afterward. Integrated controls passed 124 tests
+and 25 subtests on Python 3.11, 3.12 and 3.13; four real cases were deselected in those runs.
+The separate real KiCad group passed 18 cases in 12.01 seconds, including the 14 new loading
+controls and existing native DRC integrations. Counts are overlapping, not additive coverage.
+Format, lint/metadata, strict type, secret/dependency audit and source/wheel builds passed.
+Independent final implementation review repeated 124 tests and 25 subtests and found no remaining
+findings in scope. Fresh full validation, protected hosted/main checks and final evidence review
+remain pending. This is loading/fallback detection, not static rule-expression certification;
+inactive invalid assertion expressions remain a distinct unresolved native limitation.

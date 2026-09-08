@@ -284,3 +284,10 @@
 | D-278 | 2026-09-08 | Proposed | Execute only a fixed driver in a digest-pinned local ngspice 45.2 image under bounded input/output/deadline and confinement controls, and require confirmed container cleanup before accepting its private frame. Caller-selected programs, convergence, calibrated physics, engineering approval and apply authority remain absent. | [ADR-0153](../adr/0153-confined-ngspice-execution-confirms-cleanup.md), SEC-211 |
 
 | D-279 | 2026-09-08 | Proposed | Bind only explicit bounded nominal-DC case declarations to internally admitted model pins and declared rails/load cases. Require native ground, complete rail maps, explicit energization, directed load endpoints and declared temperature limits; do not derive voltage sources, execute a simulator or promote caller-created records to source/physics authority. | [ADR-0154](../adr/0154-operating-point-cases-bind-explicit-inputs.md), SEC-212 |
+
+2026-09-08 D-005 corrective follow-up: a native DRC report alone does not prove custom-rule
+loading when KiCad silently falls back to defaults. [ADR-0160](../adr/0160-custom-rule-loading-needs-native-witness.md)
+requires a separate private native witness before the original-context summary may be accepted.
+This restores the existing authoritative-rule contract; it does not add a public authority surface.
+Complete validation and independent integrated review remain pending at this record. The witness
+does not certify every assertion expression; that distinct native compiler limitation remains open.
