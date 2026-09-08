@@ -685,3 +685,12 @@ This source includes the four late-stop regressions and supersedes pre-correctio
 for this isolated stage. Parent-history synchronization and protected hosted/main validation
 remain required before later publication. Complete project composition and all calibrated
 physics, engineering and application requirements remain separate; this executor grants none.
+
+| SEC-212 | 2026-09-08 | Explicit operating-point case binding | Closed bounded case JSON; declaration/capture/binding identity checks; complete non-NC native endpoints; native-ground normalization; all-rail mapping; explicit energization; directed load-pair and temperature-limit checks; deadline-bound identities. | Caller-created binding/declaration data is not authenticated source or physics proof. No deck, backend, execution, convergence, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0154](../adr/0154-operating-point-cases-bind-explicit-inputs.md), D-279 |
+
+2026-09-08 SEC-212 isolated controls passed12 tests each on Python3.11,3.12 and3.13.
+Format, Ruff, complete lint/metadata, strict typecheck, security audit and package build passed.
+Independent isolation and metadata review accepted the unchanged source/assertions, complete
+parent ledger prefixes and private non-authority interpretation. Ponytail found no justified
+cuts in this binding stage. These results do not claim fresh isolated-full, native execution,
+physics, hosted publication or main verification; those remain separate gates.
