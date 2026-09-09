@@ -1,29 +1,33 @@
 """Internal bounded worker for durable optimization lifecycle metadata.
 
 The executor is a trusted host callback, never an MCP argument.  It retains every private input
-and raw output; this worker can publish only a validated :class:`OptimizationPackage`.
+and raw output; this worker can publish only a validated :class:`AnyOptimizationPackage`.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
-from typing import Final
+from typing import Final, Literal
 
 from pydantic import ValidationError
 
 from copper_mcp.optimization import lifecycle
-from copper_mcp.optimization.contracts import OptimizationError, OptimizationRequest
+from copper_mcp.optimization.contracts import (
+    AnyOptimizationRequest,
+    OptimizationError,
+    validate_request,
+)
 from copper_mcp.optimization.lifecycle import (
     TERMINAL,
+    AnyOptimizationJobRecord,
     FailureCode,
     JobStatus,
-    OptimizationJobRecord,
     ResourceUsage,
     advance_job,
     fail_job,
 )
-from copper_mcp.optimization.package import OptimizationPackage
+from copper_mcp.optimization.package import AnyOptimizationPackage, Comparison, validate_package
 from copper_mcp.optimization.repository import (
     OptimizationJobConflictError,
     OptimizationJobLease,
@@ -70,7 +74,7 @@ class OptimizationExecutionProbe:
         self,
         repository: OptimizationJobRepository,
         lease: OptimizationJobLease,
-        request: OptimizationRequest,
+        request: AnyOptimizationRequest,
         owner_binding: str,
         *,
         absolute_deadline_ms: int | None = None,
@@ -102,7 +106,7 @@ class OptimizationExecutionProbe:
         return self._lease.job_id
 
     @property
-    def record(self) -> OptimizationJobRecord:
+    def record(self) -> AnyOptimizationJobRecord:
         return self._repository.lease_record(self._lease)
 
     def remaining_time_ms(self) -> int:
@@ -125,7 +129,21 @@ class OptimizationExecutionProbe:
             return True
         return False
 
-    def checkpoint(self) -> OptimizationJobRecord:
+    def record_comparison(self, comparison: Comparison) -> None:
+        """Persist bounded v2 outcomes even when no candidate qualifies for review."""
+
+        if self._request.schema_version != "optimization/v2":
+            raise OptimizationExecutionError("invalid_candidate")
+        current = self.checkpoint()
+        replacement = lifecycle._replace(
+            current, revision=current.revision + 1, comparison=comparison
+        )
+        result = self._repository.compare_and_swap(
+            current, replacement, owner_binding=self._owner_binding, lease=self._lease
+        )
+        self._lease = self._lease.with_revision(result.revision)
+
+    def checkpoint(self) -> AnyOptimizationJobRecord:
         """Renew a live lease or stop on cancellation, fencing loss, or runtime exhaustion."""
 
         remaining_time_ms = self.remaining_time_ms()
@@ -165,7 +183,7 @@ class OptimizationExecutionProbe:
         self._unaccounted_initial_ms = 0
         return combined
 
-    def _commit_same_phase(self, charge: ResourceUsage) -> OptimizationJobRecord:
+    def _commit_same_phase(self, charge: ResourceUsage) -> AnyOptimizationJobRecord:
         current = self.checkpoint()
         reserved = self._charge_with_elapsed(charge)
         try:
@@ -193,12 +211,12 @@ class OptimizationExecutionProbe:
 
     def advance(
         self,
-        next_status: JobStatus,
+        next_status: JobStatus | Literal["evaluating"],
         *,
         charge: ResourceUsage | None = None,
         observed_board_revision: str | None = None,
         observed_snapshot_digest: str | None = None,
-    ) -> OptimizationJobRecord:
+    ) -> AnyOptimizationJobRecord:
         """Create a pure lifecycle transition, then commit it with the current fence."""
 
         if next_status in {"awaiting_approval", "approved", "completed"}:
@@ -235,10 +253,10 @@ class OptimizationExecutionProbe:
         self,
         charge: ResourceUsage,
         *,
-        next_status: JobStatus | None = None,
+        next_status: JobStatus | Literal["evaluating"] | None = None,
         observed_board_revision: str | None = None,
         observed_snapshot_digest: str | None = None,
-    ) -> OptimizationJobRecord:
+    ) -> AnyOptimizationJobRecord:
         """Reserve cumulative work in-place, or in the CAS that enters a new phase."""
 
         if next_status is None:
@@ -256,7 +274,7 @@ def _current_after_stop(
     job_id: str,
     owner_binding: str,
     error: Exception,
-) -> OptimizationJobRecord:
+) -> AnyOptimizationJobRecord:
     try:
         return repository.get(job_id, owner_binding)
     except OptimizationJobUnavailableError:
@@ -266,7 +284,7 @@ def _current_after_stop(
 def _fail(
     probe: OptimizationExecutionProbe,
     code: FailureCode,
-) -> OptimizationJobRecord:
+) -> AnyOptimizationJobRecord:
     try:
         current = probe._repository.lease_record(probe._lease)
         elapsed_charge = probe._charge_with_elapsed(None)
@@ -324,8 +342,8 @@ def _fail(
 
 def _finish_package(
     probe: OptimizationExecutionProbe,
-    package: OptimizationPackage,
-) -> OptimizationJobRecord:
+    package: AnyOptimizationPackage,
+) -> AnyOptimizationJobRecord:
     current = probe.checkpoint()
     charge = probe._charge_with_elapsed(None)
     try:
@@ -373,17 +391,17 @@ def _finish_package(
 def execute_optimization_job(
     repository: OptimizationJobRepository,
     job_id: str,
-    request: OptimizationRequest,
+    request: AnyOptimizationRequest,
     owner_binding: str,
-    executor: Callable[[OptimizationExecutionProbe], OptimizationPackage],
+    executor: Callable[[OptimizationExecutionProbe], AnyOptimizationPackage],
     *,
     absolute_deadline_ms: int | None = None,
-) -> OptimizationJobRecord:
+) -> AnyOptimizationJobRecord:
     """Execute one internal callback and publish only its reviewable package metadata."""
 
     if not isinstance(repository, OptimizationJobRepository):
         raise ValueError("optimization repository is malformed")
-    request = OptimizationRequest.model_validate(request)
+    request = validate_request(request)
     if not callable(executor):
         raise ValueError("optimization executor is not callable")
     if absolute_deadline_ms is not None and (
@@ -419,7 +437,7 @@ def execute_optimization_job(
             return initial
     try:
         raw_package = executor(probe)
-        package = OptimizationPackage.model_validate(raw_package)
+        package = validate_package(raw_package)
         return _finish_package(probe, package)
     except OptimizationJobCancelledError as error:
         return _current_after_stop(repository, job_id, owner_binding, error)

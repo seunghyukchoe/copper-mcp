@@ -284,3 +284,208 @@
 | D-278 | 2026-09-08 | Proposed | Execute only a fixed driver in a digest-pinned local ngspice 45.2 image under bounded input/output/deadline and confinement controls, and require confirmed container cleanup before accepting its private frame. Caller-selected programs, convergence, calibrated physics, engineering approval and apply authority remain absent. | [ADR-0153](../adr/0153-confined-ngspice-execution-confirms-cleanup.md), SEC-211 |
 
 | D-279 | 2026-09-08 | Proposed | Bind only explicit bounded nominal-DC case declarations to internally admitted model pins and declared rails/load cases. Require native ground, complete rail maps, explicit energization, directed load endpoints and declared temperature limits; do not derive voltage sources, execute a simulator or promote caller-created records to source/physics authority. | [ADR-0154](../adr/0154-operating-point-cases-bind-explicit-inputs.md), SEC-212 |
+
+2026-09-08 D-005 corrective follow-up: a native DRC report alone does not prove custom-rule
+loading when KiCad silently falls back to defaults. [ADR-0160](../adr/0160-custom-rule-loading-needs-native-witness.md)
+requires a separate private native witness before the original-context summary may be accepted.
+This restores the existing authoritative-rule contract; it does not add a public authority surface.
+Complete validation and independent integrated review remain pending at this record. The witness
+does not certify every assertion expression; that distinct native compiler limitation remains open.
+
+| D-280 | 2026-09-08 | Proposed | Preflight only conservative bounded nominal-DC topology from freshly parsed captured model bytes. Require positive passive values, collision-free hierarchy, minimum grounded incidence and no voltage/inductor constraint loop. Unsupported or unavailable topology refuses; no source authentication, backend execution, convergence, physics, engineering, approval or apply authority follows. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), SEC-213 |
+
+| D-281 | 2026-09-08 | Proposed | Coordinate one internally retained verified SPICE export across explicit passive/diode nominal-DC cases. Require topology before naming, exact captured models, two fixed-runtime replays per case, bounded diagnostics/vector/numeric checks and final source/artifact freshness. Preserve v1 export identities; duration/calibration/model accuracy remain not_run and engineering is inconclusive. | [ADR-0156](../adr/0156-project-operating-point-is-bounded-observation.md), SEC-214 |
+
+| D-282 | 2026-09-08 | Proposed | Preserve v1 geometry-disclosure and review-approval semantics using default-off verified-host challenges bound to owner, purpose, job record, package and judge. Use SDK Resolve/Elicit across protocol versions, fixed expected refusals and pre-prompt/post-acceptance delivery checks; keep approval's source checks and no-apply boundary. Continuation integrity is neither single-use consent nor proof of a human. | [ADR-0157](../adr/0157-verified-host-delivery-consent-is-challenge-bound.md), SEC-215 |
+
+| D-283 | 2026-09-08 | Proposed | Bind private layered trees to the complete source pad set, real physical-layer contact and deterministic branch replay; preserve shared-via accounting, remaining work allowances, bounded serialization and complete-net reparse checks. Native optimization retains mandatory composed-board DRC and separate consent/apply authority. | [ADR-0158](../adr/0158-layered-trees-bind-complete-pad-connectivity.md), SEC-216 |
+
+| D-284 | 2026-09-08 | Proposed | Measure complete supplied-IR foreign-net spacing with exact geometry, downward rounding, source/rule identity and cumulative work accounting. Unavailable input never supplies a fabricated numeric margin. Keep v1 scoring unchanged until explicit versioned integration. | [ADR-0159](../adr/0159-composed-clearance-is-an-input-bound-measurement.md), SEC-217 |
+
+2026-09-08 D-254 corrective follow-up: the held-out audio evaluator also requires
+`work_exhausted` and exactly its declared 96 placement evaluations before reading retained
+scores. A controlled scheduling pause reproduced partial-versus-complete replay divergence;
+the original failing log did not retain both metric objects, so that mechanism is not claimed
+as its proven historical cause. Six regression cases refuse interrupted or mismatched work
+counts. No solver setting, timer, fixture, signature or historical artifact is changed.
+The first covered module validation failed four routing targets and one historical replay
+timeout, not this new placement guard; those failures remain unsuccessful validation evidence.
+Full integrated validation remains required.
+
+| D-285 | 2026-09-08 | Proposed | Deliver measured optimization through the complete versioned MCP, isolated execution, comparison, persistence and review path. Preserve v1 interpretation, derive project evidence internally, reserve equal identity/candidate budgets and disclose unavailable comparison data. No standalone helper, new apply authority or uncalibrated physics pass counts as delivery. | [ADR-0161](../adr/0161-measured-optimization-is-an-end-to-end-versioned-workflow.md) |
+
+2026-09-09 D-285 integration checkpoint: the actual SDK MCP dispatcher, isolated child, layered
+routing, KiCad 10.0.5 and metadata export passed all three owned-fixture cases (v1 routing, v2
+routing and v2 placement-plus-routing) in 180.57 seconds. The movement case selects a displaced
+candidate with strictly shorter copper than its reviewable unchanged baseline; both retain full
+target connectivity and zero hard DRC errors. Original board bytes/inode/mtime remain unchanged.
+Independent review closed the renderer's modern-field rotation defect and verified-zero-search
+identity finding. The corrected source also passed 36 renderer/identity controls and 376 focused
+optimization controls, with mypy and Ruff. This is a reproducible native feature checkpoint, not
+full-suite, ordinary-project, held-out, human-consent, physics, main-landing or release evidence.
+The invocation and exact scope are documented in [native optimization](../integrations/native-optimization.md).
+
+2026-09-09 D-285 full-validation follow-up: the frozen 81ca5e6 checkout failed after 102 passing
+tests because the existing apply-token census scans every `.issue(` call and also matched the
+host-consent challenge issuer. Independent inspection confirmed those two calls issue no apply
+capability. Renaming that private method to `issue_challenge` preserves its behavior and keeps the
+original census and apply-token allowlist unchanged. Both census controls then passed in 7.73
+seconds. The full run remains failed evidence; host-consent regression validation and a later
+stable integrated full check are still required. No same-head full retry was started.
+
+2026-09-09 D-285 imported-workflow diagnostic: zero-work interruptions were localized to the
+parent supervisor's nonblocking write raising EAGAIN; the worker had not received its request.
+The supervisor now writes at most the platform's `PIPE_BUF` and handles temporary read/write
+backpressure without replacing the process or changing deadlines, cancellation or output caps.
+Four real-pipe controls passed, including forced backpressure and stop cases. This is the
+[documented pipe-readiness bound](https://docs.python.org/3.12/library/select.html#select.PIPE_BUF),
+not a new backend-retry policy. The complete imported-board MCP/native workflow still requires
+fresh validation after this correction and the independently reviewed identity-ownership fix.
+
+2026-09-09 D-285 native-import follow-up: source binding
+`sha256:4d99137daf0198cbf8c78decd7cabf0c9237a700a5965a1d05a0ebff628b4b27`
+passed the real imported-board MCP/placement/routing/KiCad/export control in 12.00 seconds.
+The source board remained unchanged. Production board intake separately captured the pinned
+audio and supply inputs; no optimization was run on them. The sensor input exposed unsupported
+leader/orthogonal drawing dimensions. Their bounded, type-specific admission retains the existing
+nested-layer, identity and lock checks; the next native intake then refused actual footprint-local
+Edge.Cuts geometry. That refusal remains a coverage gap, not an exclusion or a success.
+The broader focused run retained a failure at the old two-branch tool-schema assertion after 138
+passes. The corrected control checks all three closed branches and their explicit input modes,
+while retaining original-file binding and prohibiting caller-supplied approval/executable fields.
+Its selected schema/dimension controls passed (43 tests). Full integrated validation and independent
+review of the latest changes remain pending; the assigned reviewers became unavailable before
+completing that review. Nothing in this record claims main landing or release acceptance.
+
+2026-09-09 D-285 zoned-workflow implementation: native fill is now connected to v2 routing and
+package production, with source-preserving cache replacement, complete modeled-geometry comparison,
+two native fills, per-slot output allocation and final target connectivity. Existing v1 fill/cache
+authority is unchanged. Target-net copper/via totals are separate from newly added copper and the
+zero-search identity proof. Three synthetic workflow/cache controls passed; one real ground-pour
+MCP case passed. The mixed native case was refused, and a bounded diagnostic reached a refill
+timeout at the remaining slot allowance. Host load was above 350; that observation does not prove
+it is the sole performance cause. No deadline was increased and no whole-suite retry was started.
+Mixed native completion, adversarial/integration checks and independent review remain pending.
+
+2026-09-09 D-285 allocation correction: final connectivity was incorrectly billed to the search
+pool instead of the reserved verification pool. Two deterministic controls failed before the fix;
+all three controls passed after it, without increasing or transferring any allowance. The affected
+isolated MCP tree/placement workflow then passed under its original limits (74.21 seconds).
+The earlier broader regression run remains failed evidence (30 passed before that case failed).
+An owned-backend profile recorded substantial subprocess wait and import time; sampling means
+its nested cumulative totals are not a clean release benchmark. The host was observed at zero
+idle CPU with heavy memory pressure. Mixed-board native acceptance remains unverified; no native
+retry, new main commit, or release claim follows from this correction.
+
+The remaining selected v2 workflow regressions subsequently passed (23 tests, 4 explicitly
+deselected MCP variants already handled separately), and targeted mypy/Ruff passed. This remains
+focused evidence; it does not convert the failed native mixed-board run or incomplete full suite
+into a pass.
+
+2026-09-09 D-285 blocked workflow delivery: unsuccessful terminal v2 evaluations now export a
+canonical projection of their existing owner-bound metadata through the production status/export
+tools. The report labels itself blocked and terminal-metadata-only; it grants no candidate,
+geometry, judge, review or application authority. Its digest/revision are checked on export and
+its source record survives restart without retaining private inputs. No new database or MCP tool
+family was added. Typed root responses preserve the flat v1 wire shape: the SDK's bare union
+annotation otherwise introduced an incompatible `result` wrapper. The existing v1 schema golden
+remains byte-for-byte unchanged after resolving the new root reference in its v1 projection.
+Four focused SDK/default-isolation controls passed (122.67 seconds), covering backend refusal,
+required-domain inconclusiveness, owner/revision/digest checks, restart, non-prompting refusals and
+v1 interpretation. This closes an evaluation-delivery defect inside the active workflow, not the
+ordinary-board milestone; native mixed-board completion, production external routing, independent
+review and full integration/release validation remain open.
+
+2026-09-09 D-285 complete zoned-tree workflow control: v2 production routing now forwards its
+candidate-bound fill into the cross-layer multi-pin tree. The pair and tree routers reuse one
+foreign-zone obstacle construction, with unchanged conservative envelopes, fill admission and
+clearance/obstacle ceilings. Tree identities and both replay/request verification bind the existing
+fill digest; absent-fill canonical identities remain unchanged. No new routing backend or authority
+was introduced. The native four-layer fixture performs identity/alternative placement, complete
+three-pad routing, post-route refill, composed KiCad checks and immutable export without saving.
+Both it and the previously timed-out native two-pad/mixed-board control passed (18.39s combined)
+under their original limits after observed host load fell from above 300 to about 7. Earlier timeout
+logs remain failures, not retroactively successful runs. Routing/control regressions passed 63
+tests (6.34s); targeted mypy passed 36 source files. A first regression run had 57 passes and six
+new-test setup failures from selecting a fixture with no foreign net; the fixture was corrected.
+
+The first real pinned audio/supply board-stage MCP diagnostics captured all 10/7 eligible nets,
+required no added routing for identity placement, performed candidate fill and reached judgement.
+Both exported explicit blocked reports for required-domain inconclusiveness from project DRC
+suppressions. Original board/project/license bytes, inode and timestamps were unchanged. These
+are development diagnostics, not held-out, project ERC, calibrated physics or placement-improvement
+evidence. No suppressed check was waived. Sensor footprint-local outline intake, partial-copper
+repair, production external-router composition, independent review, full validation and the
+original release acceptance remain open. No new main commit or readiness percentage is claimed.
+
+2026-09-09 D-285 full-check checkpoint: the frozen zoned-workflow tree passed lint/metadata and
+whole-source mypy, then stopped after 337 passing tests and one skip at B-123's live implementation
+hash check. The shared zone extraction changed that file, so the historical calibration could not
+stand in for fresh source evidence. B-144 records a genuine successor run under unchanged gates;
+the old report is preserved and verified against its original source. The recorder's assumption
+that the optional million-vertex experiment must fail was replaced by recording its measured
+verdict, without raising the shipped 500,000-vertex cap or relaxing any time/memory threshold.
+The affected mutation anchor was updated to the shared-loop variables and the entire five-mutant
+spec was rerun successfully. These corrections do not turn the stopped full suite into a pass.
+
+2026-09-09 D-285 existing-copper repair: a separate copy of the frozen integration tree was used
+while its complete suite ran. V2 now selects a bounded batch of existing copper on declared
+targets that are disconnected or attached to actually moved footprints, charges one slot repair
+round, removes only unlocked/ungrouped native copper expressions, and reparses against the exact
+expected delta. Both the route composition and exported package bind the repair. No partial
+derivative is published; routing, refill, connectivity and complete-board judgement still gate it.
+A bounded diagnostic showed the first chosen moved pad still touched its old trace, so selection
+must include movement-affected targets, not only disconnected targets. Original failure logs remain.
+
+The SDK/default-isolation placement-and-repair control passed, as did the partial-routing control.
+Both real-KiCad variants then passed together in 15.49s under original limits, including zero hard
+candidate DRC errors and unchanged original bytes/inodes/timestamps. The placement control selects
+shorter routed copper than the unchanged-placement control. Seven pure source/scope/lock/group/
+budget/cancellation checks and package-tampering refusals complement these demonstrations; they
+are not held-out quality or live application evidence. A regression expectation was updated for
+the explicit extra repair-admission connectivity check, retaining the final verification pool.
+General local-window/negotiated repair, external composition, project suppression handling and
+frozen release acceptance remain open. This extension has focused/native evidence, not the frozen
+pre-repair tree's full-suite result or independent review.
+
+2026-09-09 D-285 integrated safety review: the subsequent frozen tree
+`0e791a03eb5c3d28e7a0dbedd4d31ef3745b3951` passed canonical make check (6,235 passed, two skipped,
+2,159.63s pytest), security checks and wheel/sdist builds. Independent Sol review nevertheless
+found P1: the normal exchange path reaped the worker before group termination, leaking a descendant
+that closed stdout. The new owned regression failed before the fix. A local Darwin probe also
+confirmed EPERM when signaling a normally exited unreaped leader, so simply moving wait was not a
+sound portable fix. A fixed guardian now owns the group and a worker-private status channel;
+parent cleanup happens on the real worker-exit frame before output EOF/reaping. Its watchdog
+uses the existing cleanup grace. EPERM and missing expected ownership remain refusals.
+
+The same review found P2: import/review freshness scans could receive a fresh full scan allowance.
+All such calls now use the existing remaining-deadline settings helper; sub-second remainder
+refuses. The guardian/import/consent regression selection passed 69 tests, and the native
+full-board import plus zoned-tree controls passed after the fix (19.08s combined). These results
+do not reuse the earlier full pass as validation of changed executable code. Implementation
+re-review and a fresh integrated checkpoint remain required before merge.
+
+2026-09-09 D-285 repair review corrections: independent review found that a positive-only
+connectivity kernel's failure was incorrectly treated as disconnection, and footprint-local
+groups were absent from removal protection. Four targeted regressions reproduced those defects.
+Unchanged-target repair now uses connected/disconnected/inconclusive state: copper cores prove
+connection, a bounded graph of conservative envelopes can prove disconnection, and ambiguity or
+unmodelled geometry refuses. Existing geometry-envelope helpers and layer-aware union-find are
+reused. Every admitted group expression is inspected before splicing, not only root groups.
+Controls cover connected minor/major arcs, rounded end-cap uncertainty, provably disjoint arc
+copper, nested segment/via/arc membership and budget/cancellation/source preservation. Forced
+routing and mandatory DRC failures after a successful reset prove that no private candidate or
+selected package survives. Nineteen focused controls passed; two native repair workflows also
+passed after the logic corrections. These are focused/native observations, not a repaired claim
+about the earlier timed-out full run or a completed independent re-review.
+
+2026-09-09 D-285 reviewed workflow checkpoint: independent Sol review accepted the guardian/
+deadline fixes, then accepted the repair connectivity, nested-group protection and post-reset
+disposal corrections at tree `1f6762bd4af787051a87c2c0e4f431d14759c8a0`. The reviewed repair tree
+is integrated into the feature branch without modifying the original dirty checkout. Final-source
+typing/style and focused controls are recorded separately from native/full acceptance. The latest
+native failures remain failures: retained metadata shows no published packages, the moved case
+reached 119.259s of its 120s limit before a refill timeout, and the interrupted case last recorded
+96.212s. Host contention was severe; no deadline was relaxed and no failure was restamped as a pass.
+This is a draft feature checkpoint, not a main merge, completed v0.13 release or five-area readiness
+claim. Protected review/CI and fresh validation remain gates.

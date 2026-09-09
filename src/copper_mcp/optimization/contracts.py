@@ -144,9 +144,9 @@ class ObjectiveWeights(ClosedModel):
     intent_residual: Annotated[int, Field(ge=1, le=1_000_000)]
 
 
-class OptimizationRequest(ClosedModel):
+class _OptimizationRequestFields(ClosedModel):
     identity_namespace = "copper-mcp/optimization/v1/request"
-    schema_version: Literal["optimization/v1"]
+    schema_version: Literal["optimization/v1", "optimization/v2"]
     board_revision: Digest
     snapshot_digest: Digest
     placement_scope: PlacementScope
@@ -161,7 +161,7 @@ class OptimizationRequest(ClosedModel):
     seed: Counter
     limits: ResourceLimits
     human_approval_required: Literal[True]
-    policy_profile: Literal["deterministic-v1"]
+    policy_profile: Literal["deterministic-v1", "deterministic-v2"]
 
     @field_validator("human_approval_required", mode="before")
     @classmethod
@@ -171,7 +171,7 @@ class OptimizationRequest(ClosedModel):
         return value
 
     @model_validator(mode="after")
-    def closed_policy(self) -> OptimizationRequest:
+    def closed_policy(self) -> _OptimizationRequestFields:
         if self.human_approval_required is not True:
             raise ValueError("human approval is mandatory")
         if "DRC" not in self.required_domains:
@@ -186,6 +186,59 @@ class OptimizationRequest(ClosedModel):
         if self.electrical_inputs_digest is not None and "ERC" not in self.required_domains:
             raise ValueError("electrical inputs require ERC")
         return self
+
+
+class OptimizationRequest(_OptimizationRequestFields):
+    schema_version: Literal["optimization/v1"]
+    policy_profile: Literal["deterministic-v1"]
+
+
+class ResourceLimitsV2(ResourceLimits):
+    identity_namespace = "copper-mcp/optimization/v2/limits"
+    max_route_attempts: Annotated[int, Field(ge=1, le=4096)]
+
+
+class OptimizationRequestV2(_OptimizationRequestFields):
+    identity_namespace = "copper-mcp/optimization/v2/request"
+    schema_version: Literal["optimization/v2"]
+    policy_profile: Literal["deterministic-v2"]
+    limits: ResourceLimitsV2
+    project_capture_digest: Digest | None
+    project_libraries_digest: Digest | None
+    drc_profile_digest: Digest
+    input_mode: Literal["observed-snapshot", "native-full-board"] = "observed-snapshot"
+    native_import_digest: Digest | None = None
+    imported_board_revision: Digest | None = None
+
+    @model_validator(mode="after")
+    def mandatory_checks(self) -> OptimizationRequestV2:
+        imported = self.input_mode == "native-full-board"
+        if imported != (self.native_import_digest is not None) or imported != (
+            self.imported_board_revision is not None
+        ):
+            raise ValueError("native import binding is incomplete")
+        if not {"DRC", "DFM"}.issubset(self.required_domains):
+            raise ValueError("mandatory optimization checks are missing")
+        if (self.project_capture_digest is None) != (self.project_libraries_digest is None):
+            raise ValueError("project binding is incomplete")
+        if self.project_capture_digest is not None and (
+            self.electrical_inputs_digest != self.project_capture_digest
+            or "ERC" not in self.required_domains
+        ):
+            raise ValueError("project binding requires ERC")
+        return self
+
+
+AnyOptimizationRequest = OptimizationRequest | OptimizationRequestV2
+_REQUEST_ADAPTER: TypeAdapter[AnyOptimizationRequest] = TypeAdapter(AnyOptimizationRequest)
+
+
+def validate_request(value: object) -> AnyOptimizationRequest:
+    return _REQUEST_ADAPTER.validate_python(value)
+
+
+def decode_request(value: str | bytes) -> AnyOptimizationRequest:
+    return _REQUEST_ADAPTER.validate_json(value)
 
 
 class StartOptimization(ClosedModel):

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from copper_mcp.adapters import parse_kicad_bytes
-from copper_mcp.adapters.kicad_placement_patch import render_kicad_placement_candidate_board
+from copper_mcp.adapters.kicad_placement_patch import (
+    _render_optimization_placement_candidate_board,
+    render_kicad_placement_candidate_board,
+)
 from copper_mcp.board_ir import BoardIRSnapshot, verify_snapshot
 from copper_mcp.config import Settings
 from copper_mcp.optimization.contracts import digest_document
@@ -13,7 +16,7 @@ from copper_mcp.optimization.inputs import PreparedOptimization
 from copper_mcp.optimization.lifecycle import ResourceUsage
 from copper_mcp.optimization.worker import OptimizationExecutionError, OptimizationExecutionProbe
 from copper_mcp.parse_budgets import parse_limits_for
-from copper_mcp.placement import build_placement_view
+from copper_mcp.placement import build_placement_view, evaluate_placement
 from copper_mcp.placement.solver import PlacementSolverSettings, solve_placement
 
 
@@ -24,6 +27,64 @@ class PrivatePlacement:
     candidate_id: str
     displacement_nm: int
     intent_residual_nm: int
+
+
+def search_placements_v2(
+    prepared: PreparedOptimization, settings: Settings, probe: OptimizationExecutionProbe
+) -> tuple[PrivatePlacement, ...]:
+    identity_id = digest_document(
+        "optimization-identity-placement/v2",
+        {"source": prepared.request.board_revision, "snapshot": prepared.snapshot.snapshot_digest},
+    )
+    residual = 0
+    intent = prepared.placement_intent
+    if intent is not None:
+        checks = min(
+            settings.max_placement_checks, prepared.request.limits.max_obstacle_checks // 8
+        )
+        probe.reserve(ResourceUsage(placement_evaluations=1, obstacle_checks=checks))
+        result = evaluate_placement(
+            replace(intent, proposals=()),
+            prepared.snapshot,
+            build_placement_view(
+                prepared.source, prepared.snapshot, limits=parse_limits_for(settings)
+            ),
+            max_checks=checks,
+            deadline_seconds=min(settings.max_placement_seconds, probe.remaining_time_ms() / 1000),
+            board_path=prepared.board_path,
+        )
+        probe.checkpoint()
+        if (
+            result.candidate is None
+            or not result.candidate.evidence.legality.legal
+            or any(pose.moved for pose in result.candidate.placements)
+        ):
+            raise OptimizationExecutionError("unsupported_geometry")
+        residual = sum(rule.residual_nm for rule in result.candidate.evidence.rule_results)
+    identity = PrivatePlacement(prepared.source, prepared.snapshot, identity_id, 0, residual)
+    if intent is None or prepared.request.limits.max_candidates == 1:
+        return (identity,)
+    remaining = prepared.request.limits.max_placement_evaluations - 1
+    if remaining < 1:
+        return (identity,)
+    request = type(prepared.request).model_validate(
+        {
+            **prepared.request.model_dump(),
+            "limits": {
+                **prepared.request.limits.model_dump(),
+                "max_candidates": prepared.request.limits.max_candidates - 1,
+                "max_placement_evaluations": remaining,
+            },
+        }
+    )
+    alternatives = search_placements(replace(prepared, request=request), settings, probe)
+    seen = {prepared.source}
+    result_rows = [identity]
+    for row in alternatives:
+        if row.source not in seen:
+            seen.add(row.source)
+            result_rows.append(row)
+    return tuple(result_rows)
 
 
 def search_placements(
@@ -102,13 +163,25 @@ def search_placements(
             )
         if not candidate.evidence.legality.legal:
             raise OptimizationExecutionError("invalid_candidate")
-        source = render_kicad_placement_candidate_board(
-            prepared.source,
-            snapshot,
-            candidate,
-            prepared.profile,
-            limits=parse_limits_for(settings),
-        )
+        if prepared.request.schema_version == "optimization/v2":
+            source = _render_optimization_placement_candidate_board(
+                prepared.source,
+                snapshot,
+                candidate,
+                prepared.profile,
+                movable_footprint_refs=prepared.request.placement_scope.movable_footprint_refs,
+                limits=parse_limits_for(settings),
+                cancelled=probe.cancelled,
+                deadline=prepared.started_at + prepared.request.limits.max_runtime_ms / 1000,
+            )
+        else:
+            source = render_kicad_placement_candidate_board(
+                prepared.source,
+                snapshot,
+                candidate,
+                prepared.profile,
+                limits=parse_limits_for(settings),
+            )
         converted = parse_kicad_bytes(source, prepared.profile, parse_limits_for(settings))
         if converted.snapshot is None or converted.diagnostics:
             raise OptimizationExecutionError("invalid_candidate")

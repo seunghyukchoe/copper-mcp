@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0155**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0162**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -231,6 +231,14 @@ never silently widens it.
 | [0152](0152-joint-native-views-share-acquisition-not-authority.md) | Joint native views share acquisition, not authority | Proposed |
 | [0153](0153-confined-ngspice-execution-confirms-cleanup.md) | Confined ngspice execution confirms cleanup | Proposed |
 | [0154](0154-operating-point-cases-bind-explicit-inputs.md) | Operating-point cases bind explicit inputs | Proposed |
+| [0155](0155-operating-point-topology-is-conservative-preflight.md) | Operating-point topology is conservative preflight | Proposed |
+| [0156](0156-project-operating-point-is-bounded-observation.md) | Project operating point is bounded observation | Proposed |
+| [0157](0157-verified-host-delivery-consent-is-challenge-bound.md) | Verified-host confirmation is challenge-bound | Proposed |
+| [0158](0158-layered-trees-bind-complete-pad-connectivity.md) | Layered trees bind complete pad connectivity | Proposed |
+| [0159](0159-composed-clearance-is-an-input-bound-measurement.md) | Composed clearance is an input-bound measurement | Proposed |
+| [0160](0160-custom-rule-loading-needs-native-witness.md) | Custom-rule loading needs a native witness | Proposed |
+| [0161](0161-measured-optimization-is-an-end-to-end-versioned-workflow.md) | Measured optimization is an end-to-end versioned workflow | Proposed |
+
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and
 `scripts/check_adr_numbers.py` proves that last clause on every run rather than asserting it. Read
@@ -390,3 +398,11 @@ The ADRs are chronological, not thematic. To follow one arc, read it in this ord
 
 2026-09-05 integration: the reserved ADR-0131 from PR #265 is included, and ADR-0133
 records execution above the existing ADR-0132 foundation. No spent identifier is recycled.
+
+2026-09-08 corrective increment: ADR-0155 through ADR-0159 remain held by the topology,
+project-execution, host-consent, layered-tree and measured-clearance lanes. The urgent DRC
+correction takes ADR-0160 and amends existing D-005/SEC-003; no held number is recycled.
+
+2026-09-08 parallel increment: ADR-0154 through ADR-0157 are held by the operating-point cases,
+topology, project execution and host-consent stages. The layered-tree increment takes ADR-0158
+rather than reusing those pending identities. Its isolated branch does not yet contain their files.

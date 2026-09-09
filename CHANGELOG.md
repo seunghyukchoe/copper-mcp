@@ -8,9 +8,61 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- V2 optimization can reroute existing target copper after component movement, and complete
+  partially routed targets, in one budgeted private repair batch. Locked/grouped copper and
+  unrelated nets remain protected; exported packages bind the removals and complete reroute.
+  Owned native placement-and-repair and partial-routing controls passed without saving or
+  modifying the original board. General negotiated repair and held-out improvement remain open.
+  Native demonstrations cover recorded earlier checkpoints; final-source native/full validation
+  remains open after preserved failures during severe host contention.
+- Unsuccessful terminal `optimization/v2` jobs export immutable, explicitly blocked evaluation
+  metadata through the existing MCP status/export tools, including after server restart. These
+  reports contain recorded blockers, not a candidate or invented engineering evidence; they
+  cannot request geometry disclosure or human approval. V1 responses retain their flat shape
+  and existing schema interpretation. Complete ordinary-board workflow acceptance remains open.
+- V2 zoned optimization compares placement alternatives, routes cross-layer multi-pin trees beside
+  foreign pours, refreshes candidate-only fill after copper changes, and binds fill/replay/final
+  connectivity to the review package. The pair and tree routers share the existing conservative
+  zone-obstacle checks. Native four-layer tree and mixed two-pad placement/routing controls passed
+  under unchanged limits. General repair, external composition and integrated acceptance remain
+  open; the pinned audio/supply board-stage diagnostics correctly export blocked reports for
+  suppressed project DRC checks, without claiming project ERC or physics completion.
+- `optimization/v2` now offers explicit `native-full-board` intake: privately upgrade supported
+  boards with the pinned KiCad backend, derive the full eligible net scope, and carry original
+  and imported identities through placement, isolated routing, review and export. Native-created
+  local preferences are bounded disposable output, not source authority. Existing object ownership
+  is preserved; only specified new mandatory-field UUIDs are normalized. Original files and v1
+  interpretation remain unchanged. Native fixture validation passed; ordinary-board fill/repair,
+  external routing, broader geometry coverage and integrated release validation remain pending.
+- Explicit `optimization/v2` MCP jobs compare unchanged and proposed placements under equal
+  routing budgets, route complete multilayer candidates in the isolated worker, and export
+  immutable measured-clearance review packages. Declared projects add native ERC and separate
+  schematic/PCB parity; unavailable required evidence blocks selection. V1 interpretation and
+  review-only approval remain unchanged. Real KiCad placement-and-routing is demonstrated on an
+  owned development fixture; ordinary-project intake, fresh fill, external-router composition,
+  held-out quality and live application remain unfinished.
+- Existing geometry disclosure and review approval use purpose-bound, one-use host challenges
+  across legacy and current MCP connections, with unchanged public schemas and default-off
+  verified-host gating. This adds no board application, physics or human-verification authority.
+- Private nominal-DC operating-point coordination reuses one internally verified SPICE export
+  across explicit cases, runs each case twice in the fixed executor, and rechecks source/model
+  freshness. Results remain inconclusive engineering observations with no SI/PI/thermal/EMC,
+  calibration, model-accuracy, approval, MCP, or apply authority. Corrected shared-container
+  source validation remains pending after the PR300 cleanup P1.
+- Private operating-point topology preflight reparses captured model bytes and conservatively
+  rejects unsupported nominal-DC graphs before any simulator work. It grants no execution,
+  convergence, physics, engineering, approval or apply authority.
+- Private composed-clearance observations measure bounded, downward-rounded IR-class spacing
+  with explicit unavailable results and source/constraint binding. Existing v1 package scoring
+  is unchanged; versioned ranking integration and held-out improvement remain pending.
 - Private operating-point case binding validates complete explicit rail/load/ground mappings
   against declared inputs and bound native pins. It creates no deck, execution, convergence,
   physics, engineering, approval or apply authority.
+
+- Native optimization proposes bounded cross-layer multi-pin trees with complete pad membership,
+  shared through-vias, source-pad contact and layered detours. Candidates remain private and pass
+  replay, source-preserving serialization and complete-net verification before the existing
+  composed-board KiCad DRC gate. General routing quality and live application are not claimed.
 - Private fixed-image ngspice execution confines one bounded deck to the pinned ngspice 45.2
   runtime, captures only bounded raw/diagnostic bytes, and confirms container cleanup. It does
   not select caller programs or establish convergence, physics, engineering, approval or apply authority.
@@ -331,6 +383,14 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Held-out audio placement measurements now require the complete deterministic evaluation
+  ceiling; retained candidates from interrupted searches cannot become successful evidence.
+  Operational deadlines, production settings and historical reports are unchanged.
+- Custom-rule DRC checks use a private native loading witness to detect silent fallback to
+  default rules, then report only the untouched original context. The witness does not certify
+  every rule expression; that separate native compiler limitation remains explicit.
+- DRC operations bind one resolved executable and reject observable content/file-identity drift
+  across native passes and cleanup. This is not an atomic-exec or publisher-authentication claim.
 - Private SPICE source admission and expected export rows reject pins owned by a different
   bound component, including unused no-connect pins, before case endpoints can be selected.
 - Router and simulator clients use nonblocking local pipe I/O, preserving abort-time process-group

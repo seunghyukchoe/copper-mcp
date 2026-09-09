@@ -250,6 +250,51 @@ def _invalid_verified_fill(fill: object) -> str | None:
     return None
 
 
+def _zone_obstacle_bounds(
+    snapshot: BoardIRSnapshot, verified_fill: tuple[VerifiedFill, ...]
+) -> tuple[tuple[str, str, int, _Rect], ...] | LayeredRouteDiagnostic:
+    """Shared pair/tree obstacle model; callers admit fill shape before entering this seam.
+
+    Only complete freshness-bound islands retire their family's conservative zone envelopes.
+    Returned rectangles still enclose copper; each caller inflates and charges them identically.
+    """
+    zone_bounds: dict[tuple[str, str], list[_Rect]] = {}
+    zone_clearance: dict[tuple[str, str], int] = {}
+    for zone in snapshot.content.zones:
+        key = (zone.net_id, zone.layer_id)
+        zone_bounds.setdefault(key, []).append(_points_bounds(zone.boundary.points))
+        zone_clearance[key] = max(zone_clearance.get(key, 0), zone.clearance_nm)
+    verified_keys: set[tuple[str, str]] = set()
+    islands: list[tuple[str, str, int, _Rect]] = []
+    for island in verified_fill:
+        if island.source_revision != snapshot.content.source.revision:
+            return LayeredRouteDiagnostic(
+                LayeredRouteFailureCode.STALE_REVISION,
+                "verified zone fill was established against a different board revision",
+            )
+        key = (island.net_id, island.layer_id)
+        backing = zone_bounds.get(key)
+        if backing is None:
+            return LayeredRouteDiagnostic(
+                LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "verified zone fill is not backed by a matching Board IR zone",
+            )
+        bounds = _points_bounds(island.points)
+        if not any(_contains(outline, bounds) for outline in backing):
+            return LayeredRouteDiagnostic(
+                LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
+                "verified zone fill escapes its backing Board IR zone outline",
+            )
+        verified_keys.add(key)
+        islands.append((island.layer_id, island.net_id, zone_clearance[key], bounds))
+    envelopes = (
+        (zone.layer_id, zone.net_id, zone.clearance_nm, _points_bounds(zone.boundary.points))
+        for zone in snapshot.content.zones
+        if (zone.net_id, zone.layer_id) not in verified_keys
+    )
+    return (*envelopes, *islands)
+
+
 def _diagnostic(
     code: LayeredRouteFailureCode,
     message: str,
@@ -914,90 +959,25 @@ class LayeredBoardRouter:
                         LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
                         "layered physical obstacle count exceeds the configured budget",
                     )
-        # Freshness-bound fill (ADR-0021) is the only evidence that may make an obstacle smaller,
-        # so it is checked before it is spent.  A zone family keeps its conservative outline
-        # envelope unless every gate below passes for its islands.
-        zone_bounds_by_key: dict[tuple[str, str], list[_Rect]] = {}
-        zone_clearance_by_key: dict[tuple[str, str], int] = {}
-        for zone in snapshot.content.zones:
-            key = (zone.net_id, zone.layer_id)
-            zone_bounds_by_key.setdefault(key, []).append(_points_bounds(zone.boundary.points))
-            zone_clearance_by_key[key] = max(zone_clearance_by_key.get(key, 0), zone.clearance_nm)
-        verified_fill_keys: set[tuple[str, str]] = set()
-        island_bounds: list[tuple[VerifiedFill, _Rect]] = []
-        for island in request.verified_fill:
-            if island.source_revision != snapshot.content.source.revision:
-                return _diagnostic(
-                    LayeredRouteFailureCode.STALE_REVISION,
-                    "verified zone fill was established against a different board revision",
-                )
-            key = (island.net_id, island.layer_id)
-            backing = zone_bounds_by_key.get(key)
-            if backing is None:
-                return _diagnostic(
-                    LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
-                    "verified zone fill is not backed by a matching Board IR zone",
-                )
-            bounds = _points_bounds(island.points)
-            # KiCad clips poured copper to the zone outline, so this holds for honest evidence.
-            # Checking it is what turns "the replacement only ever shrinks the obstacle" from an
-            # assumption about the filler into a verified precondition of the replacement.
-            if not any(_contains(outline, bounds) for outline in backing):
-                return _diagnostic(
-                    LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
-                    "verified zone fill escapes its backing Board IR zone outline",
-                )
-            verified_fill_keys.add(key)
-            island_bounds.append((island, bounds))
-        for zone in snapshot.content.zones:
-            if zone.net_id == request.net_id:
+        zone_obstacles = _zone_obstacle_bounds(snapshot, request.verified_fill)
+        if isinstance(zone_obstacles, LayeredRouteDiagnostic):
+            return LayeredRouteResult(diagnostic=zone_obstacles)
+        for layer_id, net_id, zone_clearance, rectangle in zone_obstacles:
+            if layer_id not in layer_index:
                 continue
-            if (zone.net_id, zone.layer_id) in verified_fill_keys:
-                # The verified islands below are this family's complete copper, so the outline
-                # envelope would only re-block the pour's own voids.
-                continue
-            rectangle = _points_bounds(zone.boundary.points)
-            if zone.layer_id in layer_index:
-                zone_clearance = max(
-                    net_class.clearance_nm,
-                    zone.clearance_nm,
-                    clearance_by_net.get(zone.net_id, widest_clearance),
-                )
-                if not add_obstacle(
-                    rectangle,
-                    layer_index[zone.layer_id],
-                    half_width + zone_clearance,
-                ) or not add_obstacle(
-                    rectangle,
-                    layer_index[zone.layer_id],
-                    via_half + zone_clearance,
-                    via=True,
-                ):
-                    return _diagnostic(
-                        LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
-                        "layered physical obstacle count exceeds the configured budget",
-                    )
-        for island, rectangle in island_bounds:
-            # The island is a polygon and this lattice model is rectangular, so it is carried as
-            # its bounding box.  That still over-approximates the real copper, and containment
-            # above bounds it by the zone box it replaced part of.  A same-net island is
-            # unreachable here: it would need a same-net zone to back it, and a selected-net zone
-            # is refused as unmodeled copper well before this point.
-            if island.layer_id not in layer_index:
-                continue
-            island_clearance = max(
+            clearance = max(
                 net_class.clearance_nm,
-                zone_clearance_by_key.get((island.net_id, island.layer_id), 0),
-                clearance_by_net.get(island.net_id, widest_clearance),
+                zone_clearance,
+                clearance_by_net.get(net_id, widest_clearance),
             )
             if not add_obstacle(
                 rectangle,
-                layer_index[island.layer_id],
-                half_width + island_clearance,
+                layer_index[layer_id],
+                half_width + clearance,
             ) or not add_obstacle(
                 rectangle,
-                layer_index[island.layer_id],
-                via_half + island_clearance,
+                layer_index[layer_id],
+                via_half + clearance,
                 via=True,
             ):
                 return _diagnostic(

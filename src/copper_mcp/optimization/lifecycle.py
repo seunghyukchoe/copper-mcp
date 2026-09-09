@@ -9,19 +9,26 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Protocol, TypeAlias
 
-from pydantic import Field, ValidationError, model_validator
+from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
 from copper_mcp.optimization.contracts import (
+    AnyOptimizationRequest,
     Backend,
     BackendVersion,
     ClosedModel,
     Counter,
     Digest,
     OptimizationError,
-    OptimizationRequest,
     digest_document,
+    validate_request,
 )
-from copper_mcp.optimization.package import ObjectiveMetrics, OptimizationPackage
+from copper_mcp.optimization.package import (
+    AnyOptimizationPackage,
+    Comparison,
+    ObjectiveMetrics,
+    ObjectiveMetricsV2,
+    validate_package,
+)
 
 JobStatus: TypeAlias = Literal[
     "queued",
@@ -90,7 +97,7 @@ class ResourceUsage(ClosedModel):
             {name: getattr(self, name) + getattr(other, name) for name in type(self).model_fields}
         )
 
-    def exhausted(self, request: OptimizationRequest) -> bool:
+    def exhausted(self, request: AnyOptimizationRequest) -> bool:
         for name in type(self).model_fields:
             value = getattr(self, name)
             ceiling = getattr(request.limits, "max_" + name)
@@ -104,10 +111,10 @@ class BackendIdentity(ClosedModel):
     version: BackendVersion
 
 
-class OptimizationJobRecord(ClosedModel):
+class _OptimizationJobFields(ClosedModel):
     """The only retention projection: no request, refs, path, capability or geometry field."""
 
-    schema_version: Literal["optimization/v1"]
+    schema_version: Literal["optimization/v1", "optimization/v2"]
     job_id: Digest
     owner_binding: Digest
     request_digest: Digest
@@ -115,20 +122,20 @@ class OptimizationJobRecord(ClosedModel):
     board_revision: Digest
     snapshot_digest: Digest
     revision: Counter
-    status: JobStatus
+    status: JobStatus | Literal["evaluating"]
     usage: ResourceUsage
     failure_code: FailureCode | None = None
     package_digest: Digest | None = None
     judge_digest: Digest | None = None
     candidate_ids: Annotated[tuple[Digest, ...], Field(max_length=32)] = ()
     backend_versions: Annotated[tuple[BackendIdentity, ...], Field(max_length=32)] = ()
-    metrics: ObjectiveMetrics | None = None
+    metrics: ObjectiveMetrics | ObjectiveMetricsV2 | None = None
     approval_receipt_digest: Digest | None = None
 
     @model_validator(mode="after")
-    def record_invariants(self) -> OptimizationJobRecord:
+    def record_invariants(self) -> _OptimizationJobFields:
         expected = digest_document(
-            "copper-mcp/optimization/v1/job",
+            f"copper-mcp/{self.schema_version}/job",
             {
                 "request_digest": self.request_digest,
                 "owner_binding": self.owner_binding,
@@ -156,41 +163,136 @@ class OptimizationJobRecord(ClosedModel):
         return self
 
 
-def _replace(record: OptimizationJobRecord, **updates: object) -> OptimizationJobRecord:
+class OptimizationJobRecord(_OptimizationJobFields):
+    """The only retention projection: no request, refs, path, capability or geometry field."""
+
+    schema_version: Literal["optimization/v1"]
+    status: JobStatus
+    metrics: ObjectiveMetrics | None = None
+
+
+class OptimizationJobRecordV2(_OptimizationJobFields):
+    identity_namespace = "copper-mcp/optimization/v2/job-record"
+    schema_version: Literal["optimization/v2"]
+    metrics: ObjectiveMetricsV2 | None = None
+    comparison: Comparison | None = None
+
+    @model_validator(mode="after")
+    def comparison_accounting(self) -> OptimizationJobRecordV2:
+        comparison = self.comparison
+        if comparison is None:
+            if self.package_digest is not None:
+                raise ValueError("selected v2 job is missing its comparison")
+            return self
+        basis = comparison.allocation
+        if basis.limits.digest != self.limits_digest:
+            raise ValueError("comparison limits differ from job limits")
+        for field in ("expansions", "route_attempts", "repair_rounds"):
+            if getattr(self.usage, field) < getattr(basis, "used_" + field) + sum(
+                getattr(row.charged, field) for row in comparison.outcomes
+            ):
+                raise ValueError("comparison work was not charged to the root")
+        if self.usage.obstacle_checks < basis.used_obstacle_checks + sum(
+            row.charged.routing_checks + row.charged.validation_checks
+            for row in comparison.outcomes
+        ) or self.usage.candidates < basis.used_candidates + len(comparison.outcomes):
+            raise ValueError("comparison work was not charged to the root")
+        return self
+
+
+AnyOptimizationJobRecord = OptimizationJobRecord | OptimizationJobRecordV2
+_RECORD_ADAPTER: TypeAdapter[AnyOptimizationJobRecord] = TypeAdapter(AnyOptimizationJobRecord)
+
+
+class BlockedEvaluationV2(ClosedModel):
+    """Immutable terminal metadata, explicitly not a candidate or engineering authority."""
+
+    identity_namespace = "copper-mcp/optimization/v2/blocked-evaluation"
+    schema_version: Literal["optimization/v2"] = "optimization/v2"
+    kind: Literal["blocked-evaluation"] = "blocked-evaluation"
+    status: Literal["blocked"] = "blocked"
+    record: OptimizationJobRecordV2
+    blocking_codes: Annotated[tuple[FailureCode, ...], Field(min_length=1, max_length=9)]
+    evidence_scope: Literal["terminal-metadata-only"] = "terminal-metadata-only"
+    approval_authority: Literal["none"] = "none"
+    apply_authority: Literal["none"] = "none"
+    geometry_disclosure: Literal["not_disclosed"] = "not_disclosed"
+
+    @model_validator(mode="after")
+    def blocked_record(self) -> BlockedEvaluationV2:
+        if self.record.status not in TERMINAL or self.record.status == "completed":
+            raise ValueError("blocked evaluation requires an unsuccessful terminal job")
+        if self.blocking_codes != _blocked_codes(self.record):
+            raise ValueError("blocked evaluation differs from its terminal record")
+        return self
+
+
+def _blocked_codes(record: OptimizationJobRecordV2) -> tuple[FailureCode, ...]:
+    if record.failure_code is None:
+        raise ValueError("blocked evaluation is missing its failure")
+    codes: set[FailureCode] = {record.failure_code}
+    if record.comparison is not None:
+        for row in record.comparison.outcomes:
+            if row.status != "reviewable":
+                codes.add(row.status)
+    return tuple(sorted(codes))
+
+
+def blocked_evaluation(record: AnyOptimizationJobRecord) -> BlockedEvaluationV2 | None:
+    if (
+        not isinstance(record, OptimizationJobRecordV2)
+        or record.status not in TERMINAL
+        or record.status == "completed"
+    ):
+        return None
+    return BlockedEvaluationV2(record=record, blocking_codes=_blocked_codes(record))
+
+
+def validate_record(value: object) -> AnyOptimizationJobRecord:
+    return _RECORD_ADAPTER.validate_python(value)
+
+
+def decode_record(value: str | bytes) -> AnyOptimizationJobRecord:
+    return _RECORD_ADAPTER.validate_json(value)
+
+
+def _replace(record: AnyOptimizationJobRecord, **updates: object) -> AnyOptimizationJobRecord:
     # model_copy(update=...) deliberately bypasses validators; never use it for transitions.
-    return OptimizationJobRecord.model_validate({**record.model_dump(), **updates})
+    return validate_record({**record.model_dump(), **updates})
 
 
-def create_job(request: OptimizationRequest, *, owner_binding: str) -> OptimizationJobRecord:
-    request = OptimizationRequest.model_validate(request)
-    return OptimizationJobRecord(
-        schema_version="optimization/v1",
-        job_id=digest_document(
-            "copper-mcp/optimization/v1/job",
-            {
-                "request_digest": request.digest,
-                "owner_binding": owner_binding,
-            },
-        ),
-        owner_binding=owner_binding,
-        request_digest=request.digest,
-        limits_digest=request.limits.digest,
-        board_revision=request.board_revision,
-        snapshot_digest=request.snapshot_digest,
-        revision=0,
-        status="queued",
-        usage=ResourceUsage(),
+def create_job(request: AnyOptimizationRequest, *, owner_binding: str) -> AnyOptimizationJobRecord:
+    request = validate_request(request)
+    return validate_record(
+        {
+            "schema_version": request.schema_version,
+            "job_id": digest_document(
+                f"copper-mcp/{request.schema_version}/job",
+                {
+                    "request_digest": request.digest,
+                    "owner_binding": owner_binding,
+                },
+            ),
+            "owner_binding": owner_binding,
+            "request_digest": request.digest,
+            "limits_digest": request.limits.digest,
+            "board_revision": request.board_revision,
+            "snapshot_digest": request.snapshot_digest,
+            "revision": 0,
+            "status": "queued",
+            "usage": ResourceUsage(),
+        }
     )
 
 
 def _check(
-    record: OptimizationJobRecord,
-    request: OptimizationRequest,
+    record: AnyOptimizationJobRecord,
+    request: AnyOptimizationRequest,
     expected_revision: int,
     owner_binding: str,
 ) -> None:
-    OptimizationJobRecord.model_validate(record)
-    OptimizationRequest.model_validate(request)
+    validate_record(record)
+    validate_request(request)
     if (
         type(expected_revision) is not int
         or expected_revision != record.revision
@@ -205,7 +307,7 @@ def _check(
         raise OptimizationError("optimization job is terminal")
 
 
-def _failed(record: OptimizationJobRecord, code: FailureCode) -> OptimizationJobRecord:
+def _failed(record: AnyOptimizationJobRecord, code: FailureCode) -> AnyOptimizationJobRecord:
     state = code if code in TERMINAL else "failed"
     return _replace(
         record,
@@ -222,39 +324,46 @@ def _failed(record: OptimizationJobRecord, code: FailureCode) -> OptimizationJob
 
 
 def fail_job(
-    record: OptimizationJobRecord,
-    request: OptimizationRequest,
+    record: AnyOptimizationJobRecord,
+    request: AnyOptimizationRequest,
     *,
     expected_revision: int,
     owner_binding: str,
     code: FailureCode,
-) -> OptimizationJobRecord:
+) -> AnyOptimizationJobRecord:
     _check(record, request, expected_revision, owner_binding)
     return _failed(record, code)
 
 
-def _matches_observation(record: OptimizationJobRecord, board: str, snapshot: str) -> bool:
+def _matches_observation(record: AnyOptimizationJobRecord, board: str, snapshot: str) -> bool:
     return board == record.board_revision and snapshot == record.snapshot_digest
 
 
 def advance_job(
-    record: OptimizationJobRecord,
-    request: OptimizationRequest,
+    record: AnyOptimizationJobRecord,
+    request: AnyOptimizationRequest,
     *,
     expected_revision: int,
     owner_binding: str,
-    next_status: JobStatus,
+    next_status: JobStatus | Literal["evaluating"],
     observed_board_revision: str,
     observed_snapshot_digest: str,
     charge: ResourceUsage | None = None,
-    package: OptimizationPackage | None = None,
-) -> OptimizationJobRecord:
+    package: AnyOptimizationPackage | None = None,
+) -> AnyOptimizationJobRecord:
     """Reserve bounded work before execution; approval is deliberately not an ordinary edge."""
 
     _check(record, request, expected_revision, owner_binding)
     if not _matches_observation(record, observed_board_revision, observed_snapshot_digest):
         return _failed(record, "stale_revision")
-    if next_status not in _TRANSITIONS.get(record.status, frozenset()):
+    transitions = _TRANSITIONS
+    if request.schema_version == "optimization/v2":
+        transitions = {
+            **transitions,
+            "placing": frozenset({"evaluating"}),
+            "evaluating": frozenset({"awaiting_approval"}),
+        }
+    if next_status not in transitions.get(record.status, frozenset()):
         raise OptimizationError("optimization transition is not permitted")
     reserved = ResourceUsage.model_validate(charge) if charge is not None else ResourceUsage()
     try:
@@ -272,7 +381,7 @@ def advance_job(
     if next_status in ("awaiting_approval", "completed"):
         if package is None:
             raise OptimizationError("optimization package is required")
-        OptimizationPackage.model_validate(package)
+        validate_package(package)
         try:
             package.require_reviewable_for(request)
         except OptimizationError:
@@ -308,8 +417,8 @@ def advance_job(
 class ApprovalConsumer(Protocol):
     def consume(
         self,
-        record: OptimizationJobRecord,
-        package: OptimizationPackage,
+        record: AnyOptimizationJobRecord,
+        package: AnyOptimizationPackage,
         capability: str,
         *,
         owner_binding: str,
@@ -317,17 +426,17 @@ class ApprovalConsumer(Protocol):
 
 
 def approve_job(
-    record: OptimizationJobRecord,
-    request: OptimizationRequest,
+    record: AnyOptimizationJobRecord,
+    request: AnyOptimizationRequest,
     *,
     expected_revision: int,
     owner_binding: str,
-    package: OptimizationPackage,
+    package: AnyOptimizationPackage,
     capability: str,
     authority: ApprovalConsumer,
     observed_board_revision: str,
     observed_snapshot_digest: str,
-) -> OptimizationJobRecord:
+) -> AnyOptimizationJobRecord:
     """Human consent acknowledges this exact package; it changes no evidence or apply token."""
 
     _check(record, request, expected_revision, owner_binding)
@@ -335,7 +444,7 @@ def approve_job(
         return _failed(record, "stale_revision")
     if record.status != "awaiting_approval":
         raise OptimizationError("optimization job is not awaiting approval")
-    OptimizationPackage.model_validate(package)
+    validate_package(package)
     package.require_reviewable_for(request)
     if record.package_digest != package.digest or record.judge_digest != package.judge.digest:
         raise OptimizationError("optimization package binding is invalid")

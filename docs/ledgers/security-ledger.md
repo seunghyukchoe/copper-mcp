@@ -774,3 +774,170 @@ Independent correction review accepted the shared pin-owner guards and reproduce
 case controls. Hosted CI34187753206 passed on the same implementation. This record changes no
 source or test bytes; final metadata and exact-tip hosted checks, followed by resulting main
 verification, remain required before the next milestone publishes. No physics or apply claim.
+
+2026-09-08 SEC-003 corrective finding: an owned KiCad 10.0.5 fixture with a missing-unit custom
+clearance constraint returned a schema-valid default-rule DRC report. The intended 0.5 mm
+negative control did not fail until the rule was corrected to explicit `0.5mm`. A matching
+project file alone did not change that outcome. Native source confirms rule-initialization
+failure clears the complete custom set and the board loader catches the exception.
+The original authority claim is therefore incomplete for malformed custom-rule input.
+
+A separate owned native experiment produced the exact probe item's unexcluded error assertion
+for two valid rule files and none for missing units, an unknown constraint or an invalid
+condition property. This supports the [ADR-0160](../adr/0160-custom-rule-loading-needs-native-witness.md)
+design, not implementation acceptance. Full original-context preservation, witness spoofing,
+deadlines, ceilings, cleanup, native integration and independent review remain required.
+SEC-113's zero diagnostic-capture budget and the existing file/apply boundaries are unchanged.
+
+2026-09-08 SEC-003 scoped implementation review accepted the loading/fallback correction after
+case-preserving paths, pre-hash input admission, projected-size admission, post-cleanup deadlines
+and context-free original-store failure handling were corrected. Four primary path/privacy
+regressions failed before correction and pass afterward. Integrated controls passed 124 tests
+and 25 subtests on Python 3.11, 3.12 and 3.13; four real cases were deselected in those runs.
+The separate real KiCad group passed 18 cases in 12.01 seconds, including the 14 new loading
+controls and existing native DRC integrations. Counts are overlapping, not additive coverage.
+Format, lint/metadata, strict type, secret/dependency audit and source/wheel builds passed.
+Independent final implementation review repeated 124 tests and 25 subtests and found no remaining
+findings in scope. Fresh full validation, protected hosted/main checks and final evidence review
+remain pending. This is loading/fallback detection, not static rule-expression certification;
+inactive invalid assertion expressions remain a distinct unresolved native limitation.
+
+| SEC-213 | 2026-09-08 | Conservative operating-point topology preflight | Fresh bounded captured-model parsing; positive R/C/L admission; iterative expansion and node/work/path limits; case-folded hierarchy-collision refusal before renaming; grounded-incidence and voltage/inductor-loop checks. | Malformed, unavailable, unsupported and expired input refuses. No source authentication, deck/backend execution, convergence, physical correctness, engineering, approval or apply authority is introduced. Full composition, protected-hosted and main verification remain required. | [ADR-0155](../adr/0155-operating-point-topology-is-conservative-preflight.md), D-280 |
+
+2026-09-08 SEC-213 isolated controls passed32 tests on each of Python3.11,3.12 and3.13.
+Format, Ruff, complete lint/metadata, strict typecheck, security and build passed. Independent
+isolation and metadata reviews accepted unchanged source/assertions, complete parent history
+and conservative non-authority claims. Ponytail's optional unread _Model.name field finding
+is recorded but not applied; _Element.name remains necessary for hierarchical identity.
+Fresh isolated-full and composed/native/publication evidence remain separate gates. None of
+these controls establishes complete singularity detection, convergence or physical accuracy.
+
+2026-09-08 SEC-213 historical full result: the pre-P1 stage at4ca0f79 passed5,724 tests,
+one skip and all make-check gates in673.17s of pytest. Tested tree
+95591f7401516947d4bf59ba77ee7cdb2e1ff6fb; source/input fingerprint
+sha256:104e9bd2b86f21f1a830ec903708524a3b4da239ac167bebb79c7a8d89f77d45.
+The shared container/P1 correction has since been propagated from the reviewed executor stage;
+topology logic and its original assertions remain unchanged. That correction requires new
+exact-source validation. The historical full result is not a pass for the current source.
+
+2026-09-08 SEC-213 complete serial validation passed 5,732 tests with one skip and 90% code
+coverage in 1847.52 seconds. All format, lint, strict type, security and build gates passed.
+Tested commit 92cfafe17448496ea02ae90e9b59a997372c233d; tree
+c70c6976498807fd0c4b65c45ba16109908d7b7f; source/input fingerprint
+sha256:1fdef2ffd51228d341351a89ee98a1509daf9287d8af425fbe58d4d8ac6cbd93.
+No test selection, authentication or work/time limit was relaxed. This source includes the
+container cleanup correction but precedes PR301's foreign-pin admission correction. Integrating
+that correction requires fresh exact-source validation; this result must not be attributed to
+the later source. No convergence, physics, application, hosted or release acceptance is claimed.
+
+| SEC-214 | 2026-09-08 | Bounded project nominal-DC observation | One internally verified export acquisition; explicit case/topology/deck admission; exact captured models; fixed-image two-run case replay; bounded diagnostics/raw-vector/numeric checks; final artifact recapture and source freshness. | Supported passive/diode nominal DC is not SI/PI/thermal/EMC, calibration, model accuracy, convergence or engineering authority. No new MCP, provider or apply surface is introduced. Protected-hosted, main and release verification remain required. | [ADR-0156](../adr/0156-project-operating-point-is-bounded-observation.md), D-281 |
+
+2026-09-08 SEC-214 isolated validation: 22 non-real controls passed on Python3.11,3.12 and3.13,
+with six real cases deselected; format, lint, type, security and build gates passed. Reused complete
+evidence belongs only to original checkpoint45b42f1, tree5bb8bd4, where the full suite recorded
+5,740 tests, one skip and676.10 seconds with source/input fingerprint
+sha256:a105ad63bc33af20b266add5d77c7efdd839269070bc8bca564ee58906717b72. It is not a
+fresh full-validation claim for this publication tip. Historical unsuccessful a6 evidence, if
+encountered, remains unsuccessful and is not substituted for this checkpoint.
+
+2026-09-08 SEC-214 publication hold: the matched45b42f1/tree5bb8bd4 full result predates the
+PR300 shared-container cleanup P1. It remains historical source evidence only and does not close
+corrected-source validation. P1 remediation, fresh full validation and protected publication/main
+verification remain pending; this note neither changes prior evidence nor claims the finding closed.
+
+2026-09-08 SEC-214 parent correction is propagated: shared container source and tests match
+the reviewed executor correction. Current complete source/config/test equality with the
+development reference is preserved at fingerprint
+sha256:18793b02532f865d42ccb978f945ced1a895bae52ffeeb59ed17f08e54a16f27.
+The earlier a105 fingerprint and its full run remain historical. Corrected-source full and
+protected publication/main validation are still required before this stage can land.
+
+2026-09-08 SEC-214 corrected full attempt remains unsuccessful:5,747 tests passed, one skipped
+and one native SPICE-source control failed in2150.82s. Its trace names exit-time deep bundle
+authentication timing out with about20s remaining. That test and authentication implementation
+are unchanged from main2cbf2df. A standalone signature check subsequently completed in7.48s;
+the exact failed test passed with coverage and unchanged limits in23.24s, with timing-only
+diagnostics showing deep checks around4s. These observations do not prove the cause of the
+full-run latency spike or establish a full pass. No check was cached, skipped or weakened.
+Complete-project acceptance remains open pending successful full validation and hosted gates.
+
+| SEC-215 | 2026-09-08 | Purpose-bound host confirmation across MCP protocols | Default-off verified-host gating; owner/purpose/job-record/package/judge-bound, expiring one-use challenges; 128-entry retention; replacement/replay refusal; pre-prompt and post-acceptance delivery checks; unchanged approval source checks and fixed resolver errors. | Private board bytes, credentials and issued capabilities remain server-side. SDK continuation protection alone proves neither one use nor human consent. No apply, physics, new tool or provider authority is added; full/native and verified-human validation remain open. | [ADR-0157](../adr/0157-verified-host-delivery-consent-is-challenge-bound.md), D-282 |
+
+2026-09-08 SEC-215 focused validation:36 consent controls pass with installed MCP2.0.0 and2.1.1,
+including actual legacy/current protocol clients. The same36 controls pass Python3.11 and3.13.
+Independent review accepted the replacement/replay controls after a P2 correction: expected
+resolver failures now return fixed ToolError rather than UnexpectedToolError. Both exact-class
+regressions failed before the correction. The five normalized input/output schemas match the
+clean6244fdb/8a4bbce baseline (60,042 bytes; sha256:b6f0bc2d53d688bf4922ef17ca6c88cb9f8dbcc3eddf8b1bc4e474d3fb86627f).
+Ponytail found no safe cut without removing load-bearing checks. These synthetic client results
+do not prove a human UI, native application or full-repository acceptance.
+
+2026-09-08 SEC-003 PR302 follow-up: review found that each native pass independently resolves
+the executable. A changed PATH, configured alias or executable can separate the loading witness
+from the original report's backend. The prior full run is successful evidence for its recorded
+source, but does not close this finding. A single resolved executable identity with bounded
+content/stat checks before both passes and after cleanup is being implemented. It will require
+new scoped/full/hosted validation; no atomic-exec, vendor or shared-library assurance is implied.
+Dependent topology validation was intentionally interrupted, exit130, after322 passing tests
+and442.61 seconds. Its partial log remains non-successful evidence; it will not be reused as a pass.
+
+2026-09-08 SEC-003 executable-binding correction: one resolved path and bounded descriptor-backed
+content/stat identity now bind the operation. Drift checks cover both passes and final cleanup,
+including no-rule execution. A new mocked outbound-timeout control reproduced 10 seconds being
+granted after seven seconds of a ten-second budget; the corrected no-rule path grants three.
+Independent review accepted the implementation and this final deadline correction. Integrated
+checks passed 137 tests and 25 subtests on Python 3.11, 3.12 and 3.13; four native cases were
+deselected in those runs. A separate controlled native group passed 18 cases in 39.14 seconds.
+An earlier worker command accidentally selected one native unittest and failed its workspace
+assertion; that run is not acceptance evidence, and no installed executable was modified.
+Fresh complete and exact-tip hosted validation remain required. Executable consistency does not
+establish atomic pathname execution, publisher authentication or shared-library integrity.
+
+2026-09-08 SEC-003 portable-test correction: hosted CI run 34209815291 rejected three legacy
+DRC mock cases on all supported interpreters because `/trusted/kicad-cli` does not exist.
+Those tests now use the existing inert executable-fixture helper in their pytest-owned
+temporary area, outside the workspace whose contents they assert. Subprocesses remain mocked;
+production executable discovery, identity admission and drift checks are unchanged. The three
+cases failed before correction (43.80 seconds) and passed afterward on Python 3.12 (149.43
+seconds on a heavily contended host). This is mock-contract evidence, not native execution.
+The new exact-tip hosted matrix and complete integration validation remain pending.
+
+| SEC-216 | 2026-09-08 | Private complete layered-tree composition | Exact source-pad/layer membership; bounded pre-hash admission; deterministic replay; complete source-net verification; shared through-via identity and remaining allowances; source-preserving reparse; context-free callback errors and final cancellation checks. | Scoped correctness review is accepted. Native DRC, full integration, held-out quality and protected publication remain pending. No external conversion, physics, human confirmation, apply or saving authority is introduced. | [ADR-0158](../adr/0158-layered-trees-bind-complete-pad-connectivity.md), D-283 |
+
+2026-09-08 SEC-216 independent review closed the reported terminal-layer, complete-pad-set,
+nonfinite budget, inherited exception-context, pre-hash traversal, shared-via, remaining allowance,
+late-cancellation and same-layer/source-pad contact findings. The final reviewer independently ran
+71 scoped tests in 1.42 seconds, plus pair-budget and cancellation controls. The implementation
+worker reported 154 combined new/legacy unit tests in 6.99 seconds. Counts are overlapping, not
+additive. Inner-only SMD fixtures are synthetic only; the ordinary outer-pad native fixture is
+prepared but has not executed. No native, full-suite, held-out or readiness acceptance is claimed.
+
+2026-09-08 SEC-216 native fixture check: the ordinary three-outer-pad/four-layer case passed
+with KiCad 10.0.5 in 2.03 seconds. Its source had unconnected items; the deterministically
+serialized complete result had zero hard DRC errors and zero unconnected items. The original
+source bytes, inode and modification time were unchanged. This uses distinct single-pad blocker
+nets and exercises actual inner copper, not the invalid inner-only SMD fixture. Source/input
+fingerprint sha256:6e9b09caecd6f810520b5e04ee792e521fff50a7b5bf66f3a1c5ccb9468a5072.
+This owned fixture proves only that composed case. Full integration, broader native coverage,
+held-out quality and protected publication remain required; no physics or apply authority is added.
+
+| SEC-217 | 2026-09-08 | Private composed IR-class clearance | Complete input admission before hashing; exact rational geometry; physical-layer and net-class checks; cumulative work; fixed refusals; final cancellation; input-bound measured/unavailable observation. | Private implementation review accepted; parser-produced quoted strings are preserved while hostile subclasses refuse. Native comparisons are owned fixtures only. Full validation, versioned ranking integration and held-out improvement remain pending; no native-rule, physics or application authority is added. | [ADR-0159](../adr/0159-composed-clearance-is-an-input-bound-measurement.md), D-284 |
+
+2026-09-08 SEC-217 scoped evidence: 73 unit controls plus two independent arithmetic tests passed.
+The latter cover 128 deterministic projection samples and translation/reflection invariance, not
+128 physical measurements. Independent review repeated 75 non-native tests in 0.33 seconds.
+The real KiCad circular-pad comparison passed three cases in 1.34 seconds after explicit `0.5mm`
+replaced the incorrect unitless fixture value. Earlier parser-admission and wrong-unit attempts
+remain failed evidence, not native validation passes. New shared rule-loading integration still
+needs current-source native/full verification. No production ranking or readiness gain is claimed.
+
+2026-09-08 SEC-003 complete validation of the loading/fallback correction passed 5,781 tests
+with one skip and 90% code coverage in 1765.24 seconds of serial pytest. Format, lint/metadata,
+strict typecheck, secret/dependency audit and source/wheel builds all passed. Tested commit
+68a811b067b0c81af6aaa80b8256b4794b691cc2; tree 1bc3e5dc623df889e69f97698f0d9e928a553311;
+source/input fingerprint sha256:0fb075b0f78365db1bca07a7154dd99d235b2b6cb1303fad5c58b4b2ad9c5563.
+The run enabled the new native rule-loading controls and existing real-router/native settings,
+without removing tests, relaxing limits or replacing native checks with mocks. This record changes
+no implementation or test bytes. Final record review, exact-tip hosted validation and resulting
+main verification remain required. The static-expression limitation above and full five-area
+readiness, physics and human-approval gates remain open.
