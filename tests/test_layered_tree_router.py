@@ -17,10 +17,12 @@ from copper_mcp.board_ir import (
     make_content,
     make_snapshot,
 )
+from copper_mcp.routing.astar import VerifiedFill, fill_binding_for
 from copper_mcp.routing.layered_astar import LayeredAStarSettings
 from copper_mcp.routing.layered_contracts import LayeredRouteFailureCode, LayeredRoutePath
 from copper_mcp.routing.layered_tree_contracts import (
     LayeredTreeTerminal,
+    canonical_layered_tree_candidate_bytes,
     with_layered_tree_candidate_id,
 )
 from copper_mcp.routing.layered_tree_router import LayeredTreeRequest, LayeredTreeRouter
@@ -287,6 +289,74 @@ def test_selected_copper_and_zones_remain_explicit_refusals() -> None:
     )
     assert zoned_result.diagnostic is not None
     assert zoned_result.diagnostic.code is LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY
+
+
+def _foreign_zone_case():
+    _profile_value, _source, snapshot, request, _candidate = _case(
+        FIXTURE.with_name("layered-tree-ordinary-4layer.kicad_pcb").read_bytes()
+    )
+    foreign_net = next(net.id for net in snapshot.content.nets if net.id != request.net_id)
+    points = tuple(
+        PointNM(x * 1_000_000, y * 1_000_000) for x, y in ((1, 1), (4, 1), (4, 4), (1, 4))
+    )
+    zone = Zone(
+        "zone:foreign", foreign_net, "layer:F.Cu", Ring(points), 250000, 250000, 250000, 250000
+    )
+    snapshot = _changed_snapshot(snapshot, zones=(zone,))
+    fill = VerifiedFill(foreign_net, "layer:F.Cu", points, snapshot.content.source.revision)
+    return snapshot, replace(request, board_revision=snapshot.snapshot_digest), fill
+
+
+def test_foreign_zones_route_and_tree_replay_binds_fill_in_both_directions():
+    snapshot, request, fill = _foreign_zone_case()
+    router = LayeredTreeRouter()
+    plain = router.propose(snapshot, request).candidate
+    request_with_fill = replace(request, verified_fill=(fill,))
+    candidate = router.propose(snapshot, request_with_fill).candidate
+    assert candidate is not None and plain is not None
+    assert candidate.branches == plain.branches
+    assert plain.fill_binding is None
+    assert b"fill_binding" not in canonical_layered_tree_candidate_bytes(plain)
+    assert candidate.fill_binding == fill_binding_for((fill,))
+    assert router.replay(snapshot, candidate, request_with_fill).candidate == candidate
+    assert verify_layered_tree_candidate(candidate, snapshot, expected_request=request_with_fill).ok
+    for value, replay_request in ((candidate, request), (plain, request_with_fill)):
+        refusal = router.replay(snapshot, value, replay_request)
+        assert refusal.candidate is None
+        assert refusal.diagnostic.code is LayeredRouteFailureCode.FILL_EVIDENCE_MISMATCH
+        assert not verify_layered_tree_candidate(
+            value, snapshot, expected_request=replay_request
+        ).ok
+
+
+@pytest.mark.parametrize("mutation", ["stale", "orphan", "escape", "malformed", "obstacle-budget"])
+def test_tree_zone_evidence_refuses_without_dropping_the_obstacle(mutation):
+    snapshot, request, fill = _foreign_zone_case()
+    expected = LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY
+    if mutation == "stale":
+        fill = replace(fill, source_revision="sha256:" + "a" * 64)
+        expected = LayeredRouteFailureCode.STALE_REVISION
+    elif mutation == "orphan":
+        fill = replace(fill, net_id="net:absent")
+    elif mutation == "escape":
+        fill = replace(
+            fill, points=tuple(PointNM(point.x + 4_000_000, point.y) for point in fill.points)
+        )
+    elif mutation == "obstacle-budget":
+        full = LayeredTreeRouter().propose(snapshot, request).candidate
+        assert full is not None
+        request = replace(
+            request, settings=replace(request.settings, max_obstacles=full.metrics.obstacles - 1)
+        )
+        expected = LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED
+    if mutation == "malformed":
+        request = replace(request, verified_fill=[fill])
+        expected = LayeredRouteFailureCode.INVALID_REQUEST
+    else:
+        request = replace(request, verified_fill=(fill,))
+    result = LayeredTreeRouter().propose(snapshot, request)
+    assert result.candidate is None
+    assert result.diagnostic.code is expected
 
 
 def test_later_branch_attaches_to_prior_copper_at_the_only_via_portal() -> None:

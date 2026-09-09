@@ -101,6 +101,112 @@ comparison interpretation so review cannot approve a different measurement or ca
 
 ## Acceptance
 
+### Next production connection: native full-board intake
+
+The pinned development projects require native conversion before the existing workflow can
+capture their geometry. Implement an explicit v2 `input_mode: native-full-board`; the default
+`observed-snapshot` mode and all v1 launches retain their required observed snapshot/target scope.
+Native full-board mode requires the original board digest, derives the imported snapshot and
+all nets with at least two pads, and refuses conflicting explicit target selection. A supplied
+expected snapshot must match; an absent one is permitted only in this explicit mode. Never
+exclude already-connected targets, routing failures or later unsupported targets from that scope.
+
+Run the reviewed native upgrade on two private copies under the inherited absolute job deadline.
+Preserve original board/project bytes and every existing object identity. Only native-generated,
+unique mandatory Datasheet/Description field UUIDs beneath preserved source footprint UUIDs may
+receive deterministic UUID5 identities from original digest, footprint identity and field name.
+Check collisions and refuse other unexplained conversion differences. This rule comes from the
+actual audio conversion, not an assumption that all UUIDs are disposable. Compare complete
+normalized bytes and bind original/normalized revisions, executable/version, fixed command and
+normalization method into the v2 request and exported package. Variable pre-normalization output
+digests are observations, not stable request identities. Executable consistency does not prove
+vendor or shared-library authentication.
+
+Original raw context remains freshness authority. Geometry, placement intent and routing operate
+on the explicit imported baseline. The isolated child and review path must reproduce the same
+import from fresh originals under their existing deadline and consent checks. Imported identity
+may have zero routing work only when it equals that verified baseline; it must disclose conversion
+and must not claim equality with raw original bytes. Add no apply surface or unattended saving.
+
+The same workflow must preserve supported drawing-layer dimensions and native footprint-filter
+metadata instead of stripping them. Unsupported copper/outline/pose semantics still refuse.
+Original-project source freshness, replay, tampering, conflicting modes and imported identity need
+production-consumer tests. The real three-profile demonstration still requires fill, repair and
+external routing; native import alone is not a completed milestone.
+
+Native upgrade behavior follows the [KiCad 10 CLI documentation](https://docs.kicad.org/10.0/en/cli/cli.html#pcb-upgrade).
+
+### Integrated verification
+
+The isolated worker runs under a small standard-library guardian that remains the owned process
+group leader. Only the guardian holds the private status-pipe writer; it closes that descriptor
+in the worker before exec, observes the worker's actual exit status, and then parks. A successful
+status triggers parent group termination before any guardian reap or wait for stdout EOF, followed
+by buffered-output draining and ordinary response validation. Permission-denied cleanup, a missing
+expected group, malformed status or unexpected guardian exit cannot become success. The guardian
+also kills its own group at the inherited deadline plus the existing five-second cleanup grace,
+or on detected status-reader loss. This does not authorize work past the original work deadline.
+Every native-import and review context scan receives remaining-deadline settings, including the
+post-import freshness scan; sub-second remainder refuses before another scan starts.
+
+Failed terminal v2 jobs expose a separate `blocked-evaluation` package through the existing status
+and export tools. It is a canonical projection of the owner-bound terminal record and recorded
+comparison blockers, not a selected candidate or a fabricated JudgeReport. It explicitly carries
+no approval, apply or geometry authority and labels its evidence as terminal metadata only.
+Status supplies its digest; export checks that digest and the record revision. This projection
+may be reconstructed after private inputs expire or the server restarts because its complete
+source is already-retained redacted metadata. Normal candidate export, human confirmation and v1
+semantics are unchanged. No geometry request or approval prompt is allowed for a blocked report.
+
+V2 candidate fill is distinct from ADR-0021's read-only check of a user's existing cache. The
+optimizer may generate fresh fill only in private candidate copies. Two fixed native refills
+must agree; modeled geometry, zone intent and original context must remain unchanged. Only
+native-produced cache expressions may be spliced into the candidate, preserving other source
+expressions. Bind the input/output board and snapshot revisions, context, executable and canonical
+fill into the exported package. Refresh after copper changes and recheck every target before the
+complete-board DRC/judge gate. Old v1 fill authority continues to reject stale caches.
+
+The production tree path now shares the pair router's foreign-zone obstacle construction and
+fill admission. Conservative envelopes remain when there is no verified fill; supplied islands
+must pass the existing shape, aggregate size, revision, backing-zone and containment gates.
+Tree candidates record the existing canonical fill digest and replay/structural request checks
+bind it in both directions. Absent fill remains absent from canonical identity, preserving old
+non-zoned candidate addresses. The v1 optimizer still refuses zoned composition. Selected-net
+zone attachment and partial pre-existing copper repair remain distinct unsupported tree cases;
+foreign-pour support must not be described as negotiated rip-up/reroute.
+
+V2 optimization now stages one bounded existing-copper reset per candidate when its equal slot
+allocation includes a repair round. Selection is restricted to declared target nets with existing
+copper that are disconnected or attached to a footprint whose pose actually changed within the
+declared movable scope. A moved pad can still touch old copper; that does not make retaining its
+old route a useful placement comparison. Unchanged placement receives the same repair allowance
+and can use it to complete partial routing, but connected unchanged nets retain their copper.
+
+Only selected unlocked segment/via/arc expressions are removed from private bytes. Group-member
+references at any admitted nesting level refuse rather than becoming dangling metadata.
+For unchanged footprints, positive copper cores may prove connection, but failure to do so is
+not disconnection evidence. A separate bounded graph of enclosing pad/track/via/arc/fresh-fill
+geometry must prove the target disconnected before a reset is admitted. Overlapping envelopes,
+unmodelled arcs or missing fill authority remain inconclusive and refuse unchanged-net repair.
+This keeps the connected-unchanged retention rule intact without treating approximations as
+electrical authority. Source/snapshot equality, native IDs,
+byte-preserving splices and a complete modeled round trip establish the exact removal. The package
+binds input/output identities, the original placed baseline, removed-ID and net-scope digests,
+counts and policy; no raw removed geometry is retained in metadata. The batch is charged before
+source work. Fresh fill, complete routing/connectivity and mandatory composed-board checks must
+then succeed before anything is published. Failure or cancellation discards the private derivative,
+not a user's edited document. V1, all apply surfaces and human consent semantics remain unchanged.
+This whole-affected-net reset is not negotiated local-window repair, and it does not establish
+zone attachment, general arc routing or held-out improvement.
+
+Each comparison slot receives a nontransferable share of remaining native-output bytes as well
+as its existing work/time allocation. Existing connected copper is checked with the established
+multilayer connectivity kernel under batched, precharged predicate ceilings; recognizing an
+existing connection must not consume a fabricated full routing search. V2 trace-length and via
+quality use the complete evaluated target-net copper, separate from newly added copper used by
+identity/no-search checks. Unsupported target arcs still refuse rather than contributing zero
+length. This is not a physics metric or a change to v1's interpretation.
+
 Require an actual MCP request through the isolated child, tree routing, mandatory checks, SQLite
 and export; existing success fixtures that replace isolation cannot prove this flow. Add native
 owned-fixture coverage without changing source board bytes. Verify v1 golden values and zero new

@@ -37,6 +37,13 @@ autorouter. Zones, arcs and pre-existing selected-net copper remain explicit uns
 this private path; broader source conversion, candidate-bound refill and repair are separate work.
 It does not add external-router conversion, physics judgement, host consent, apply or saving.
 
+2026-09-09 integration extension: foreign zones are now supported through the shared pair/tree
+conservative obstacle model and source-bound verified fill, connected to v2 optimization's native
+refill and final checks (ADR-0161). Candidate replay binds the fill digest; absent-fill candidate
+identities are unchanged. Selected-net zones, arcs and pre-existing selected-net copper still
+refuse in this tree path. Owned native placement-plus-tree-plus-fill execution passed; this does
+not close held-out quality, full integration or independent review.
+
 Owned unit layouts exercise three through thirty-two pads and two/four/six/eight layers, shared
 vias, same-layer detours, existing source-pad contact, byte-preserving replay and adversarial
 budget/cancellation/identity cases. They are not held-out routing quality evidence. The inner-only

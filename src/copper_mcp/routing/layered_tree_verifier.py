@@ -245,6 +245,11 @@ def verify_layered_tree_candidate(
     if candidate.base_revision != snapshot.snapshot_digest:
         return _failure("stale_revision")
     if expected_request is not None:
+        from copper_mcp.routing.astar import fill_binding_for
+        from copper_mcp.routing.layered_board_adapter import (
+            _invalid_verified_fill,
+            _verified_fill_over_check_budget,
+        )
         from copper_mcp.routing.layered_tree_router import LayeredTreeRequest
 
         if (
@@ -255,6 +260,12 @@ def verify_layered_tree_candidate(
             or expected_request.grid_step_nm != candidate.grid_step_nm
             or expected_request.settings != candidate.settings
             or expected_request.seed != candidate.seed
+        ):
+            return _failure("request_mismatch")
+        if (
+            _verified_fill_over_check_budget(expected_request.verified_fill) is not None
+            or _invalid_verified_fill(expected_request.verified_fill) is not None
+            or fill_binding_for(expected_request.verified_fill) != candidate.fill_binding
         ):
             return _failure("request_mismatch")
     pads = {pad.id: pad for pad in snapshot.content.pads}

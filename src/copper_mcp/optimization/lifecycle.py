@@ -204,6 +204,50 @@ AnyOptimizationJobRecord = OptimizationJobRecord | OptimizationJobRecordV2
 _RECORD_ADAPTER: TypeAdapter[AnyOptimizationJobRecord] = TypeAdapter(AnyOptimizationJobRecord)
 
 
+class BlockedEvaluationV2(ClosedModel):
+    """Immutable terminal metadata, explicitly not a candidate or engineering authority."""
+
+    identity_namespace = "copper-mcp/optimization/v2/blocked-evaluation"
+    schema_version: Literal["optimization/v2"] = "optimization/v2"
+    kind: Literal["blocked-evaluation"] = "blocked-evaluation"
+    status: Literal["blocked"] = "blocked"
+    record: OptimizationJobRecordV2
+    blocking_codes: Annotated[tuple[FailureCode, ...], Field(min_length=1, max_length=9)]
+    evidence_scope: Literal["terminal-metadata-only"] = "terminal-metadata-only"
+    approval_authority: Literal["none"] = "none"
+    apply_authority: Literal["none"] = "none"
+    geometry_disclosure: Literal["not_disclosed"] = "not_disclosed"
+
+    @model_validator(mode="after")
+    def blocked_record(self) -> BlockedEvaluationV2:
+        if self.record.status not in TERMINAL or self.record.status == "completed":
+            raise ValueError("blocked evaluation requires an unsuccessful terminal job")
+        if self.blocking_codes != _blocked_codes(self.record):
+            raise ValueError("blocked evaluation differs from its terminal record")
+        return self
+
+
+def _blocked_codes(record: OptimizationJobRecordV2) -> tuple[FailureCode, ...]:
+    if record.failure_code is None:
+        raise ValueError("blocked evaluation is missing its failure")
+    codes: set[FailureCode] = {record.failure_code}
+    if record.comparison is not None:
+        for row in record.comparison.outcomes:
+            if row.status != "reviewable":
+                codes.add(row.status)
+    return tuple(sorted(codes))
+
+
+def blocked_evaluation(record: AnyOptimizationJobRecord) -> BlockedEvaluationV2 | None:
+    if (
+        not isinstance(record, OptimizationJobRecordV2)
+        or record.status not in TERMINAL
+        or record.status == "completed"
+    ):
+        return None
+    return BlockedEvaluationV2(record=record, blocking_codes=_blocked_codes(record))
+
+
 def validate_record(value: object) -> AnyOptimizationJobRecord:
     return _RECORD_ADAPTER.validate_python(value)
 

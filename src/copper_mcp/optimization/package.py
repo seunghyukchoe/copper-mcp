@@ -18,6 +18,9 @@ from copper_mcp.optimization.contracts import (
     digest_document,
 )
 from copper_mcp.optimization.judge import JudgeReport, JudgeReportV2
+from copper_mcp.optimization.native_import import NativeImportBinding
+from copper_mcp.optimization.repair import CopperRepairBinding
+from copper_mcp.optimization.zone_fill import CandidateFillBinding
 
 
 class CandidateBinding(ClosedModel):
@@ -78,6 +81,9 @@ class CandidateBindingV2(CandidateBinding):
     final_snapshot_digest: Digest
     constraint_digest: Digest
     drc_profile_digest: Digest
+    native_import_digest: Digest | None = None
+    fill_history_digest: Digest | None = None
+    repair_digest: Digest | None = None
 
 
 SignedMargin = Annotated[int, Field(ge=-((1 << 53) - 1), le=(1 << 53) - 1)]
@@ -135,6 +141,9 @@ class ObjectiveMetricsV2(ClosedModel):
     displacement_nm: Counter
     intent_residual: Counter
     actual_route_probes: Counter
+    added_copper_length_nm: Counter = 0
+    added_via_count: Counter = 0
+    copper_scope: Literal["target-net-straight-traces/v1"] = "target-net-straight-traces/v1"
 
     @model_validator(mode="after")
     def connectivity(self) -> ObjectiveMetricsV2:
@@ -151,6 +160,7 @@ class SlotBudget(ClosedModel):
     routing_checks: Counter
     validation_checks: Counter
     wall_ms: Counter
+    external_output_bytes: Counter = 0
 
 
 class SlotWork(ClosedModel):
@@ -161,6 +171,7 @@ class SlotWork(ClosedModel):
     repair_rounds: Counter = 0
     routing_checks: Counter = 0
     validation_checks: Counter = 0
+    external_output_bytes: Counter = 0
     search_accounting: Literal["conservative-proposal-replay-reservations/v1"] = (
         "conservative-proposal-replay-reservations/v1"
     )
@@ -175,6 +186,7 @@ class AllocationBasis(ClosedModel):
     used_placement_evaluations: Counter
     used_candidates: Counter
     remaining_ms: Counter
+    used_external_output_bytes: Counter = 0
 
     @model_validator(mode="after")
     def bounded(self) -> AllocationBasis:
@@ -185,6 +197,7 @@ class AllocationBasis(ClosedModel):
             "obstacle_checks",
             "placement_evaluations",
             "candidates",
+            "external_output_bytes",
         ):
             if getattr(self, "used_" + field) > getattr(self.limits, "max_" + field):
                 raise ValueError("allocation basis exceeds root limits")
@@ -206,6 +219,10 @@ class AllocationBasis(ClosedModel):
             routing_checks=checks,
             validation_checks=checks,
             wall_ms=self.remaining_ms // count,
+            external_output_bytes=(
+                self.limits.max_external_output_bytes - self.used_external_output_bytes
+            )
+            // count,
         )
 
 
@@ -270,6 +287,7 @@ class Comparison(ClosedModel):
                     "repair_rounds",
                     "routing_checks",
                     "validation_checks",
+                    "external_output_bytes",
                 )
             ):
                 raise ValueError("comparison slot exceeds its allocation")
@@ -380,6 +398,10 @@ class OptimizationPackageV2(_OptimizationPackageFields):
     metrics: ObjectiveMetricsV2
     judge: JudgeReportV2
     comparison: Comparison
+    native_import: NativeImportBinding | None = None
+    zone_fill: CandidateFillBinding | None = None
+    fill_round_count: Counter = 0
+    repair: CopperRepairBinding | None = None
 
     def _allows_zero_probe_identity(self, request: AnyOptimizationRequest) -> bool:
         """Structural half of the v2 identity exception; the worker also checks raw equality."""
@@ -388,31 +410,75 @@ class OptimizationPackageV2(_OptimizationPackageFields):
             {"source": request.board_revision, "snapshot": request.snapshot_digest},
         )
         row = self.comparison.outcomes[0]
+        baseline = (
+            request.board_revision
+            if self.native_import is None
+            else self.native_import.imported_board_revision
+        )
+        final_revision = baseline
+        final_snapshot = request.snapshot_digest
+        if self.zone_fill is not None:
+            if (
+                self.fill_round_count != 1
+                or self.zone_fill.input_board_revision != baseline
+                or self.zone_fill.input_snapshot_digest != request.snapshot_digest
+            ):
+                return False
+            final_revision = self.zone_fill.output_board_revision
+            final_snapshot = self.zone_fill.output_snapshot_digest
         return (
             request.schema_version == "optimization/v2"
+            and self.repair is None
             and self.binding.placement_candidate_id == identity
             and row.role == "identity"
             and row.placement_candidate_id == identity
             and row.candidate_id == self.binding.digest
             and row.metrics == self.metrics
             and row.status == "reviewable"
-            and self.binding.candidate_board_revision
-            == self.binding.board_revision
-            == request.board_revision
+            and self.binding.candidate_board_revision == final_revision
+            and self.binding.board_revision == request.board_revision
             and self.binding.snapshot_digest
             == self.binding.placed_snapshot_digest
             == self.binding.route_bundle_base_digest
-            == self.binding.final_snapshot_digest
             == request.snapshot_digest
+            and self.binding.final_snapshot_digest == final_snapshot
             and self.metrics.displacement_nm
-            == self.metrics.copper_length_nm
-            == self.metrics.via_count
+            == self.metrics.added_copper_length_nm
+            == self.metrics.added_via_count
             == self.metrics.actual_route_probes
             == 0
         )
 
     @model_validator(mode="after")
     def measured_binding(self) -> OptimizationPackageV2:
+        if self.binding.repair_digest != (None if self.repair is None else self.repair.digest):
+            raise ValueError("candidate copper repair binding is inconsistent")
+        if self.repair is not None and (
+            self.repair.base_snapshot_digest != self.binding.placed_snapshot_digest
+            or self.repair.target_net_count > self.metrics.target_net_count
+            or self.metrics.actual_route_probes < 1
+            or not any(
+                row.candidate_id == self.binding.digest and row.charged.repair_rounds >= 1
+                for row in self.comparison.outcomes
+            )
+        ):
+            raise ValueError("candidate copper repair lacks a charged complete reroute")
+        if (self.zone_fill is None) != (self.fill_round_count == 0) or (self.zone_fill is None) != (
+            self.binding.fill_history_digest is None
+        ):
+            raise ValueError("candidate fill evidence is incomplete")
+        if self.zone_fill is not None and (
+            self.zone_fill.output_board_revision != self.binding.candidate_board_revision
+            or self.zone_fill.output_snapshot_digest != self.binding.final_snapshot_digest
+        ):
+            raise ValueError("candidate fill describes another board")
+        if self.binding.native_import_digest != (
+            None if self.native_import is None else self.native_import.digest
+        ) or (
+            self.native_import is not None
+            and self.native_import.original_board_revision != self.binding.board_revision
+        ):
+            raise ValueError("candidate native import binding is inconsistent")
         if self.binding.drc_profile_digest != self.judge.drc_profile_digest:
             raise ValueError("candidate DRC profile differs from its judge")
         measurement = self.metrics.clearance
@@ -456,6 +522,12 @@ class OptimizationPackageV2(_OptimizationPackageFields):
             raise OptimizationError("optimization comparison budget is invalid")
         if self.binding.drc_profile_digest != request.drc_profile_digest:
             raise OptimizationError("optimization DRC profile was changed")
+        if (
+            request.native_import_digest != self.binding.native_import_digest
+            or request.imported_board_revision
+            != (None if self.native_import is None else self.native_import.imported_board_revision)
+        ):
+            raise OptimizationError("optimization native import was changed")
         if self.judge.project_required != (request.project_capture_digest is not None):
             raise OptimizationError("optimization project requirement was changed")
         if (

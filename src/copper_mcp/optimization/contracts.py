@@ -206,9 +206,17 @@ class OptimizationRequestV2(_OptimizationRequestFields):
     project_capture_digest: Digest | None
     project_libraries_digest: Digest | None
     drc_profile_digest: Digest
+    input_mode: Literal["observed-snapshot", "native-full-board"] = "observed-snapshot"
+    native_import_digest: Digest | None = None
+    imported_board_revision: Digest | None = None
 
     @model_validator(mode="after")
     def mandatory_checks(self) -> OptimizationRequestV2:
+        imported = self.input_mode == "native-full-board"
+        if imported != (self.native_import_digest is not None) or imported != (
+            self.imported_board_revision is not None
+        ):
+            raise ValueError("native import binding is incomplete")
         if not {"DRC", "DFM"}.issubset(self.required_domains):
             raise ValueError("mandatory optimization checks are missing")
         if (self.project_capture_digest is None) != (self.project_libraries_digest is None):

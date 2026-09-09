@@ -12,7 +12,6 @@ import stat
 import sys
 import tempfile
 from collections.abc import Sequence
-from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 
@@ -109,6 +108,7 @@ def main() -> None:
         from copper_mcp.optimization.coordinator import coordinate_optimization
         from copper_mcp.optimization.inputs import prepare_optimization
         from copper_mcp.optimization.judge import AnyJudgeReport
+        from copper_mcp.optimization.lifecycle import ResourceUsage
         from copper_mcp.optimization.package import AnyOptimizationPackage
         from copper_mcp.optimization.repository import OptimizationJobRepository
         from copper_mcp.optimization.worker import (
@@ -135,10 +135,27 @@ def main() -> None:
         reports: list[AnyJudgeReport] = []
 
         def execute(probe: OptimizationExecutionProbe) -> AnyOptimizationPackage:
-            prepared = prepare_optimization(document["launch"], settings)
+            parent_output = document.get("import_output_bytes", 0)
+            if (
+                type(parent_output) is not int
+                or not 0 <= parent_output < request.limits.max_external_output_bytes
+            ):
+                raise OptimizationExecutionError("budget_exhausted")
+            probe.reserve(ResourceUsage(external_output_bytes=parent_output))
+
+            def account_import(count: int) -> None:
+                probe.reserve(ResourceUsage(external_output_bytes=count))
+
+            prepared = prepare_optimization(
+                document["launch"],
+                settings,
+                started_at=document["started_at"],
+                deadline=document["deadline_ms"] / 1000,
+                import_output_budget=request.limits.max_external_output_bytes - parent_output,
+                account_import_output=account_import,
+            )
             if prepared.request != request:
                 raise OptimizationExecutionError("stale_revision")
-            prepared = replace(prepared, started_at=document["started_at"])
             result = coordinate_optimization(
                 prepared,
                 settings,

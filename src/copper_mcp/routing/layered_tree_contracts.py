@@ -192,10 +192,13 @@ class LayeredTreeCandidate:
     router_version: str
     policy: str
     seed: int
+    fill_binding: str | None = None
 
     def __post_init__(self) -> None:
         _digest("tree candidate ID", self.candidate_id)
         _digest("tree base revision", self.base_revision)
+        if self.fill_binding is not None:
+            _digest("tree fill binding", self.fill_binding)
         _typed_id("tree net ID", self.net_id, "net:")
         if (
             type(self.terminals) is not tuple
@@ -282,6 +285,7 @@ def canonical_layered_tree_candidate_bytes(
 ) -> bytes:
     _admit_layered_tree_candidate(candidate)
     payload = {
+        **({"fill_binding": candidate.fill_binding} if candidate.fill_binding is not None else {}),
         "base_revision": candidate.base_revision,
         "branches": [
             {

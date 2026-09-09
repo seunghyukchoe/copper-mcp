@@ -11,6 +11,7 @@ from copper_mcp.routing._layered_tree_cancel import (
     LayeredTreeCancellationError,
     poll_cancelled,
 )
+from copper_mcp.routing.astar import VerifiedFill, fill_binding_for
 from copper_mcp.routing.layered_astar import (
     MAX_EXPLICIT_VIAS,
     MAX_LAYERS,
@@ -25,12 +26,15 @@ from copper_mcp.routing.layered_board_adapter import (
     _axis_aligned_rectangle,
     _cell_obstacle,
     _inflate,
+    _invalid_verified_fill,
     _layer_order,
     _pad_bounds,
     _paths_and_vias,
     _points_bounds,
     _resolve_net_class,
     _segment_bounds,
+    _verified_fill_over_check_budget,
+    _zone_obstacle_bounds,
 )
 from copper_mcp.routing.layered_contracts import (
     LayeredRouteDiagnostic,
@@ -71,6 +75,7 @@ class LayeredTreeRequest:
     grid_step_nm: int = 250_000
     seed: int = 0
     settings: LayeredAStarSettings = field(default_factory=LayeredAStarSettings)
+    verified_fill: tuple[VerifiedFill, ...] = ()
 
 
 def _digest(value: object) -> bool:
@@ -264,6 +269,12 @@ class LayeredTreeRouter:
             return _diagnostic(
                 LayeredRouteFailureCode.INVALID_REQUEST, "layered tree request is malformed"
             )
+        over_budget = _verified_fill_over_check_budget(request.verified_fill)
+        if over_budget is not None:
+            return _diagnostic(LayeredRouteFailureCode.OBSTACLE_CHECK_BUDGET_EXCEEDED, over_budget)
+        malformed = _invalid_verified_fill(request.verified_fill)
+        if malformed is not None:
+            return _diagnostic(LayeredRouteFailureCode.INVALID_REQUEST, malformed)
         if type(snapshot) is not BoardIRSnapshot:
             return _diagnostic(
                 LayeredRouteFailureCode.INVALID_SNAPSHOT, "Board IR snapshot is malformed"
@@ -346,12 +357,12 @@ class LayeredTreeRouter:
         if (
             any(item.net_id == request.net_id for item in snapshot.content.segments)
             or any(item.net_id == request.net_id for item in snapshot.content.vias)
-            or snapshot.content.zones
+            or any(item.net_id == request.net_id for item in snapshot.content.zones)
             or snapshot.content.arcs
         ):
             return _diagnostic(
                 LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
-                "selected-net copper, zones, and arcs are unsupported for layered trees",
+                "selected-net copper and arcs are unsupported for layered trees",
             )
         outline = (
             snapshot.content.outline[0].outer
@@ -504,6 +515,25 @@ class LayeredTreeRouter:
                         LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
                         "layered tree obstacle budget is exhausted",
                     )
+        zone_obstacles = _zone_obstacle_bounds(snapshot, request.verified_fill)
+        if isinstance(zone_obstacles, LayeredRouteDiagnostic):
+            return LayeredTreeResult(diagnostic=zone_obstacles)
+        for layer_id, net_id, zone_clearance, rectangle in zone_obstacles:
+            if layer_id not in layer_index:
+                continue
+            clearance = max(
+                net_class.clearance_nm,
+                zone_clearance,
+                clearance_by_net.get(net_id, widest_clearance),
+            )
+            layer = layer_index[layer_id]
+            if not add_obstacle(rectangle, layer, half_width + clearance) or not add_obstacle(
+                rectangle, layer, via_half + clearance, via=True
+            ):
+                return _diagnostic(
+                    LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                    "layered tree obstacle budget is exhausted",
+                )
         for keepout in snapshot.content.keepouts:
             rectangle = _points_bounds(keepout.boundary.points)
             for layer_id in set(keepout.layer_ids) & set(layer_ids):
@@ -793,6 +823,7 @@ class LayeredTreeRouter:
             router_version=LAYERED_TREE_ROUTER_VERSION,
             policy=LAYERED_TREE_POLICY,
             seed=request.seed,
+            fill_binding=fill_binding_for(request.verified_fill),
         )
         try:
             candidate = with_layered_tree_candidate_id(candidate, checkpoint=checkpoint)

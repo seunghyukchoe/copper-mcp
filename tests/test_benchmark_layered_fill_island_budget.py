@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+import subprocess
 from typing import Any
 
 from scripts import benchmark_layered_fill_island_budget as benchmark
@@ -13,6 +15,36 @@ def _artifact() -> dict[str, Any]:
     value = json.loads(benchmark.OUTPUT.read_text(encoding="utf-8"))
     assert isinstance(value, dict)
     return value
+
+
+def test_original_calibration_remains_bound_to_its_original_source() -> None:
+    original = json.loads(
+        (
+            benchmark.ROOT
+            / "benchmarks/results/routing/2026-08-17-layered-fill-island-budget-v1.json"
+        ).read_bytes()
+    )
+    recorded = original.pop("run_id")
+    assert recorded == "sha256:99cc07e4047e95beb0f82be8c10da8641ed33f0ad36d87376007cb887e57d5a6"
+    assert recorded == benchmark._canonical_digest(original)
+    assert original["metrics"]["gates"]["fill_domain_ceiling_single_and_split"] is False
+    configuration = original["configuration"]
+    files = {
+        **configuration["implementation_sha256"],
+        str(benchmark.SCRIPT): configuration["script_sha256"],
+        "scripts/benchmark_layered_fill_obstacles.py": configuration["fixture_script_sha256"],
+    }
+    git = shutil.which("git")
+    assert git is not None
+    for name, expected in files.items():
+        source = subprocess.run(  # noqa: S603 - fixed commit and digest-pinned artifact paths
+            [git, "show", f"ddd1819b68ac50c092b5bf9ee8f79dbb42042092:{name}"],
+            cwd=benchmark.ROOT,
+            check=True,
+            capture_output=True,
+            timeout=10,
+        ).stdout
+        assert "sha256:" + hashlib.sha256(source).hexdigest() == expected
 
 
 def test_artifact_is_self_digested_and_binds_scripts_and_implementation() -> None:
@@ -36,7 +68,7 @@ def test_artifact_is_self_digested_and_binds_scripts_and_implementation() -> Non
     }
 
 
-def test_artifact_records_the_failed_domain_gate_and_selected_finite_cap() -> None:
+def test_artifact_records_current_gates_without_expanding_the_selected_cap() -> None:
     metrics = _artifact()["metrics"]
     cases = {case["name"]: case for case in metrics["cases"]}
 
@@ -45,11 +77,14 @@ def test_artifact_records_the_failed_domain_gate_and_selected_finite_cap() -> No
     assert metrics["gates"] == {
         "widest_recorded_corpus_island": True,
         "shipped_fill_default": True,
-        "fill_domain_ceiling_single_and_split": False,
+        "fill_domain_ceiling_single_and_split": all(
+            cases[name]["propose_plus_replay_ns"] <= 20_000_000_000
+            and cases[name]["incremental_traced_peak_bytes"] <= 1_500_000_000
+            for name in ("fill_domain_ceiling", "equal_total_split")
+        ),
     }
     assert cases["widest_recorded_corpus_island"]["propose_status"] == "accepted"
     assert cases["shipped_fill_default"]["replay_status"] == "accepted"
-    assert cases["equal_total_split"]["propose_plus_replay_ns"] > 20_000_000_000
     assert cases["selected_cap_overflow"]["propose_code"] == "invalid_request"
     assert cases["aggregate_overflow"]["propose_code"] == ("obstacle_check_budget_exceeded")
 

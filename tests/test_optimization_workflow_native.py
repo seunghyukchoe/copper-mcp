@@ -32,11 +32,23 @@ _FIXTURE = Path(__file__).parent / "fixtures/route-candidate/layered-tree-ordina
 @pytest.mark.real_kicad
 @pytest.mark.skipif(not _CONFIGURED_CLI, reason="requires explicitly configured real KiCad")
 @pytest.mark.parametrize(
-    "version,movement",
-    [("optimization/v1", False), ("optimization/v2", False), ("optimization/v2", True)],
-    ids=["v1-routing", "v2-routing", "v2-placement-and-routing"],
+    "version,movement,input_mode",
+    [
+        ("optimization/v1", False, "observed-snapshot"),
+        ("optimization/v2", False, "observed-snapshot"),
+        ("optimization/v2", True, "observed-snapshot"),
+        ("optimization/v2", True, "native-full-board"),
+    ],
+    ids=[
+        "v1-routing",
+        "v2-routing",
+        "v2-placement-and-routing",
+        "v2-native-full-board-placement-and-routing",
+    ],
 )
-def test_mcp_routes_complete_multilayer_tree_and_exports_without_apply(tmp_path, version, movement):
+def test_mcp_routes_complete_multilayer_tree_and_exports_without_apply(
+    tmp_path, version, movement, input_mode
+):
     source = _FIXTURE.read_bytes()
     assert source.count(b'(net "POWER")') == 2
     source = source.replace(b'(net "POWER")', b'(net "BLOCKER_F")', 1).replace(
@@ -121,6 +133,12 @@ def test_mcp_routes_complete_multilayer_tree_and_exports_without_apply(tmp_path,
     }
     if version == "optimization/v2":
         launch["schema_version"] = version
+    if input_mode == "native-full-board":
+        # The production intake derives the complete target scope and working snapshot.
+        # The client still binds the original bytes and supplies an explicit movable scope.
+        launch["input_mode"] = input_mode
+        launch.pop("expect_snapshot_digest")
+        launch.pop("target_net_refs")
     if movement:
         movable = next(
             footprint.id
@@ -185,6 +203,15 @@ def test_mcp_routes_complete_multilayer_tree_and_exports_without_apply(tmp_path,
             assert package["metrics"]["fully_connected_target_nets"] == 1
             assert package["metrics"]["hard_drc_errors"] == 0
             assert package["metrics"]["via_count"] > 0
+            if input_mode == "native-full-board":
+                from copper_mcp.optimization.native_import import NativeImportBinding
+
+                imported = NativeImportBinding.model_validate(package["native_import"])
+                assert imported.original_board_revision == launch["expect_board_revision"]
+                assert imported.digest == service._jobs[job_id].request.native_import_digest
+                assert imported.backend_version == "10.0.5"
+                assert imported.repetitions == 2
+                assert imported.authority == "executable-consistency-only"
             if movement:
                 comparison = package["comparison"]
                 outcomes = comparison["outcomes"]

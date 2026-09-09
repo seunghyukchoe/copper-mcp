@@ -26,7 +26,7 @@ contain, so it cannot go stale unnoticed.
 | [Decision ledger](decision-ledger.md) | `D-` | `D-285` | `D-286` |
 | [Risk register](risk-register.md) | `R-` | `R-212` | `R-213` |
 | [Security review ledger](security-ledger.md) | `SEC-` | `SEC-217` | `SEC-218` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-143` | `B-144` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-144` | `B-145` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:

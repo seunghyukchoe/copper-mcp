@@ -25,6 +25,39 @@ from copper_mcp.optimization.contracts import OptimizationError
 from copper_mcp.optimization.mcp import HumanDecision, register_optimization_tools
 
 
+def test_review_deadline_failure_is_a_deliberate_non_echoing_refusal(
+    app, launch, synthetic_authority, monkeypatch
+):
+    from copper_mcp.kicad_cli import KiCadCliError
+
+    server, gateway = app
+    allow_direct_elicitation(monkeypatch)
+    record = completed_search(app, launch)["record"]
+    service, _owner = gateway.service()
+
+    async def accept(*_args, **_kwargs):
+        return AcceptedElicitation(data=HumanDecision(decision="approve"))
+
+    def exhausted(*_args, **_kwargs):
+        raise KiCadCliError("owned-private-context-canary")
+
+    monkeypatch.setattr(Context, "elicit", accept)
+    monkeypatch.setattr(service, "approve_from_host", exhausted)
+    with pytest.raises(ToolError) as caught:
+        call(
+            server,
+            "approve_optimization_job",
+            {
+                "job_id": record["job_id"],
+                "expected_record_revision": record["revision"],
+                "expected_package_digest": record["package_digest"],
+                "expected_judge_digest": record["judge_digest"],
+            },
+        )
+    assert type(caught.value) is ToolError
+    assert "canary" not in str(caught.value)
+
+
 @pytest.mark.parametrize("delivery", ["pending", "missing", "corrupt", "failed"])
 def test_published_metadata_is_not_reviewable_until_parent_validates_delivery(
     app, launch, synthetic_authority, monkeypatch, delivery
@@ -533,7 +566,7 @@ def test_legacy_response_to_challenge_a_cannot_consume_replacement_b(
             await entered.wait()
             pending_key, pending_a = next(iter(gateway._consents._pending.items()))
             gateway._consents._pending[pending_key] = replace(pending_a, expires_at=0.0)
-            challenge_b = gateway._consents.issue(pending_a.binding)
+            challenge_b = gateway._consents.issue_challenge(pending_a.binding)
             release.set()
         return results[0], pending_a.binding, challenge_b
 
@@ -615,15 +648,27 @@ def test_five_closed_tools_have_no_model_approval_capability(app):
         assert set(tool.input_schema["properties"]) == {"request"}
         request_schema = tool.input_schema["properties"]["request"]
         if tool.name == "start_optimization":
-            assert len(request_schema["oneOf"]) == 2
+            assert len(request_schema["oneOf"]) == 3
             assert all(
                 branch["additionalProperties"] is False for branch in request_schema["oneOf"]
             )
             assert "schema_version" not in request_schema["oneOf"][0]["properties"]
-            assert (
-                request_schema["oneOf"][1]["properties"]["schema_version"]["const"]
-                == "optimization/v2"
+            v2 = request_schema["oneOf"][1:]
+            assert all(
+                branch["properties"]["schema_version"]["const"] == "optimization/v2"
+                for branch in v2
             )
+            modes = {branch["properties"]["input_mode"]["const"]: branch for branch in v2}
+            assert set(modes) == {"observed-snapshot", "native-full-board"}
+            assert "expect_snapshot_digest" in modes["observed-snapshot"]["required"]
+            native = modes["native-full-board"]
+            assert "expect_board_revision" in native["required"]
+            assert native["properties"]["target_net_refs"]["type"] == "null"
+            for branch in request_schema["oneOf"]:
+                assert (
+                    not {"apply_token", "human_confirmation_capability", "kicad_cli"}
+                    & branch["properties"].keys()
+                )
         else:
             assert request_schema["additionalProperties"] is False
     assert "human_confirmation_capability" not in str(
@@ -663,6 +708,14 @@ def _v1_projection(schema):
 
     output = walk(schema)
     definitions = schema.get("$defs", {})
+    # A typed root union moves the unchanged v1 model behind a root reference.
+    # Resolve only that reference; the original byte-for-byte golden stays fixed.
+    ref = output.get("$ref", "")
+    if ref.startswith("#/$defs/"):
+        output = {
+            **walk(definitions[ref[8:]]),
+            **{key: value for key, value in output.items() if key != "$ref"},
+        }
     needed = {}
     pending = [output]
     while pending:

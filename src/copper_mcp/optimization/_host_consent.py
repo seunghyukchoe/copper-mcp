@@ -87,7 +87,7 @@ class _PendingHostConsents:
         for key in expired:
             del self._pending[key]
 
-    def issue(self, binding: _ConsentBinding) -> str:
+    def issue_challenge(self, binding: _ConsentBinding) -> str:
         admitted = _validate(binding)
         with self._lock:
             now = time.monotonic()

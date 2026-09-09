@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import asdict, replace
+from math import isqrt
 from typing import cast
 
 from copper_mcp.adapters.kicad_layered_route_patch import KiCadLayeredRoutePatchError
@@ -33,7 +34,9 @@ from copper_mcp.optimization.package import (
     SlotWork,
 )
 from copper_mcp.optimization.placement import search_placements_v2
+from copper_mcp.optimization.repair import CopperRepairBinding
 from copper_mcp.optimization.worker import OptimizationExecutionError, OptimizationExecutionProbe
+from copper_mcp.optimization.zone_fill import CandidateFillBinding, CandidateFillError
 from copper_mcp.routing.contracts import AStarSettings
 
 
@@ -57,6 +60,7 @@ class SlotProbe(OptimizationExecutionProbe):
             repair_rounds=self.usage.repair_rounds,
             routing_checks=self.routing_checks,
             validation_checks=self.validation_checks,
+            external_output_bytes=self.usage.external_output_bytes,
         )
 
     def remaining_time_ms(self) -> int:
@@ -90,6 +94,7 @@ class SlotProbe(OptimizationExecutionProbe):
             or prospective.expansions > self.budget.expansions
             or prospective.route_attempts > self.budget.route_attempts
             or prospective.repair_rounds > self.budget.repair_rounds
+            or prospective.external_output_bytes > self.budget.external_output_bytes
         ):
             self.stopped = True
             raise OptimizationExecutionError("budget_exhausted")
@@ -135,6 +140,7 @@ def allocate_slots(
         used_placement_evaluations=usage.placement_evaluations,
         used_candidates=usage.candidates,
         remaining_ms=probe.remaining_time_ms(),
+        used_external_output_bytes=usage.external_output_bytes,
     )
     budget = allocation.per_slot(count)
     if min(budget.expansions, budget.route_attempts, budget.routing_checks, budget.wall_ms) < 1:
@@ -166,8 +172,6 @@ def coordinate_v2(
 
     if prepared.request.allowed_backends != ("internal-layered-v1",):
         raise OptimizationExecutionError("backend_failure")
-    if prepared.snapshot.content.zones:
-        raise OptimizationExecutionError("unsupported_geometry")
     verify_original_context(prepared, settings)
     probe.advance("placing")
     placements = search_placements_v2(prepared, settings, probe)
@@ -175,6 +179,9 @@ def coordinate_v2(
     probe.advance("evaluating")
     outcomes: list[ComparisonOutcome] = []
     evaluated: list[tuple[CandidateBindingV2, ObjectiveMetricsV2, JudgeReportV2, bytes]] = []
+    route_evidence: dict[
+        str, tuple[CandidateFillBinding | None, int, CopperRepairBinding | None]
+    ] = {}
     last_failure = OptimizationExecutionError("backend_failure")
     for index, placed in enumerate(placements):
         probe.reserve(ResourceUsage(candidates=1))
@@ -183,7 +190,12 @@ def coordinate_v2(
             patch_failed = False
             try:
                 routed = route_targets(prepared, placed.source, placed.snapshot, settings, slot)
-            except (KiCadRoutePatchError, KiCadLayeredRoutePatchError, KiCadLayeredTreePatchError):
+            except (
+                KiCadRoutePatchError,
+                KiCadLayeredRoutePatchError,
+                KiCadLayeredTreePatchError,
+                CandidateFillError,
+            ):
                 patch_failed = True
             if patch_failed:
                 probe.checkpoint()
@@ -204,14 +216,22 @@ def coordinate_v2(
                     index != 0
                     or placed.candidate_id != identity
                     or placed.source != prepared.source
-                    or routed.source != prepared.source
                     or placed.snapshot != prepared.snapshot
-                    or routed.snapshot != prepared.snapshot
                     or routed.base_snapshot_digest != prepared.snapshot.snapshot_digest
                     or placed.displacement_nm
                     or routed.wire_length_nm
                     or routed.vias
                     or routed.candidate_ids
+                ):
+                    raise OptimizationExecutionError("invalid_candidate")
+                if routed.fill is None:
+                    if routed.source != prepared.source or routed.snapshot != prepared.snapshot:
+                        raise OptimizationExecutionError("invalid_candidate")
+                elif (
+                    routed.fill_rounds != 1
+                    or routed.fill.input_board_revision != prepared.snapshot.content.source.revision
+                    or routed.fill.input_snapshot_digest != prepared.snapshot.snapshot_digest
+                    or routed.fill.output_board_revision != routed.snapshot.content.source.revision
                 ):
                     raise OptimizationExecutionError("invalid_candidate")
             slot.validation = True
@@ -230,10 +250,16 @@ def coordinate_v2(
                 drc_profile_digest=prepared.request.drc_profile_digest
                 if prepared.request.schema_version == "optimization/v2"
                 else "",
+                native_import_digest=None
+                if prepared.native_import is None
+                else prepared.native_import.digest,
+                fill_history_digest=routed.fill_history_digest,
+                repair_digest=None if routed.repair is None else routed.repair.digest,
             )
             judge = cast(
                 JudgeReportV2, judge_composition(prepared, binding, routed.source, settings, slot)
             )
+            slot.checkpoint()
             observe_judge(judge)
             if not judge.reviewable:
                 raise OptimizationExecutionError(
@@ -255,6 +281,23 @@ def coordinate_v2(
                 raise OptimizationExecutionError(
                     "budget_exhausted" if slot.stopped else "invalid_candidate"
                 ) from None
+            scope = set(prepared.target_net_refs)
+            copper = routed.snapshot.content
+            slot.reserve(
+                ResourceUsage(
+                    obstacle_checks=len(copper.segments) + len(copper.vias) + len(copper.arcs)
+                )
+            )
+            if any(arc.net_id in scope for arc in copper.arcs):
+                raise OptimizationExecutionError("unsupported_geometry")
+            total_length = 0
+            for segment in copper.segments:
+                slot.checkpoint()
+                if segment.net_id in scope:
+                    total_length += isqrt(
+                        (segment.end.x - segment.start.x) ** 2
+                        + (segment.end.y - segment.start.y) ** 2
+                    )
             metrics = ObjectiveMetricsV2(
                 hard_legality_errors=0,
                 hard_drc_errors=0,
@@ -264,8 +307,10 @@ def coordinate_v2(
                     routed.snapshot, prepared.routing_settings.grid_step_nm * 4, slot
                 ),
                 clearance=ClearanceObservation.model_validate(asdict(observation)),
-                via_count=routed.vias,
-                copper_length_nm=routed.wire_length_nm,
+                via_count=sum(via.net_id in scope for via in copper.vias),
+                copper_length_nm=total_length,
+                added_via_count=routed.vias,
+                added_copper_length_nm=routed.wire_length_nm,
                 displacement_nm=placed.displacement_nm,
                 intent_residual=placed.intent_residual_nm,
                 actual_route_probes=routed.route_probes,
@@ -283,6 +328,7 @@ def coordinate_v2(
                 )
             )
             evaluated.append((binding, metrics, judge, routed.source))
+            route_evidence[binding.digest] = (routed.fill, routed.fill_rounds, routed.repair)
         except OptimizationExecutionError as error:
             if error.code in {"cancelled", "stale_revision", "interrupted"}:
                 raise
@@ -337,6 +383,7 @@ def coordinate_v2(
 
     ordered = sorted(evaluated, key=rank)
     binding, metrics, judge, source = ordered[0]
+    fill, fill_rounds, repair = route_evidence[binding.digest]
     package = OptimizationPackageV2(
         schema_version="optimization/v2",
         request_digest=prepared.request.digest,
@@ -345,6 +392,10 @@ def coordinate_v2(
         metrics=metrics,
         judge=judge,
         comparison=comparison,
+        native_import=prepared.native_import,
+        zone_fill=fill,
+        fill_round_count=fill_rounds,
+        repair=repair,
         backend_provenance=(
             BackendProvenance(
                 backend="internal-layered-v1",

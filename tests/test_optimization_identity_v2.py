@@ -54,10 +54,12 @@ def test_zero_probe_identity_preserves_every_original_binding(
     assert package.metrics.actual_route_probes == 0
     assert (
         package.metrics.displacement_nm
-        == package.metrics.copper_length_nm
-        == package.metrics.via_count
+        == package.metrics.added_copper_length_nm
+        == package.metrics.added_via_count
         == 0
     )
+    assert package.metrics.copper_length_nm == 20_000_000
+    assert package.metrics.via_count == 0
     assert package.binding.candidate_board_revision == package.binding.board_revision
     assert (
         package.binding.snapshot_digest

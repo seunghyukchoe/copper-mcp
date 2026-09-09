@@ -8,6 +8,32 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- V2 optimization can reroute existing target copper after component movement, and complete
+  partially routed targets, in one budgeted private repair batch. Locked/grouped copper and
+  unrelated nets remain protected; exported packages bind the removals and complete reroute.
+  Owned native placement-and-repair and partial-routing controls passed without saving or
+  modifying the original board. General negotiated repair and held-out improvement remain open.
+  Native demonstrations cover recorded earlier checkpoints; final-source native/full validation
+  remains open after preserved failures during severe host contention.
+- Unsuccessful terminal `optimization/v2` jobs export immutable, explicitly blocked evaluation
+  metadata through the existing MCP status/export tools, including after server restart. These
+  reports contain recorded blockers, not a candidate or invented engineering evidence; they
+  cannot request geometry disclosure or human approval. V1 responses retain their flat shape
+  and existing schema interpretation. Complete ordinary-board workflow acceptance remains open.
+- V2 zoned optimization compares placement alternatives, routes cross-layer multi-pin trees beside
+  foreign pours, refreshes candidate-only fill after copper changes, and binds fill/replay/final
+  connectivity to the review package. The pair and tree routers share the existing conservative
+  zone-obstacle checks. Native four-layer tree and mixed two-pad placement/routing controls passed
+  under unchanged limits. General repair, external composition and integrated acceptance remain
+  open; the pinned audio/supply board-stage diagnostics correctly export blocked reports for
+  suppressed project DRC checks, without claiming project ERC or physics completion.
+- `optimization/v2` now offers explicit `native-full-board` intake: privately upgrade supported
+  boards with the pinned KiCad backend, derive the full eligible net scope, and carry original
+  and imported identities through placement, isolated routing, review and export. Native-created
+  local preferences are bounded disposable output, not source authority. Existing object ownership
+  is preserved; only specified new mandatory-field UUIDs are normalized. Original files and v1
+  interpretation remain unchanged. Native fixture validation passed; ordinary-board fill/repair,
+  external routing, broader geometry coverage and integrated release validation remain pending.
 - Explicit `optimization/v2` MCP jobs compare unchanged and proposed placements under equal
   routing budgets, route complete multilayer candidates in the isolated worker, and export
   immutable measured-clearance review packages. Declared projects add native ERC and separate

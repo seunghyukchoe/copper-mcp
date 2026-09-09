@@ -10,13 +10,18 @@ from dataclasses import dataclass, field
 
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
 from copper_mcp.config import Settings
-from copper_mcp.kicad_cli import _context_revision, _drc_context
+from copper_mcp.kicad_cli import _candidate_drc_deadline_settings, _context_revision, _drc_context
 from copper_mcp.optimization.approval import HumanApprovalAuthority
 from copper_mcp.optimization.contracts import AnyOptimizationRequest, OptimizationError
 from copper_mcp.optimization.inputs import ProjectDeclaration, prepare_optimization
 from copper_mcp.optimization.isolated import run_isolated_job
 from copper_mcp.optimization.judge import AnyJudgeReport
-from copper_mcp.optimization.lifecycle import AnyOptimizationJobRecord
+from copper_mcp.optimization.lifecycle import (
+    AnyOptimizationJobRecord,
+    BlockedEvaluationV2,
+    blocked_evaluation,
+)
+from copper_mcp.optimization.native_import import NativeImportBinding, import_native_board
 from copper_mcp.optimization.package import AnyOptimizationPackage
 from copper_mcp.optimization.repository import OptimizationJobRepository
 from copper_mcp.parse_budgets import parse_limits_for
@@ -37,6 +42,7 @@ class _PrivateJob:
     profile: KiCadConstraintProfile
     artifact_bindings: tuple[tuple[str, str], ...] = ()
     project: ProjectDeclaration | None = None
+    native_import: NativeImportBinding | None = None
     future: Future[AnyOptimizationJobRecord] | None = None
     judges: list[AnyJudgeReport] = field(default_factory=list)
     source: bytes | None = None
@@ -114,6 +120,8 @@ class OptimizationService:
             reserved = sum(len(content) for content in prepared.context.values()) + len(
                 prepared.electrical_source or b""
             )
+            if prepared.native_import is not None:
+                reserved += len(prepared.source)
             if (
                 len(self._jobs) >= 128
                 or reserved + sum(item.reserved_bytes for item in self._jobs.values())
@@ -135,6 +143,7 @@ class OptimizationService:
                 prepared.profile,
                 artifact_bindings=prepared.input_artifact_bindings,
                 project=prepared.project,
+                native_import=prepared.native_import,
             )
             self._jobs[record.job_id] = private
             pending_source: bytes | None = None
@@ -251,6 +260,19 @@ class OptimizationService:
                 raise OptimizationError("optimization package revision is stale")
             return package
 
+    def export_blocked(
+        self, job_id: str, owner: str, expected_revision: int, expected_digest: str
+    ) -> BlockedEvaluationV2 | None:
+        """Read-only terminal metadata does not depend on private candidate retention."""
+        with self._lock:
+            record = self.repository.get(job_id, owner)
+            report = blocked_evaluation(record)
+            if report is not None and (
+                record.revision != expected_revision or report.digest != expected_digest
+            ):
+                raise OptimizationError("blocked evaluation revision is stale")
+            return report
+
     def approve_from_host(
         self,
         job_id: str,
@@ -278,15 +300,36 @@ class OptimizationService:
                 max_bytes=self.settings.max_board_bytes,
             )
             observed_board_revision = "sha256:" + hashlib.sha256(board.content).hexdigest()
+            review_deadline = time.monotonic() + min(
+                self.settings.max_route_preview_seconds,
+                private.request.limits.max_runtime_ms / 1000,
+            )
+            context = _drc_context(
+                board.path, _candidate_drc_deadline_settings(self.settings, review_deadline), board
+            )
+            if (
+                _context_revision(context) != private.context_digest
+                or observed_board_revision != private.request.board_revision
+            ):
+                raise OptimizationError("optimization source or rules changed before approval")
+            working_source = board.content
+            if private.native_import is not None:
+                imported = import_native_board(
+                    context,
+                    private.board_path,
+                    self.settings,
+                    deadline=review_deadline,
+                    max_output_bytes=private.request.limits.max_external_output_bytes,
+                )
+                if imported.binding != private.native_import:
+                    raise OptimizationError("optimization native import changed before approval")
+                working_source = imported.source
             parsed = parse_kicad_bytes(
-                board.content, private.profile, parse_limits_for(self.settings)
+                working_source, private.profile, parse_limits_for(self.settings)
             )
             if parsed.snapshot is None or parsed.diagnostics:
                 raise OptimizationError("optimization source is no longer reviewable")
             observed_snapshot_digest = parsed.snapshot.snapshot_digest
-            context = _drc_context(board.path, self.settings, board)
-            if _context_revision(context) != private.context_digest:
-                raise OptimizationError("optimization source or rules changed before approval")
             if (
                 observed_board_revision != private.request.board_revision
                 or observed_snapshot_digest != private.request.snapshot_digest
@@ -304,13 +347,26 @@ class OptimizationService:
                 capture, _libraries, libraries_digest = capture_project_inputs(
                     private.project,
                     self.settings,
-                    time.monotonic() + self.settings.max_drc_context_scan_seconds,
+                    min(
+                        review_deadline,
+                        time.monotonic() + self.settings.max_drc_context_scan_seconds,
+                    ),
                 )
                 if (
                     capture.digest != private.request.project_capture_digest
                     or libraries_digest != private.request.project_libraries_digest
                 ):
                     raise OptimizationError("optimization project changed before approval")
+            if private.native_import is not None:
+                current = _drc_context(
+                    board.path,
+                    _candidate_drc_deadline_settings(self.settings, review_deadline),
+                )
+                if (
+                    _context_revision(current) != private.context_digest
+                    or time.monotonic() >= review_deadline
+                ):
+                    raise OptimizationError("optimization source changed before approval")
             capability = self.authority.issue_from_human_channel(
                 record, package, owner_binding=owner
             )

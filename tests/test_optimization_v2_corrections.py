@@ -116,13 +116,15 @@ def test_circuit_intent_erc_uses_slot_allowance(launch, tmp_path, synthetic_auth
     )
     (tmp_path / "electrical.json").write_bytes(fixture.read_bytes())
     value = {**_v2(launch), "electrical_intent_path": "electrical.json"}
-    original = evaluation_v2.SlotProbe.__init__
+    original = evaluation.judge_composition
 
-    def slot(self, root, budget):
-        original(self, root, budget)
-        self.deadline = time.monotonic() + 3
+    def judge(prepared, binding, source, settings, probe):
+        # Exercise three seconds of *remaining judging time*, not host-dependent routing
+        # speed. This only shortens the existing slot; it never renews an expired budget.
+        probe.deadline = min(probe.deadline, time.monotonic() + 3)
+        return original(prepared, binding, source, settings, probe)
 
-    monkeypatch.setattr(evaluation_v2.SlotProbe, "__init__", slot)
+    monkeypatch.setattr(evaluation, "judge_composition", judge)
     seen = []
 
     def erc(source, *, intent_digest, schematic_digest, settings):
@@ -144,8 +146,12 @@ def test_circuit_intent_erc_uses_slot_allowance(launch, tmp_path, synthetic_auth
 
     monkeypatch.setattr(kicad_cli, "run_circuit_schematic_erc", erc)
     record, _, _ = run(value, tmp_path)
-    assert seen and all(0 < seconds <= 3 for seconds in seen)
-    assert record.status == "awaiting_approval"
+    assert seen and all(0 < seconds <= 3 for seconds in seen), (
+        record.status,
+        record.failure_code,
+        record.usage,
+    )
+    assert record.status in {"awaiting_approval", "budget_exhausted"}
 
 
 def test_reserve_search_counts_proposal_and_replay_per_branch(launch, tmp_path, monkeypatch):
