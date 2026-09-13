@@ -140,8 +140,18 @@ def test_recording_docker_cli_preserves_input_output_and_failure(tmp_path, exit_
     os.environ.get("COPPER_MCP_TEST_EXTERNAL_WORKFLOW") != "1",
     reason="requires explicit real-router workflow opt-in and production operator settings",
 )
-@pytest.mark.parametrize("backend", ["freerouting-dsn-ses-v1", "simpleroutejson-v1"])
-def test_real_external_mcp_compares_placement_routes_every_target_and_replays(tmp_path, backend):
+@pytest.mark.parametrize(
+    "backend,hybrid",
+    [
+        ("freerouting-dsn-ses-v1", False),
+        ("simpleroutejson-v1", False),
+        ("simpleroutejson-v1", True),
+    ],
+    ids=["freerouting-dsn-ses-v1", "simpleroutejson-v1", "simpleroutejson-with-internal"],
+)
+def test_real_external_mcp_compares_placement_routes_every_target_and_replays(
+    tmp_path, backend, hybrid
+):
     source = _FIXTURE.read_text()
     # Native Specctra uses unique reference designators. Supply them on this owned
     # synthetic derivative without dropping the POWER net or its obstructing pads.
@@ -234,7 +244,7 @@ def test_real_external_mcp_compares_placement_routes_every_target_and_replays(tm
         "input_mode": "native-full-board",
         "board": board.name,
         "expect_board_revision": "sha256:" + hashlib.sha256(board.read_bytes()).hexdigest(),
-        "allowed_backends": [backend],
+        "allowed_backends": ["internal-layered-v1", backend] if hybrid else [backend],
         "constraints": constraints,
         "movable_footprint_refs": [movable],
         "placement_intent_path": intent.name,
@@ -314,9 +324,16 @@ def test_real_external_mcp_compares_placement_routes_every_target_and_replays(tm
                 assert package.native_import.digest == request.native_import_digest
                 outcomes = package.comparison.outcomes
                 assert [row.role for row in outcomes] == ["identity", "alternative"]
-                assert all(row.status == "reviewable" for row in outcomes)
+                if not hybrid:
+                    assert all(row.status == "reviewable" for row in outcomes)
+                else:
+                    assert outcomes[1].status == "reviewable"
+                    assert package.comparison.improvement == "not_claimed"
                 assert package.comparison.budget == package.comparison.allocation.per_slot(2)
                 for row in outcomes:
+                    if hybrid and row.status != "reviewable":
+                        assert row.metrics is None and row.candidate_id is None
+                        continue
                     assert row.metrics is not None
                     assert (
                         row.metrics.target_net_count == row.metrics.fully_connected_target_nets == 2
@@ -324,9 +341,12 @@ def test_real_external_mcp_compares_placement_routes_every_target_and_replays(tm
                     assert row.metrics.hard_drc_errors == row.metrics.hard_legality_errors == 0
                     assert row.metrics.via_count > 0
                     assert row.metrics.actual_route_probes > 0
-                assert outcomes[0].metrics.displacement_nm == 0
+                if outcomes[0].metrics is not None:
+                    assert outcomes[0].metrics.displacement_nm == 0
                 assert outcomes[1].metrics.displacement_nm > 0
-                assert {row.backend for row in package.backend_provenance} == {backend}
+                assert {row.backend for row in package.backend_provenance} == (
+                    {"internal-layered-v1"} if hybrid else {backend}
+                )
                 assert all(
                     row.source_board_revision == launch["expect_board_revision"]
                     for row in package.backend_provenance
@@ -379,7 +399,7 @@ def test_real_external_mcp_compares_placement_routes_every_target_and_replays(tm
                     for attempt in row.external_runs:
                         assert attempt.backend == backend and attempt.status == "success"
                         assert attempt.executable_digest == shim_digest
-                        if backend == "simpleroutejson-v1":
+                        if backend == "simpleroutejson-v1" and not hybrid:
                             quantization = attempt.coordinate_quantization
                             assert quantization is not None
                             assert quantization.method == "nearest-nm-half-away-from-zero/v1"
@@ -388,8 +408,20 @@ def test_real_external_mcp_compares_placement_routes_every_target_and_replays(tm
                                 < quantization.rounded_coordinate_count
                                 <= quantization.coordinate_count
                             )
-                        assert attempt.normalized_route_digest is not None
-                        assert attempt.converter_digest is not None
+                        if hybrid:
+                            assert attempt.normalized_route_digest is None
+                            assert [step.backend for step in row.routing_attempts] == [
+                                backend,
+                                "internal-layered-v1",
+                            ]
+                            assert row.routing_attempts[0].outcome == "invalid_candidate"
+                            assert row.routing_attempts[0].external_run_digest == attempt.digest
+                            assert row.routing_attempts[1].outcome == (
+                                "composed" if row.status == "reviewable" else row.status
+                            )
+                        else:
+                            assert attempt.normalized_route_digest is not None
+                            assert attempt.converter_digest is not None
                         assert attempt.output_bytes > 0 and attempt.exit_code == 0
                         witnesses = [
                             run

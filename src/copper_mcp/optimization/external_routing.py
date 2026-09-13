@@ -242,7 +242,7 @@ def _run_router(
     runner = _router_runner(settings, probe, engine)
     result = runner.run(
         ContainerRunRequest(engine, payload),
-        cancelled=probe.cancelled,
+        cancelled=probe.root.cancelled,
         deadline=time.monotonic() + probe.remaining_time_ms() / 1000,
     )
     freerouting = engine is EngineKind.FREEROUTING
@@ -255,9 +255,10 @@ def _run_router(
         result.record,
     )
     if result.record.output_bytes:
-        probe.reserve(ResourceUsage(external_output_bytes=result.record.output_bytes))
+        probe.charge_external_output(result.record.output_bytes)
     if result.record.status is ContainerRunStatus.CANCELLED:
-        raise OptimizationExecutionError("cancelled")
+        probe.checkpoint()
+        raise OptimizationExecutionError("backend_failure")
     if result.record.status in {
         ContainerRunStatus.DEADLINE_EXCEEDED,
         ContainerRunStatus.OUTPUT_LIMIT_EXCEEDED,
@@ -1384,16 +1385,17 @@ def route_external_targets(
     snapshot: BoardIRSnapshot,
     settings: Settings,
     probe: SlotProbe,
+    *,
+    backend: Backend | None = None,
 ) -> ExternalRouteExecution:
     """Execute the one operator-configured external backend and return checked private bytes."""
 
-    if (
-        prepared.request.schema_version != "optimization/v2"
-        or len(prepared.request.allowed_backends) != 1
+    if prepared.request.schema_version != "optimization/v2" or (
+        backend is None and len(prepared.request.allowed_backends) != 1
     ):
         raise OptimizationExecutionError("backend_failure")
-    backend = prepared.request.allowed_backends[0]
-    if backend == "internal-layered-v1":
+    backend = prepared.request.allowed_backends[0] if backend is None else backend
+    if backend == "internal-layered-v1" or backend not in prepared.request.allowed_backends:
         raise OptimizationExecutionError("backend_failure")
     expected_settings = external_router_settings_digest(settings, prepared.request.allowed_backends)
     if expected_settings != prepared.external_router_settings_digest:

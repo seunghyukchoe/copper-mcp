@@ -576,3 +576,24 @@ regression passes after the fix; all 62 repository/isolation/deadline controls p
 3.12.13 (13.84s) and local 3.11.15 (13.15s). The CI interpreter was Linux 3.11.16, so local evidence
 is not presented as that hosted rerun. Independent correctness/security and Ponytail reviews
 accepted the correction. Hosted current-head verification and protected main landing remain open.
+
+2026-09-14 D-285 explicit hybrid workflow: v2 now executes only its declared backend pool,
+external-name order then internal when allowed, within one cumulative placement-slot allocation.
+Failed derivatives are discarded and every attempt/run/cost is bound into the comparison.
+Budget, cancellation, stale inputs and required engineering failures do not trigger retries.
+Legacy v2 empty-attempt serialization and all v1 interpretation remain unchanged.
+
+The original 0.25 mm grid and resource caps were retained. The controlled identity placement
+still exhausts its routing strategy, while checking existing copper first and then higher-pin
+nets permits the moved candidate to route both POWER and TREE. That failed control remains in
+the package and no placement improvement is claimed. Experimental weighted reservations were
+not adopted. The real isolated SRJ-to-internal MCP/KiCad/replay control passed in 15.13s: actual
+SRJ output was refused, selected copper was internally composed, required native checks passed,
+candidate/judge identities repeated, and original files were unchanged. This is owned development
+evidence, not held-out quality or physics calibration.
+
+Seventy-seven related software controls passed in 35.09s, including legacy nested serialization
+and failed-cost attribution. An unavailable-runtime MCP control also passed without inventing an
+external execution. Independent correctness/security and Ponytail review accepted the source
+delta. Full integrated validation, the three ordinary development profiles, held-out acceptance,
+live mutation and engineering authorities remain separate unfinished gates.

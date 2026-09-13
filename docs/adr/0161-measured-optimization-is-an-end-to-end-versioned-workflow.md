@@ -260,3 +260,29 @@ Internal v2 search preplans bounded branch units for every common-layer attempt 
 fallback, then allocates remaining proposal/replay reservations proportionally. A successful or
 already-connected net removes only its unreserved future units. Failed reservations remain spent;
 no unused allowance transfers between placement slots, and no global or per-slot limit increases.
+
+### Explicit hybrid recovery
+
+V2 may declare one or more of the existing backends. Try external backends in canonical name
+order, then internal routing only if it is declared. Each placement retains one cumulative
+`SlotProbe`: no resets, refunds, repeated backend or cross-slot transfer. Every attempt starts
+from the same immutable placed source, not another backend's partially disposed copper.
+Retry only routing-stage backend failure, unsupported geometry or invalid candidate. Budget
+exhaustion, cancellation, stale inputs and mandatory engineering failures stop or refuse; there
+is no implicit retry after DRC/ERC failure. A multi-backend request observes runtime availability
+inside each attempt, so an unavailable external backend cannot prevent authorized internal fallback.
+Single-backend early configuration refusal is preserved.
+
+Comparison rows bind every routing attempt to its backend, outcome, composition (when produced),
+external execution (when actually invoked) and charged work. Routing-only counters must sum exactly;
+later validation work remains separately attributable in the slot total. `composed` is a routing
+result, not engineering approval. Selected composition/backend and all run references must agree
+with final provenance. Empty attempt fields are omitted during nested canonical serialization,
+preserving the identities of existing single-backend v2 packages. V1 remains unchanged.
+
+V2 internal ordering checks retained copper first, then higher-pin nets, with deterministic ID
+ties and a precharged index pass. This heuristic does not change the grid, geometry constraints
+or resource ceilings. Final target references remain canonical and no failed target is omitted.
+The owned default-grid hybrid control has a failed identity slot and a fully routed, DRC-checked
+moved candidate; its comparison explicitly claims no improvement. Held-out placement acceptance
+still requires a measured baseline and the previously frozen quality objective.

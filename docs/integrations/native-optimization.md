@@ -31,7 +31,7 @@ net references, and any explicitly movable footprint references into the launch 
 | `required_domains` | V2 only: additional required judge domains. The caller cannot remove mandatory DRC/DFM or project-required ERC. Missing authorities block review. |
 | `placement_grid_nm`, `routing_settings`, `seed` | Bounded existing native search parameters. Manhattan distance may guide the search, never final evidence. |
 | `limits` | Cumulative runtime, candidate, placement, route-attempt, repair, expansion, obstacle-check and output ceilings. Server ceilings may tighten them. |
-| `allowed_backends` | Select exactly one backend: `internal-layered-v1`, or in v2 `freerouting-dsn-ses-v1` / `simpleroutejson-v1` with the operator-configured [local runtime](local-router-runtime.md). Multi-backend fallback remains unimplemented and refuses. |
+| `allowed_backends` | V1 uses `internal-layered-v1`. V2 permits a declared pool of `internal-layered-v1`, `freerouting-dsn-ses-v1` and `simpleroutejson-v1`; external backends use the operator-configured [local runtime](local-router-runtime.md). External routers are tried first, internal only when explicitly included. |
 
 The response includes a job record. `get_optimization_job` takes its `job_id` and returns current
 state and bounded judge reports. `cancel_optimization_job` additionally requires
@@ -136,8 +136,10 @@ PYTHONPATH=src python -m pytest --no-cov -n 0 \
 
 Configure the server's local runtime using the operator variables in
 [local-router-runtime.md](local-router-runtime.md#server-configuration), then select one external
-backend in the v2 request. Executable paths, images and Docker settings are never MCP arguments.
-Both placement slots use the same fixed backend and their equal nontransferable allocations.
+backend or an explicit pool in the v2 request. Executable paths, images and Docker settings are
+never MCP arguments. Both placement slots use the same declared pool, deterministic external-first
+order and equal nontransferable allocations. Failed routing work remains charged. Budget exhaustion,
+cancellation, stale inputs and mandatory engineering failures do not trigger further routing.
 
 FreeRouting proposes for the whole board. CopperMCP retains exact original copper identities,
 geometry and locks, then admits only supported new copper on the reduced routing target set.
@@ -157,8 +159,18 @@ It compares both placements, checks every target with real KiCad, exports review
 matches confined executions to their evidence, repeats the run, and requires identical
 candidate/judge digests without modifying source files. The owned four-layer control passed;
 this is not twelve-board acceptance. The corresponding real SRJ control currently refuses its
-incomplete POWER output. Use FreeRouting or internal routing for that case; automatic hybrid
-recovery is not yet implemented, and no terminal or net is silently omitted.
+incomplete POWER output when SRJ is the sole authorized backend. Include `internal-layered-v1`
+explicitly to permit recovery. The following real control retains SRJ's refusal, routes the complete
+moved candidate internally, runs KiCad checks and verifies replay without omitting POWER:
+
+```sh
+COPPER_MCP_TEST_EXTERNAL_WORKFLOW=1 PYTHONPATH=src python -m pytest --no-cov -n 0 \
+  'tests/test_optimization_external_native.py::test_real_external_mcp_compares_placement_routes_every_target_and_replays[simpleroutejson-with-internal]'
+```
+
+Its tight-budget unchanged-placement control still fails and is disclosed; the package claims no
+placement improvement. `routing_attempts` records every attempted backend and cost alongside
+`external_runs`. A successful routing composition must still pass required native/judge gates.
 
 The corresponding real-import control uses the same consumer and leaves snapshot/target selection
 to production intake:
@@ -249,7 +261,7 @@ general zoned-board acceptance. The pinned development audio/supply board-stage 
 required checks but remained blocked by explicit project DRC suppressions; no suppression was
 waived and neither diagnostic claimed project ERC, physics or placement improvement.
 Production external conversion/disposal is connected, with real FreeRouting control evidence;
-SRJ incomplete-output recovery, broader ordinary-project intake/ERC/parity coverage, bounded repair
+broader hybrid quality, ordinary-project intake/ERC/parity coverage, bounded repair
 coordination, Orca advisory scheduling and quality measurement, before/after rendering, the
 held-out corpus, real host UI validation and hosted calibration are unfinished. No 90% routing,
 3x speedup, unqualified ordinary-board coverage or v0.13 release acceptance follows from these

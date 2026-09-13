@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -433,8 +434,19 @@ def _owned_freerouting_cli(root: Path, malformed: bool) -> tuple[Path, Path]:
     return cli, witness
 
 
-@pytest.mark.parametrize("malformed", [False, True], ids=["checked-package", "blocked-output"])
-def test_external_router_mcp_dispatch_compares_and_disposes_complete_candidate(tmp_path, malformed):
+@pytest.mark.parametrize(
+    "malformed,hybrid,unavailable",
+    [(False, False, False), (True, False, False), (True, True, False), (True, True, True)],
+    ids=[
+        "checked-package",
+        "blocked-output",
+        "explicit-internal-recovery",
+        "unavailable-external-recovery",
+    ],
+)
+def test_external_router_mcp_dispatch_compares_and_disposes_complete_candidate(
+    tmp_path, malformed, hybrid, unavailable
+):
     workspace = tmp_path / "project"
     workspace.mkdir()
     tools = tmp_path / "tools"
@@ -471,6 +483,8 @@ def test_external_router_mcp_dispatch_compares_and_disposes_complete_candidate(t
         optimization_docker_config_root=tools / "docker-config",
         optimization_simpleroutejson_image=_IMAGE,
     )
+    if unavailable:
+        settings = replace(settings, optimization_docker_executable=None)
     launch = {
         "schema_version": "optimization/v2",
         "board": board.name,
@@ -478,7 +492,9 @@ def test_external_router_mcp_dispatch_compares_and_disposes_complete_candidate(t
         "expect_snapshot_digest": snapshot.snapshot_digest,
         "constraints": constraints,
         "target_net_refs": sorted(net.id for net in snapshot.content.nets),
-        "allowed_backends": ["simpleroutejson-v1"],
+        "allowed_backends": ["internal-layered-v1", "simpleroutejson-v1"]
+        if hybrid
+        else ["simpleroutejson-v1"],
         "movable_footprint_refs": [movable],
         "placement_intent_path": "placement.json",
         "placement_grid_nm": 1_000_000,
@@ -511,22 +527,26 @@ def test_external_router_mcp_dispatch_compares_and_disposes_complete_candidate(t
         status = await call("get_optimization_job", {"job_id": job_id})
         record = status["record"]
         assert status["apply_authority"] == "none"
-        assert witness.read_text().splitlines() == ["run", "run"]
-        expected_status = "failed" if malformed else "awaiting_approval"
+        blocked = malformed and not hybrid
+        expected_status = "failed" if blocked else "awaiting_approval"
         assert record["status"] == expected_status, record.get("failure_code")
+        if unavailable:
+            assert not witness.exists()
+        else:
+            assert witness.read_text().splitlines() == ["run", "run"]
         exported = await call(
             "export_optimization_package",
             {
                 "job_id": job_id,
                 "expected_record_revision": record["revision"],
                 "expected_package_digest": status["blocked_evaluation_digest"]
-                if malformed
+                if blocked
                 else record["package_digest"],
                 "include_geometry": False,
             },
         )
         package = exported["package"]
-        if malformed:
+        if blocked:
             assert record["failure_code"] == "invalid_candidate"
             assert package["status"] == "blocked"
             assert package["evidence_scope"] == "terminal-metadata-only"
@@ -537,19 +557,60 @@ def test_external_router_mcp_dispatch_compares_and_disposes_complete_candidate(t
             assert exported["aggregate_status"] == "inconclusive"
             outcomes = package["comparison"]["outcomes"]
             assert [row["role"] for row in outcomes] == ["identity", "alternative"]
-            assert all(row["status"] == "reviewable" for row in outcomes)
+            assert [row["status"] for row in outcomes] == (
+                ["backend_failure", "reviewable"] if hybrid else ["reviewable", "reviewable"]
+            )
             for row in outcomes:
+                if hybrid and row["status"] != "reviewable":
+                    assert row["candidate_id"] is None and row["metrics"] is None
+                    assert [
+                        (attempt["backend"], attempt["outcome"])
+                        for attempt in row["routing_attempts"]
+                    ] == [
+                        (
+                            "simpleroutejson-v1",
+                            "backend_failure" if unavailable else "invalid_candidate",
+                        ),
+                        ("internal-layered-v1", "backend_failure"),
+                    ]
+                    continue
                 assert row["metrics"]["fully_connected_target_nets"] == 2
                 assert row["metrics"]["via_count"] > 0
                 assert row["metrics"]["actual_route_probes"] > 0
-                assert row["external_runs"][0]["backend"] == "simpleroutejson-v1"
-                assert row["external_runs"][0]["normalized_route_digest"] is not None
-                quantization = row["external_runs"][0]["coordinate_quantization"]
-                assert quantization["method"] == "nearest-nm-half-away-from-zero/v1"
-                assert quantization["coordinate_count"] > 0
-            assert outcomes[0]["metrics"]["displacement_nm"] == 0
+                if unavailable:
+                    assert not row["external_runs"]
+                else:
+                    assert row["external_runs"][0]["backend"] == "simpleroutejson-v1"
+                if hybrid:
+                    if not unavailable:
+                        assert row["external_runs"][0]["normalized_route_digest"] is None
+                    assert [
+                        (attempt["backend"], attempt["outcome"])
+                        for attempt in row["routing_attempts"]
+                    ] == [
+                        (
+                            "simpleroutejson-v1",
+                            "backend_failure" if unavailable else "invalid_candidate",
+                        ),
+                        ("internal-layered-v1", "composed"),
+                    ]
+                    assert row["charged"]["route_attempts"] >= (6 if unavailable else 7)
+                else:
+                    assert row["external_runs"][0]["normalized_route_digest"] is not None
+                    quantization = row["external_runs"][0]["coordinate_quantization"]
+                    assert quantization["method"] == "nearest-nm-half-away-from-zero/v1"
+                    assert quantization["coordinate_count"] > 0
+            if not hybrid:
+                assert outcomes[0]["metrics"]["displacement_nm"] == 0
+            else:
+                assert package["comparison"]["improvement"] == "not_claimed"
+                assert package["comparison"]["clearance_ranking"] == "omitted_unavailable"
             assert outcomes[1]["metrics"]["displacement_nm"] > 0
             assert service._jobs[job_id].source is not None
+            if hybrid:
+                assert {item["backend"] for item in package["backend_provenance"]} == {
+                    "internal-layered-v1"
+                }
         assert not gateway._artifacts
 
     try:
