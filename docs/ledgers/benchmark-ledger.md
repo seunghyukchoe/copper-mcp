@@ -2095,3 +2095,14 @@ worker deadline are unchanged. This synthetic resource calibration grants no rou
 physics, cross-machine, hosted-CI or release claim. The mutation spec is unchanged; its previous
 execution is not restamped as current execution. Seven historical/current artifact controls passed
 within the 56-test production-boundary/calibration run. Full integration remains a separate gate.
+
+2026-09-14 source-availability correction: after PR303 was squash-merged, main CI could not read
+the PR-only `0a57d61` commit used to authenticate the September 9 calibration. The original
+measurement remains unchanged. Verification now obtains the five bound files from durable main
+commit `33bad62ea794ab54079a518d2dd7a35671a48b2f`, reverses the two exact intervening source changes
+(the output filename date and coincident-endpoint guard), then requires every original SHA256
+from the original self-digested report. The three other bound files are byte-identical. This
+reconstructs historical source bytes; it does not attribute old timings to new code or rerun a
+measurement. A main-only, no-tags clone demonstrably lacks `0a57d61`; all seven historical/current
+calibration controls pass against that object database. No branch ref, mutable source, relaxed
+hash check, resource-limit change or extra network lookup is introduced into test execution.
