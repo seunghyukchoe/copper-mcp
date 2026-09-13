@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Historical fill-budget source verification now survives squash merges without depending on
+  temporary PR commits; the original reports, source hashes and resource limits are unchanged.
+
 - Isolated optimization cancellation polling now reads committed owner-bound status without
   acquiring SQLite's writer lock. This prevents contention with a publishing child from failing
   otherwise valid jobs. Expiry/corruption checks, write-side fencing and delivery deadlines remain.
