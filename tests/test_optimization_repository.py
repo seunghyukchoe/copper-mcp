@@ -44,6 +44,39 @@ OTHER_OWNER = "sha256:" + "7" * 64
 PRIVATE_CANARY = "PRIVATE-REFERENCE-CANARY"
 
 
+def test_cancellation_observation_retains_owner_expiry_and_committed_status(tmp_path):
+    now = [100]
+    with OptimizationJobRepository(
+        tmp_path / "observe.sqlite3", clock=lambda: now[0], ttl_ms=100
+    ) as repository:
+        request = optimization_request()
+        record = repository.create(request, OWNER)
+        changes = repository._connection.total_changes
+        assert repository.cancellation_requested(record.job_id, OWNER) is False
+        assert repository._connection.total_changes == changes
+        assert not repository._connection.in_transaction
+        with pytest.raises(OptimizationJobUnavailableError):
+            repository.cancellation_requested(record.job_id, OTHER_OWNER)
+        repository.cancel(record.job_id, request, OWNER, expected_revision=record.revision)
+        changes = repository._connection.total_changes
+        assert repository.cancellation_requested(record.job_id, OWNER) is True
+        assert repository._connection.total_changes == changes
+        now[0] = 201
+        with pytest.raises(OptimizationJobUnavailableError):
+            repository.cancellation_requested(record.job_id, OWNER)
+        assert repository._connection.total_changes == changes
+
+
+def test_cancellation_observation_refuses_inconsistent_stored_status(tmp_path):
+    with OptimizationJobRepository(tmp_path / "observe.sqlite3") as repository:
+        record = repository.create(optimization_request(), OWNER)
+        repository._connection.execute(
+            "UPDATE optimization_jobs SET status = 'cancelled' WHERE job_id = ?", (record.job_id,)
+        )
+        with pytest.raises(OptimizationError):
+            repository.cancellation_requested(record.job_id, OWNER)
+
+
 def digest(character: str) -> str:
     return "sha256:" + character * 64
 

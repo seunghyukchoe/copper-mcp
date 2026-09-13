@@ -5,6 +5,7 @@
 - Related: [ADR-0132](0132-supervised-optimization-keeps-evidence-and-consent-separate.md),
   [ADR-0131](0131-bundle-drc-evidence-is-composed-not-cherry-picked.md),
   [v0.13 plan](../plans/v0.13-supervised-optimization.md)
+- Layered multi-pin extension: [ADR-0158](0158-layered-trees-bind-complete-pad-connectivity.md)
 
 ## Decision
 

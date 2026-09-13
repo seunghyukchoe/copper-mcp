@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from kicad_drc_mock import make_fake_kicad_cli
 from pydantic import ValidationError
 
 import copper_mcp.kicad_cli as kicad_cli
@@ -131,8 +132,13 @@ def _report(source: str) -> dict[str, object]:
 
 def _install_fake_kicad(
     monkeypatch: pytest.MonkeyPatch,
+    workspace: Path,
     capture: dict[str, Any] | None = None,
 ) -> None:
+    executable_root = workspace.parent / f"{workspace.name}-route-preview-kicad-bin"
+    executable_root.mkdir(exist_ok=True)
+    executable = make_fake_kicad_cli(executable_root)
+
     def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         assert kwargs["shell"] is False
         assert "--save-board" not in command
@@ -145,9 +151,7 @@ def _install_fake_kicad(
             capture["temporary_mode"] = stat.S_IMODE(report_path.parent.stat().st_mode)
         return subprocess.CompletedProcess(command, 0)
 
-    monkeypatch.setattr(
-        kicad_cli, "discover_kicad_cli", lambda settings: Path("/trusted/kicad-cli")
-    )
+    monkeypatch.setattr(kicad_cli, "discover_kicad_cli", lambda settings: executable)
     monkeypatch.setattr(subprocess, "run", run)
 
 
@@ -1046,7 +1050,7 @@ def test_preview_binds_optional_authoritative_drc_evidence(
 ) -> None:
     board, settings = _workspace(tmp_path)
     capture: dict[str, Any] = {}
-    _install_fake_kicad(monkeypatch, capture)
+    _install_fake_kicad(monkeypatch, tmp_path, capture)
     before = _entries(tmp_path)
 
     preview = preview_route(_request(include_drc=True), settings)

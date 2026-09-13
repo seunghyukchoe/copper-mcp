@@ -10,7 +10,11 @@ against the source snapshot so an unsupported construct cannot be silently carri
 from __future__ import annotations
 
 import hashlib
+import math
+import time
+from collections.abc import Callable
 from dataclasses import replace
+from typing import NoReturn
 
 from copper_mcp.adapters.cst import CstError, Splice, apply_splices, line_indent, span
 from copper_mcp.adapters.kicad_board_ir import KiCadConstraintProfile, parse_kicad_bytes
@@ -40,13 +44,54 @@ _ALLOWED_FOOTPRINT_HEADS = frozenset({"at", "fp_rect", "layer", "locked", "pad",
 _ALLOWED_RECT_HEADS = frozenset(
     {"end", "fill", "layer", "locked", "start", "stroke", "tstamp", "uuid"}
 )
+_LOCAL_GRAPHICS = {
+    "fp_line": frozenset({"start", "end", "stroke", "width", "layer", "uuid", "tstamp", "locked"}),
+    "fp_rect": _ALLOWED_RECT_HEADS | {"width"},
+    "fp_circle": frozenset(
+        {"center", "end", "stroke", "width", "fill", "layer", "uuid", "tstamp", "locked"}
+    ),
+    "fp_arc": frozenset(
+        {"start", "mid", "end", "stroke", "width", "layer", "uuid", "tstamp", "locked"}
+    ),
+    "fp_poly": frozenset({"pts", "stroke", "width", "fill", "layer", "uuid", "tstamp", "locked"}),
+}
+_LOCAL_METADATA = frozenset(
+    {
+        "at",
+        "layer",
+        "locked",
+        "pad",
+        "uuid",
+        "tstamp",
+        "attr",
+        "descr",
+        "tags",
+        "path",
+        "sheetfile",
+        "sheetname",
+        "placed",
+        "embedded_fonts",
+        "group",
+        "model",
+        "net_tie_pad_groups",
+        "duplicate_pad_numbers_are_jumpers",
+        "zone_connect",
+        "solder_mask_margin",
+        "solder_paste_margin",
+        "solder_paste_margin_ratio",
+        "solder_paste_ratio",
+    }
+)
+_TEXT_CHILDREN = frozenset(
+    {"at", "layer", "effects", "uuid", "tstamp", "locked", "unlocked", "hide"}
+)
 
 
 class KiCadPlacementPatchError(ValueError):
     """Raised when a placement candidate cannot be rendered safely."""
 
 
-def _fail(message: str) -> None:
+def _fail(message: str) -> NoReturn:
     raise KiCadPlacementPatchError(message)
 
 
@@ -164,6 +209,10 @@ def _expected_content(
                 courtyards=tuple(
                     _move_ring(ring, footprint, x, y, rotation) for ring in footprint.courtyards
                 ),
+                courtyard_circles=tuple(
+                    replace(circle, center=_move_local(circle.center, footprint, x, y, rotation))
+                    for circle in footprint.courtyard_circles
+                ),
                 # A far-side courtyard rectangle moves with its footprint exactly as a near-side
                 # one does. `_validate_footprint_expression` refuses every board that carries one
                 # before this is reached, so no corpus board exercises it today; it is written
@@ -173,6 +222,10 @@ def _expected_content(
                 far_side_courtyards=tuple(
                     _move_ring(ring, footprint, x, y, rotation)
                     for ring in footprint.far_side_courtyards
+                ),
+                far_side_courtyard_circles=tuple(
+                    replace(circle, center=_move_local(circle.center, footprint, x, y, rotation))
+                    for circle in footprint.far_side_courtyard_circles
                 ),
             )
         )
@@ -240,13 +293,98 @@ def _validate_footprint_expression(expression: SExpr, locator: str) -> None:
         _pose(pad, f"{locator}.pad[{index}]")
 
 
-def render_kicad_placement_candidate_board(
+def _known_children(expression: SExpr, allowed: frozenset[str]) -> None:
+    if any(isinstance(item, SExpr) and item.head not in allowed for item in expression.items[1:]):
+        _fail("moved optimization footprint contains unsupported pose-carrying syntax")
+
+
+def _validate_optimization_footprint_expression(
+    expression: SExpr, copper_layers: set[str], checkpoint: Callable[[], None]
+) -> None:
+    """Only moved bodies need pose interpretation; unmodified bodies remain opaque bytes.
+
+    KiCad parsePCB_TEXT_effects/format(PCB_TEXT) store local positions but absolute angles.
+    PCB_TEXTBOX uses a relative angle instead and is intentionally outside this profile.
+    Saved back-side local coordinates are already flipped: no additional mirror is applied.
+    """
+    _known_children(
+        expression, _LOCAL_METADATA | frozenset(_LOCAL_GRAPHICS) | {"property", "fp_text"}
+    )
+    layer = child(expression, "layer")
+    if layer is None or atoms(layer) not in {("F.Cu",), ("B.Cu",)}:
+        _fail("optimization footprint has an unsupported side")
+    _pose(expression, "optimization footprint")
+    for item in expression.items[1:]:
+        checkpoint()
+        if not isinstance(item, SExpr):
+            continue
+        if item.head in _LOCAL_GRAPHICS or item.head in {"property", "fp_text"}:
+            graphic_layer = child(item, "layer")
+            if graphic_layer is not None:
+                names = atoms(graphic_layer)
+                if len(names) != 1 or names[0] in copper_layers or names[0] == "Edge.Cuts":
+                    _fail("moved footprint routing-layer graphics are unsupported")
+        if item.head in _LOCAL_GRAPHICS:
+            _known_children(item, _LOCAL_GRAPHICS[item.head])
+            if child(item, "layer") is None:
+                _fail("moved footprint graphic has no explicit layer")
+            for field in ("start", "end", "mid", "center"):
+                value = child(item, field)
+                if value is not None:
+                    tokens = atoms(value)
+                    if len(tokens) != 2:
+                        _fail("moved footprint graphic coordinates are malformed")
+                    PointNM(mm_to_nm(tokens[0]), mm_to_nm(tokens[1]))
+            stroke = child(item, "stroke")
+            if stroke is not None:
+                _known_children(stroke, frozenset({"width", "type"}))
+            pts = child(item, "pts")
+            if pts is not None:
+                _known_children(pts, frozenset({"xy"}))
+        elif item.head in {"property", "fp_text"}:
+            if len(item.items) < 3 or not all(isinstance(value, str) for value in item.items[1:3]):
+                _fail("moved footprint text header is malformed")
+            if item.head == "fp_text" and item.items[1] not in {"reference", "value", "user"}:
+                _fail("moved footprint text kind is unsupported")
+            _known_children(item, _TEXT_CHILDREN)
+            at = child(item, "at")
+            if at is not None:
+                tokens = atoms(at)
+                values = tokens[:-1] if tokens and tokens[-1] == "unlocked" else tokens
+                if len(values) not in {2, 3}:
+                    _fail("moved footprint text pose is malformed")
+                PointNM(mm_to_nm(values[0]), mm_to_nm(values[1]))
+                if len(values) == 3:
+                    normalize_rotation_udeg(values[2])
+            effects = child(item, "effects")
+            if effects is not None:
+                _known_children(effects, frozenset({"font", "justify", "hide"}))
+                font = child(effects, "font")
+                if font is not None:
+                    _known_children(
+                        font,
+                        frozenset({"face", "size", "thickness", "bold", "italic", "line_spacing"}),
+                    )
+        elif item.head == "model":
+            # Model transforms are footprint-local; the parent pose transforms their frame.
+            _known_children(item, frozenset({"offset", "at", "scale", "rotate", "hide", "opacity"}))
+            for field in ("offset", "at", "scale", "rotate"):
+                transform = child(item, field)
+                if transform is not None:
+                    _known_children(transform, frozenset({"xyz"}))
+        elif item.head == "pad":
+            _pose(item, "optimization pad")
+
+
+def _render_placement_candidate_board(
     source: bytes,
     snapshot: BoardIRSnapshot,
     candidate: PlacementCandidate,
     profile: KiCadConstraintProfile,
     *,
     limits: ParseLimits | None = None,
+    movable_footprint_refs: tuple[str, ...] | None = None,
+    checkpoint: Callable[[], None] = lambda: None,
 ) -> bytes:
     """Render one revision-bound placement candidate into disposable KiCad bytes.
 
@@ -256,6 +394,8 @@ def render_kicad_placement_candidate_board(
     courtyard board-frame geometry changed.
     """
 
+    checkpoint()
+    optimization_v2 = movable_footprint_refs is not None
     limits = limits or ParseLimits()
     if not isinstance(source, bytes):
         raise KiCadPlacementPatchError("KiCad source must be immutable bytes")
@@ -271,6 +411,7 @@ def render_kicad_placement_candidate_board(
         _fail("KiCad source exceeds the input-byte budget")
 
     conversion = parse_kicad_bytes(source, profile, limits)
+    checkpoint()
     if conversion.snapshot is None or conversion.diagnostics:
         _fail("KiCad source cannot be represented by the supported Board IR")
     if conversion.snapshot != snapshot:
@@ -286,6 +427,8 @@ def render_kicad_placement_candidate_board(
             "placement candidate identity verification failed"
         ) from error
     _require_native_geometry_identities(snapshot)
+    if optimization_v2 and not candidate.evidence.legality.legal:
+        _fail("optimization placement candidate is not legal")
     if len(candidate.placements) > limits.max_objects:
         _fail("placement candidate exceeds the object budget")
 
@@ -299,7 +442,9 @@ def render_kicad_placement_candidate_board(
         _fail("KiCad source footprint count disagrees with Board IR")
     expressions: dict[str, SExpr] = {}
     for index, expression in enumerate(source_footprints):
-        _validate_footprint_expression(expression, f"kicad_pcb.footprint[{index}]")
+        checkpoint()
+        if not optimization_v2:
+            _validate_footprint_expression(expression, f"kicad_pcb.footprint[{index}]")
         identity = _native_identity(
             expression, kind="footprint", locator=f"kicad_pcb.footprint[{index}]"
         )
@@ -310,6 +455,17 @@ def render_kicad_placement_candidate_board(
     snapshot_footprints = {item.id: item for item in snapshot.content.footprints}
     if set(expressions) != set(snapshot_footprints):
         _fail("source and Board IR footprint identities disagree")
+    if optimization_v2:
+        if (
+            type(movable_footprint_refs) is not tuple
+            or len(movable_footprint_refs) > limits.max_objects
+            or any(type(ref) is not str or len(ref) > 170 for ref in movable_footprint_refs)
+        ):
+            _fail("optimization placement scope is malformed")
+        if len(set(movable_footprint_refs)) != len(movable_footprint_refs) or not set(
+            movable_footprint_refs
+        ) <= set(snapshot_footprints):
+            _fail("optimization placement scope is malformed")
     candidate_by_ref = {item.ref_id: item for item in candidate.placements}
     if len(candidate_by_ref) != len(candidate.placements):
         _fail("placement candidate contains duplicate footprint identities")
@@ -327,12 +483,15 @@ def render_kicad_placement_candidate_board(
     changed: dict[str, tuple[int, int, int]] = {}
     splices: list[Splice] = []
     for ref_id in sorted(candidate_by_ref):
+        checkpoint()
         footprint = snapshot_footprints[ref_id]
         proposed = candidate_by_ref[ref_id]
         moved_value: object = proposed.moved
         if type(moved_value) is not bool:
             _fail("placement candidate moved flag is malformed")
-        if proposed.side != FootprintSide.FRONT.value:
+        if optimization_v2 and proposed.side != footprint.side.value:
+            _fail("optimization placement must preserve the observed side")
+        if not optimization_v2 and proposed.side != FootprintSide.FRONT.value:
             _fail("back-side placement changes are unsupported")
         moved: object = proposed.moved
         if type(moved) is not bool:
@@ -359,8 +518,14 @@ def render_kicad_placement_candidate_board(
             _fail("locked footprint movement is unsupported")
         if not differs:
             continue
+        if optimization_v2 and ref_id not in (movable_footprint_refs or ()):
+            _fail("optimization placement moved outside its declared scope")
 
         expression = expressions[ref_id]
+        if optimization_v2:
+            _validate_optimization_footprint_expression(
+                expression, {layer.name for layer in snapshot.content.copper_layers}, checkpoint
+            )
         old_x, old_y, old_rotation = _pose(expression, f"{ref_id}.at")
         if (old_x, old_y, old_rotation) != (
             footprint.origin.x,
@@ -376,26 +541,67 @@ def render_kicad_placement_candidate_board(
         at = child(expression, "at")
         assert at is not None
         at_start, at_end = span(at, root_text)
-        indentation = line_indent(root_text, at_start)
+        indentation = "" if optimization_v2 else line_indent(root_text, at_start)
         splices.append(Splice(at_start, at_end, indentation + _render_pose(*changed[ref_id])))
 
         delta = (proposed.orientation_udeg - old_rotation) % _FULL_ROTATION_UDEG
         for pad in children(expression, "pad"):
+            checkpoint()
+            if optimization_v2 and delta == 0:
+                continue
             pad_at = child(pad, "at")
             assert pad_at is not None
             values = atoms(pad_at)
             pad_rotation = normalize_rotation_udeg(values[2] if len(values) == 3 else "0")
             next_rotation = (pad_rotation + delta) % _FULL_ROTATION_UDEG
             start, end = span(pad_at, root_text)
-            indentation = line_indent(root_text, start)
+            indentation = "" if optimization_v2 else line_indent(root_text, start)
             x = mm_to_nm(values[0])
             y = mm_to_nm(values[1])
             splices.append(Splice(start, end, indentation + _render_pad_pose(x, y, next_rotation)))
+        if optimization_v2 and delta:
+            for text in (*children(expression, "property"), *children(expression, "fp_text")):
+                checkpoint()
+                if text.head == "property" and text.items[1] in {
+                    "ki_fp_filters",
+                    "Footprint",
+                }:
+                    continue
+                text_at = child(text, "at")
+                if text_at is None:
+                    _, end = span(text, root_text)
+                    splices.append(Splice(end - 1, end - 1, " " + _render_pad_pose(0, 0, delta)))
+                else:
+                    values = atoms(text_at)
+                    angle_values = values[:-1] if values[-1] == "unlocked" else values
+                    angle = normalize_rotation_udeg(
+                        angle_values[2] if len(angle_values) == 3 else "0"
+                    )
+                    suffix = " unlocked" if values[-1] == "unlocked" else ""
+                    start, end = span(text_at, root_text)
+                    next_angle = _rotation_token((angle + delta) % _FULL_ROTATION_UDEG)
+                    splices.append(
+                        Splice(
+                            start,
+                            end,
+                            f"(at {values[0]} {values[1]} {next_angle}{suffix})",
+                        )
+                    )
 
     if len(splices) > limits.max_nodes:
         _fail("placement patch exceeds the edit budget")
     if not splices:
+        checkpoint()
         return source
+    if optimization_v2:
+        projected = len(source)
+        for edit in splices:
+            checkpoint()
+            projected += len(edit.replacement.encode("utf-8")) - len(
+                root_text[edit.start : edit.end].encode("utf-8")
+            )
+        if projected > limits.max_input_bytes:
+            _fail("rendered placement board exceeds the input-byte budget")
     try:
         rendered = apply_splices(root_text, splices).encode("utf-8", errors="strict")
     except (CstError, UnicodeError) as error:
@@ -404,13 +610,77 @@ def render_kicad_placement_candidate_board(
         _fail("rendered placement board exceeds the input-byte budget")
 
     patched = parse_kicad_bytes(rendered, profile, limits)
+    checkpoint()
     if patched.snapshot is None or patched.diagnostics:
         _fail("rendered placement board failed Board IR round-trip parsing")
     assert patched.snapshot is not None
     expected = _expected_content(snapshot, changed, patched.snapshot.content.source.revision)
     if patched.snapshot.content != expected:
         _fail("rendered placement board changed content outside its pose patch")
+    checkpoint()
     return rendered
+
+
+def render_kicad_placement_candidate_board(
+    source: bytes,
+    snapshot: BoardIRSnapshot,
+    candidate: PlacementCandidate,
+    profile: KiCadConstraintProfile,
+    *,
+    limits: ParseLimits | None = None,
+) -> bytes:
+    """Legacy front-side placement/apply subset; unchanged accepted syntax and defaults."""
+    return _render_placement_candidate_board(source, snapshot, candidate, profile, limits=limits)
+
+
+def _render_optimization_placement_candidate_board(
+    source: bytes,
+    snapshot: BoardIRSnapshot,
+    candidate: PlacementCandidate,
+    profile: KiCadConstraintProfile,
+    *,
+    movable_footprint_refs: tuple[str, ...],
+    limits: ParseLimits | None = None,
+    deadline: float | None = None,
+    cancelled: Callable[[], bool] | None = None,
+) -> bytes:
+    """Private, side-preserving v2 rendering; never used by the public apply path."""
+    if type(movable_footprint_refs) is not tuple:
+        _fail("optimization placement scope is malformed")
+    if deadline is not None:
+        finite = False
+        if type(deadline) in (int, float):
+            try:
+                finite = math.isfinite(deadline)
+            except OverflowError:
+                pass
+        if not finite:
+            _fail("optimization placement deadline is malformed")
+
+    def checkpoint() -> None:
+        if deadline is not None and time.monotonic() >= deadline:
+            _fail("optimization placement deadline expired")
+        if cancelled is not None:
+            stopped = cancelled()
+            if type(stopped) is not bool or stopped:
+                _fail("optimization placement stopped")
+
+    failed = False
+    try:
+        return _render_placement_candidate_board(
+            source,
+            snapshot,
+            candidate,
+            profile,
+            limits=limits,
+            movable_footprint_refs=movable_footprint_refs,
+            checkpoint=checkpoint,
+        )
+    except (ValueError, TypeError, OverflowError, RuntimeError):
+        failed = True
+    if failed:
+        _fail("optimization placement rendering was refused")
+    raise AssertionError("unreachable")
 
 
 __all__ = ["KiCadPlacementPatchError", "render_kicad_placement_candidate_board"]

@@ -62,17 +62,23 @@ class EngineKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class OperatorRouterImages:
-    freerouting: str
-    simple_route_json: str
+    freerouting: str | None
+    simple_route_json: str | None
 
     def __post_init__(self) -> None:
-        _image_reference(self.freerouting)
-        _image_reference(self.simple_route_json)
+        if self.freerouting is None and self.simple_route_json is None:
+            raise ContainerRunnerError("no router image is configured")
+        for value in (self.freerouting, self.simple_route_json):
+            if value is not None:
+                _image_reference(value)
 
     def for_engine(self, engine: EngineKind) -> str:
         if type(engine) is not EngineKind:
             raise ContainerRunnerError("engine kind is invalid")
-        return self.freerouting if engine is EngineKind.FREEROUTING else self.simple_route_json
+        image = self.freerouting if engine is EngineKind.FREEROUTING else self.simple_route_json
+        if image is None:
+            raise ContainerRunnerError("selected router image is not configured")
+        return image
 
     def identity_kind(self, engine: EngineKind) -> str:
         return (
@@ -92,7 +98,12 @@ class ContainerRunRequest:
 
 @dataclass(frozen=True, slots=True)
 class ContainerRunRecord:
-    """Retention-safe metadata only; image references, argv, payloads, and paths are absent."""
+    """Retention-safe metadata; output_bytes counts the bounded stdout prefix received.
+
+    Failed payloads are discarded and have no result digest, but their retained byte count
+    still consumes the caller's allocation. This is not a count of bytes the router produced
+    after its stream was closed. Image references, argv, payloads and paths are absent.
+    """
 
     status: ContainerRunStatus
     engine: EngineKind
@@ -208,6 +219,7 @@ class ContainerRouterRunner(ContainerProcessOwner):
                 returned,
                 process.returncode,
                 len(request.input_bytes),
+                len(output),
             )
 
     def _docker_command(self, name: str, image: str) -> tuple[str, ...]:
@@ -242,6 +254,7 @@ class ContainerRouterRunner(ContainerProcessOwner):
         output: bytes | None = None,
         exit_code: int | None = None,
         input_bytes: int = 0,
+        retained_output_bytes: int | None = None,
     ) -> ContainerRunResult:
         record = ContainerRunRecord(
             status,
@@ -252,7 +265,7 @@ class ContainerRouterRunner(ContainerProcessOwner):
             input_digest,
             _sha256(output) if output is not None else None,
             input_bytes if input_digest else 0,
-            len(output) if output else 0,
+            len(output or b"") if retained_output_bytes is None else retained_output_bytes,
             exit_code,
         )
         return ContainerRunResult(record, output)

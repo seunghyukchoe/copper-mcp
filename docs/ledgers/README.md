@@ -23,13 +23,23 @@ contain, so it cannot go stale unnoticed.
 
 | Ledger | Prefix | Highest allocated | Next free |
 |---|---|---|---|
-| [Decision ledger](decision-ledger.md) | `D-` | `D-279` | `D-280` |
+| [Decision ledger](decision-ledger.md) | `D-` | `D-285` | `D-286` |
 | [Risk register](risk-register.md) | `R-` | `R-212` | `R-213` |
-| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-212` | `SEC-213` |
-| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-143` | `B-144` |
+| [Security review ledger](security-ledger.md) | `SEC-` | `SEC-217` | `SEC-218` |
+| [Benchmark ledger](benchmark-ledger.md) | `B-` | `B-144` | `B-145` |
 | [Release ledger](release-ledger.md) | none — keyed by version | `0.6.0` | n/a |
 
 The rules:
+
+The 2026-09-08 composed-clearance lane retains D-284, SEC-217 and ADR-0159, stepping over the
+topology, project, host-consent and layered-tree identities D-280 through D-283, SEC-213 through
+SEC-216 and ADR-0155 through ADR-0158. ADR-0160 is the integrated shared DRC correction and
+amends existing D-005/SEC-003. Pending identities are not free for reuse.
+
+The 2026-09-08 layered-tree lane steps over D-279 through D-282, SEC-212 through SEC-215 and
+ADR-0154 through ADR-0157, held by the operating-point and host-consent stages. It takes D-283,
+SEC-216 and ADR-0158. These pending identities are not available for reuse; their absence from
+this isolated branch is not permission to recycle them.
 
 The 2026-08-24 parallel closure wave pre-assigned `D-219`/`R-170`/`SEC-158`/`ADR-0119`
 to the authoritative-signoff lane and `D-220`/`R-171` to its sibling lane. This record therefore

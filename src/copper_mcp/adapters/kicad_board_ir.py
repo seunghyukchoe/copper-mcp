@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import uuid
 from collections import Counter
 from dataclasses import dataclass, replace
 from math import isqrt
@@ -861,8 +862,11 @@ class KiCadConstraintProfile:
     net_class_by_name: tuple[tuple[str, str], ...] = ()
     differential_pairs: tuple[DifferentialPairRule, ...] = ()
     length_rules: tuple[LengthRule, ...] = ()
+    native_import_metadata: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.native_import_metadata) is not bool:
+            raise ValueError("native import metadata profile is malformed")
         if not isinstance(self.net_classes, tuple) or not all(
             isinstance(item, NetClass) for item in self.net_classes
         ):
@@ -1276,6 +1280,7 @@ class _Converter:
 
         groups = 0
         board_properties = 0
+        dimension_ids: list[str] = []
         for index, item in enumerate(self.root.items[1:]):
             # The index is computed here, not read from the board, so it names the position of the
             # offending child without echoing anything the board author controls.  Before this,
@@ -1296,6 +1301,9 @@ class _Converter:
             if head == _ROOT_PROPERTY_HEAD:
                 self._check_root_property(item, root_locator)
                 board_properties += 1
+                continue
+            if head == "dimension" and self.profile.native_import_metadata:
+                dimension_ids.append(self._check_import_dimension(item, root_locator))
                 continue
             if head.startswith("gr_"):
                 layer = self._graphic_layer(item, "kicad_pcb.graphic")
@@ -1328,6 +1336,29 @@ class _Converter:
             )
         self.group_count = groups
         self.root_board_property_count = board_properties
+        if dimension_ids:
+            expected = set(dimension_ids)
+            uses: Counter[str] = Counter()
+            pending = [self.root]
+            while pending:
+                node = pending.pop()
+                if node.head in {"uuid", "tstamp"}:
+                    values = atoms(node)
+                    if len(values) != 1:
+                        self.fail("identity.ambiguous", "native identity is malformed", "kicad_pcb")
+                    try:
+                        value = str(uuid.UUID(values[0]))
+                    except ValueError:
+                        value = ""
+                    if value in expected:
+                        uses[value] += 1
+                pending.extend(part for part in node.items if isinstance(part, SExpr))
+            if len(expected) != len(dimension_ids) or any(uses[value] != 2 for value in expected):
+                self.fail(
+                    "identity.ambiguous",
+                    "dimension identity is reused by another object",
+                    "kicad_pcb",
+                )
 
         general = self._one(self.root, "general", "kicad_pcb", required=False)
         if general is not None:
@@ -1408,6 +1439,19 @@ class _Converter:
                         f"{locator}.zone",
                         object_kind="zone",
                     )
+                if (
+                    self.profile.native_import_metadata
+                    and head == "property"
+                    and len(item.items) > 1
+                    and item.items[1] in {"ki_fp_filters", "Footprint"}
+                    and len(item.items) == 3
+                    and isinstance(item.items[1], str)
+                    and isinstance(item.items[2], str)
+                    and is_quoted_atom(item.items[2])
+                ):
+                    # Native 10.0.5 parseFOOTPRINT treats these two names as filter/legacy
+                    # metadata, not visible fields; no layer is required. Keep source bytes.
+                    continue
                 # `point` is layer-bearing like the `fp_*` primitives -- it carries `at`, `size`
                 # and `layer` -- so it goes through the same layer-aware path rather than the
                 # metadata allowlist. That keeps the copper question decided by the layer, not by
@@ -1459,6 +1503,197 @@ class _Converter:
                         f"{locator}.unsupported",
                         object_kind="footprint",
                     )
+
+    def _check_import_dimension(self, dimension: SExpr, locator: str) -> str:
+        """Preserve native linear/leader drawing dimensions; never routing geometry."""
+        kind = self._values(dimension, "type", locator)[0]
+        if kind not in {"aligned", "orthogonal", "leader"}:
+            self.fail(
+                "unsupported.construct",
+                "dimension type is outside the native import profile",
+                locator,
+            )
+        self._reject_unknown_children(
+            dimension,
+            frozenset(
+                {
+                    "type",
+                    "layer",
+                    "uuid",
+                    "tstamp",
+                    "locked",
+                    "pts",
+                    "format",
+                    "style",
+                    "gr_text",
+                }
+                | ({"height"} if kind != "leader" else set())
+                | ({"orientation"} if kind == "orthogonal" else set())
+            ),
+            locator,
+        )
+        self._validate_direct_atoms(
+            dimension, positional_atoms=0, allowed=frozenset({"locked"}), locator=locator
+        )
+        layer = self._graphic_layer(dimension, locator)
+        if layer not in {
+            "Dwgs.User",
+            "Cmts.User",
+            "Eco1.User",
+            "Eco2.User",
+            "F.Fab",
+            "B.Fab",
+            *(f"User.{i}" for i in range(1, 10)),
+        }:
+            self.fail("unsupported.construct", "dimension must remain on a drawing layer", locator)
+        for head in ("uuid", "tstamp"):
+            self._values(dimension, head, locator, required=False)
+        if kind != "leader":
+            height = self._values(dimension, "height", locator)
+            self._mm(height[0], locator)
+        if kind == "orthogonal" and self._values(dimension, "orientation", locator) not in {
+            ("0",),
+            ("1",),
+        }:
+            self.fail("unsupported.construct", "dimension orientation is unsupported", locator)
+        pts = self._one(dimension, "pts", locator)
+        assert pts is not None
+        self._reject_unknown_children(pts, frozenset({"xy"}), locator)
+        self._validate_direct_atoms(pts, positional_atoms=0, allowed=frozenset(), locator=locator)
+        points = children(pts, "xy")
+        if len(points) != 2:
+            self.fail("unsupported.construct", "dimension endpoints are malformed", locator)
+        for point in points:
+            values = atoms(point)
+            if len(values) != 2:
+                self.fail("unsupported.construct", "dimension endpoints are malformed", locator)
+            for token in values:
+                self._mm(token, locator)
+        formatting = self._one(dimension, "format", locator)
+        style = self._one(dimension, "style", locator)
+        assert formatting is not None and style is not None
+        self._reject_unknown_children(
+            formatting,
+            frozenset(
+                {
+                    "prefix",
+                    "suffix",
+                    "units",
+                    "units_format",
+                    "precision",
+                    "override_value",
+                    "suppress_zeroes",
+                }
+            ),
+            locator,
+        )
+        self._reject_unknown_children(
+            style,
+            frozenset(
+                {
+                    "thickness",
+                    "arrow_length",
+                    "text_position_mode",
+                    "extension_offset",
+                    "keep_text_aligned",
+                }
+                | ({"text_frame"} if kind == "leader" else {"arrow_direction", "extension_height"})
+            ),
+            locator,
+        )
+        if kind == "leader":
+            self._values(style, "text_frame", locator)
+        for node in (formatting, style):
+            self._validate_direct_atoms(
+                node, positional_atoms=0, allowed=frozenset(), locator=locator
+            )
+            for field in node.items[1:]:
+                if not isinstance(field, SExpr) or field.head is None:
+                    self.fail("unsupported.construct", "dimension fields are malformed", locator)
+                values = self._values(node, field.head, locator)
+                token = values[0]
+                if field.head in {"prefix", "suffix", "override_value"}:
+                    if not is_quoted_atom(token):
+                        self.fail("unsupported.construct", "dimension text is malformed", locator)
+                elif field.head in {"keep_text_aligned", "suppress_zeroes"}:
+                    if token not in {"yes", "no"}:
+                        self.fail("unsupported.construct", "dimension flag is malformed", locator)
+                elif field.head == "arrow_direction":
+                    if token not in {"inward", "outward"}:
+                        self.fail(
+                            "unsupported.construct",
+                            "dimension arrow direction is unsupported",
+                            locator,
+                        )
+                elif field.head == "text_frame":
+                    if self._nonnegative_integer(token, locator) > 3:
+                        self.fail(
+                            "unsupported.construct", "dimension frame is unsupported", locator
+                        )
+                elif field.head in {"units", "units_format", "precision", "text_position_mode"}:
+                    if self._nonnegative_integer(token, locator) > 9:
+                        self.fail(
+                            "unsupported.construct", "dimension format is unsupported", locator
+                        )
+                elif self._mm(token, locator) < 0:
+                    self.fail("unsupported.construct", "dimension style is malformed", locator)
+        text = self._one(dimension, "gr_text", locator)
+        assert text is not None
+        self._validate_direct_atoms(
+            text, positional_atoms=1, allowed=frozenset({"locked"}), locator=locator
+        )
+        self._reject_unknown_children(
+            text, frozenset({"at", "layer", "uuid", "tstamp", "locked", "effects"}), locator
+        )
+        if self._graphic_layer(text, locator) != layer:
+            self.fail(
+                "unsupported.construct", "dimension text must stay on its drawing layer", locator
+            )
+        values = self._values(text, "at", locator, minimum=2, maximum=3)
+        self._mm(values[0], locator)
+        self._mm(values[1], locator)
+        if len(values) == 3:
+            self._rotation(values[2], locator)
+        for head in ("uuid", "tstamp"):
+            self._values(text, head, locator, required=False)
+        identities = []
+        for expression in (dimension, text):
+            fields = children(expression, "uuid") + children(expression, "tstamp")
+            if len(fields) != 1:
+                self.fail("identity.ambiguous", "dimension identity must be explicit", locator)
+            try:
+                identities.append(str(uuid.UUID(atoms(fields[0])[0])))
+            except ValueError:
+                self.fail("identity.ambiguous", "dimension identity must be a UUID", locator)
+        if identities[0] != identities[1] or self._locked(dimension) != self._locked(
+            text, positional_atoms=1
+        ):
+            self.fail(
+                "unsupported.construct",
+                "dimension text changed its parent identity or lock",
+                locator,
+            )
+        effects = self._one(text, "effects", locator)
+        assert effects is not None
+        self._reject_unknown_children(effects, frozenset({"font", "justify"}), locator)
+        self._validate_direct_atoms(
+            effects, positional_atoms=0, allowed=frozenset(), locator=locator
+        )
+        font = self._one(effects, "font", locator)
+        assert font is not None
+        self._reject_unknown_children(font, frozenset({"size", "thickness", "face"}), locator)
+        self._validate_direct_atoms(
+            font, positional_atoms=0, allowed=frozenset({"bold", "italic"}), locator=locator
+        )
+        for token in self._values(font, "size", locator, minimum=2, maximum=2):
+            if self._mm(token, locator) <= 0:
+                self.fail("unsupported.construct", "dimension font size is malformed", locator)
+        for token in self._values(font, "thickness", locator, required=False):
+            if self._mm(token, locator) < 0:
+                self.fail("unsupported.construct", "dimension font is malformed", locator)
+        self._values(font, "face", locator, required=False)
+        self._values(effects, "justify", locator, minimum=1, maximum=3, required=False)
+        return identities[0]
 
     def _refuse_footprint_routing_graphic(
         self, footprint: SExpr, layer: str, locator: str, head: str

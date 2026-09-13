@@ -22,7 +22,7 @@ from itertools import combinations, pairwise
 from math import isqrt
 from typing import Final
 
-from copper_mcp.board_ir import BoardIRSnapshot, Pad, PointNM, verify_snapshot
+from copper_mcp.board_ir import BoardIRSnapshot, Pad, PadShape, PointNM, verify_snapshot
 from copper_mcp.board_ir.pad_geometry import pad_obstacle_bounds
 from copper_mcp.routing.layered_astar import (
     MAX_EXPLICIT_VIAS,
@@ -201,7 +201,7 @@ def _success(
 def _point_in_pad_envelope(point: PointNM, pad: Pad) -> bool:
     """Conservatively detect a via-in-pad candidate without claiming exact padstack geometry."""
 
-    if pad.copper_envelope is not None:
+    if pad.copper_envelope is not None or (pad.shape is PadShape.RECT and pad.rotation_udeg == 0):
         min_x, min_y, max_x, max_y = pad_obstacle_bounds(pad)
         return min_x <= point.x <= max_x and min_y <= point.y <= max_y
     # A rotated or non-rectangular pad cannot be checked exactly by this module.  Use a

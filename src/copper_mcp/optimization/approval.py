@@ -15,8 +15,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from copper_mcp.optimization.contracts import OptimizationError, digest_document
-from copper_mcp.optimization.lifecycle import OptimizationJobRecord
-from copper_mcp.optimization.package import OptimizationPackage
+from copper_mcp.optimization.lifecycle import AnyOptimizationJobRecord
+from copper_mcp.optimization.package import AnyOptimizationPackage
 
 _TTL_SECONDS = 600
 _CAPACITY = 128
@@ -32,7 +32,9 @@ class _Ticket:
     judge_digest: str
 
 
-def _ticket(record: OptimizationJobRecord, package: OptimizationPackage, owner: str) -> _Ticket:
+def _ticket(
+    record: AnyOptimizationJobRecord, package: AnyOptimizationPackage, owner: str
+) -> _Ticket:
     if (
         record.status != "awaiting_approval"
         or record.owner_binding != owner
@@ -75,8 +77,8 @@ class HumanApprovalAuthority:
 
     def issue_from_human_channel(
         self,
-        record: OptimizationJobRecord,
-        package: OptimizationPackage,
+        record: AnyOptimizationJobRecord,
+        package: AnyOptimizationPackage,
         *,
         owner_binding: str,
     ) -> str:
@@ -93,8 +95,8 @@ class HumanApprovalAuthority:
 
     def consume(
         self,
-        record: OptimizationJobRecord,
-        package: OptimizationPackage,
+        record: AnyOptimizationJobRecord,
+        package: AnyOptimizationPackage,
         capability: str,
         *,
         owner_binding: str,
@@ -109,7 +111,7 @@ class HumanApprovalAuthority:
                 raise OptimizationError("optimization confirmation is unavailable")
             del self._tokens[capability]
             return digest_document(
-                "copper-mcp/optimization/v1/human-review-receipt",
+                f"copper-mcp/{record.schema_version}/human-review-receipt",
                 {
                     "job_id": ticket.job_id,
                     "revision": ticket.revision,

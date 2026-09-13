@@ -48,7 +48,7 @@
     {
       "id": "LFIB05-fill-island-envelopes-bypass-obstacle-meter",
       "file": "src/copper_mcp/routing/layered_board_adapter.py",
-      "anchor": "            if not add_obstacle(\n                rectangle,\n                layer_index[island.layer_id],\n                half_width + island_clearance,\n            ) or not add_obstacle(\n                rectangle,\n                layer_index[island.layer_id],\n                via_half + island_clearance,\n                via=True,\n            ):\n",
+      "anchor": "            if not add_obstacle(\n                rectangle,\n                layer_index[layer_id],\n                half_width + clearance,\n            ) or not add_obstacle(\n                rectangle,\n                layer_index[layer_id],\n                via_half + clearance,\n                via=True,\n            ):\n",
       "replacement": "            if False:\n",
       "expectation": "killed",
       "killing_tests": [

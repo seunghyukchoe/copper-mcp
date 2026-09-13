@@ -19,22 +19,32 @@ def judge_electrical_intent(
     settings: Settings,
     probe: OptimizationExecutionProbe,
     executable_digest: str,
+    *,
+    deadline: float | None = None,
 ) -> DomainResult:
     if prepared.electrical_source is None:
         return DomainResult(
             domain="ERC", status="inconclusive", reason="insufficient_inputs", evidence=None
         )
+    if deadline is not None:
+        probe.checkpoint()
     snapshot = decode_snapshot_json(prepared.electrical_source)
     if snapshot.snapshot_digest != prepared.request.electrical_inputs_digest:
         raise kicad_cli.KiCadCliError("optimization electrical input binding is inconsistent")
     schematic = render_kicad_schematic(snapshot)
+    if deadline is not None:
+        probe.checkpoint()
     if schematic != render_kicad_schematic(snapshot):
         raise kicad_cli.KiCadCliError("optimization schematic replay is inconsistent")
     summaries = []
     for _ in range(2):
         probe.checkpoint()
         clipped = kicad_cli._candidate_drc_deadline_settings(
-            settings, prepared.started_at + prepared.request.limits.max_runtime_ms / 1000
+            settings,
+            min(
+                prepared.started_at + prepared.request.limits.max_runtime_ms / 1000,
+                deadline if deadline is not None else float("inf"),
+            ),
         )
         summary = kicad_cli.run_circuit_schematic_erc(
             schematic.content,

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from kicad_drc_mock import make_fake_kicad_cli, rule_liveness_report
 
 import copper_mcp.kicad_cli as kicad_cli
 from copper_mcp.adapters import KiCadConstraintProfile, parse_kicad_bytes
@@ -121,30 +122,43 @@ def _fake_run(
         assert "--refill-zones" not in command
         report_path = Path(command[command.index("--output") + 1])
         snapshot_board = Path(command[-1])
-        if isinstance(report, bytes):
-            report_path.write_bytes(report)
+        derivative_report = rule_liveness_report(snapshot_board)
+        current_report = derivative_report if derivative_report is not None else report
+        if isinstance(current_report, bytes):
+            report_path.write_bytes(current_report)
         else:
-            report_path.write_text(json.dumps(report), encoding="utf-8")
+            report_path.write_text(json.dumps(current_report), encoding="utf-8")
         if capture is not None:
-            capture["command"] = command
-            capture["kwargs"] = kwargs
-            capture["snapshot_bytes"] = snapshot_board.read_bytes()
-            capture["temporary_root"] = report_path.parent
-            capture["temporary_mode"] = stat.S_IMODE(report_path.parent.stat().st_mode)
-        if after_report is not None:
+            rules = snapshot_board.with_suffix(".kicad_dru")
+            current = {
+                "command": command,
+                "kwargs": kwargs,
+                "snapshot_bytes": snapshot_board.read_bytes(),
+                "snapshot_rules": rules.read_bytes() if rules.exists() else None,
+                "temporary_root": report_path.parent,
+                "temporary_mode": stat.S_IMODE(report_path.parent.stat().st_mode),
+                "derivative": derivative_report is not None,
+            }
+            capture.setdefault("passes", []).append(current)
+            capture.update(current)
+        if after_report is not None and derivative_report is None:
             after_report(command)
-        return subprocess.CompletedProcess(command, returncode)
+        return subprocess.CompletedProcess(
+            command, 5 if derivative_report is not None else returncode
+        )
 
     return run
 
 
 def _install_fake_kicad(
     monkeypatch: pytest.MonkeyPatch,
+    root: Path,
     run: Callable[..., subprocess.CompletedProcess[str]],
 ) -> None:
-    monkeypatch.setattr(
-        kicad_cli, "discover_kicad_cli", lambda settings: Path("/trusted/kicad-cli")
-    )
+    executable_root = root.parent / f"{root.name}-kicad-bin"
+    executable_root.mkdir(exist_ok=True)
+    executable = make_fake_kicad_cli(executable_root, "trusted-kicad-cli")
+    monkeypatch.setattr(kicad_cli, "discover_kicad_cli", lambda settings: executable)
     monkeypatch.setattr(subprocess, "run", run)
 
 
@@ -159,7 +173,7 @@ def test_binds_clean_candidate_to_private_drc_context_and_preserves_source(
     rules.write_text("(version 1)", encoding="utf-8")
     settings = Settings(workspace=tmp_path, max_drc_report_bytes=4096)
     capture: dict[str, Any] = {}
-    _install_fake_kicad(monkeypatch, _fake_run(_report(board.name), capture=capture))
+    _install_fake_kicad(monkeypatch, tmp_path, _fake_run(_report(board.name), capture=capture))
 
     evidence = run_placement_candidate_drc(board.name, candidate, profile, settings)
 
@@ -177,8 +191,9 @@ def test_binds_clean_candidate_to_private_drc_context_and_preserves_source(
     assert not Path(capture["temporary_root"]).exists()
     assert board.read_bytes() == source
     command = capture["command"]
-    assert command[command.index("/trusted/kicad-cli") :] == [
-        "/trusted/kicad-cli",
+    executable_index = command.index("pcb") - 1
+    assert command[executable_index:] == [
+        command[executable_index],
         "pcb",
         "drc",
         "--format",
@@ -191,6 +206,19 @@ def test_binds_clean_candidate_to_private_drc_context_and_preserves_source(
         command[command.index("--output") + 1],
         command[-1],
     ]
+    derivative, original = capture["passes"]
+    assert derivative["derivative"] is True and original["derivative"] is False
+    assert derivative["snapshot_bytes"] != original["snapshot_bytes"]
+    assert derivative["snapshot_rules"].startswith(b"(version 1)\n(rule ")
+    assert original["snapshot_rules"] == rules.read_bytes() == b"(version 1)"
+    assert "assertion_failure" not in evidence.summary.violation_type_counts
+    assert original["kwargs"]["timeout"] <= derivative["kwargs"]["timeout"]
+    for captured in capture["passes"]:
+        assert 0 < captured["kwargs"]["timeout"] <= settings.kicad_timeout_seconds
+        args = captured["command"]
+        assert args[args.index("pcb") - 2] == str(settings.max_drc_report_bytes)
+        assert captured["temporary_mode"] == 0o700
+        assert not captured["temporary_root"].exists()
 
 
 def test_violation_evidence_is_negative_and_redacted(
@@ -212,7 +240,7 @@ def test_violation_evidence_is_negative_and_redacted(
         ],
         unconnected_items=[_finding("unconnected_items", "error")],
     )
-    _install_fake_kicad(monkeypatch, _fake_run(report, returncode=5))
+    _install_fake_kicad(monkeypatch, tmp_path, _fake_run(report, returncode=5))
 
     evidence = run_placement_candidate_drc(
         board.name, candidate, profile, Settings(workspace=tmp_path, max_drc_report_bytes=4096)
@@ -277,7 +305,7 @@ def test_rejects_stale_tampered_and_unsupported_inputs_before_kicad(
         calls += 1
         return subprocess.CompletedProcess([], 0)
 
-    _install_fake_kicad(monkeypatch, unexpected_run)
+    _install_fake_kicad(monkeypatch, tmp_path, unexpected_run)
     cases: list[tuple[object, object]] = [
         (replace(candidate, base_revision="sha256:" + "0" * 64), profile),
         (replace(candidate, candidate_id="sha256:" + "0" * 64), profile),
@@ -327,20 +355,33 @@ def test_rejects_stale_tampered_and_unsupported_inputs_before_kicad(
         ("oversized", "configured limit"),
     ],
 )
+@pytest.mark.parametrize("with_rules", [False, True])
 def test_fails_closed_on_process_and_report_errors(
     failure: str,
     message: str,
+    with_rules: bool,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source, _, profile, candidate = _candidate()
     board = tmp_path / FIXTURE.name
     board.write_bytes(source)
+    if with_rules:
+        board.with_suffix(".kicad_dru").write_bytes(b"(version 1)")
     capture: dict[str, Any] = {}
+    passes: list[bool] = []
 
     def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         report_path = Path(command[command.index("--output") + 1])
         capture["temporary_root"] = report_path.parent
+        derivative_report = rule_liveness_report(Path(command[-1]))
+        passes.append(derivative_report is not None)
+        assert command[command.index("pcb") - 2] == "1024"
+        if derivative_report is not None:
+            payload = json.dumps(derivative_report).encode()
+            assert len(payload) <= 1024
+            report_path.write_bytes(payload)
+            return subprocess.CompletedProcess(command, 5)
         if failure == "timeout":
             raise subprocess.TimeoutExpired(command, 1)
         if failure == "exit":
@@ -357,7 +398,7 @@ def test_fails_closed_on_process_and_report_errors(
             report_path.write_bytes(b"x" * 1025)
         return subprocess.CompletedProcess(command, 0)
 
-    _install_fake_kicad(monkeypatch, run)
+    _install_fake_kicad(monkeypatch, tmp_path, run)
     with pytest.raises(kicad_cli.KiCadCliError, match=message):
         run_placement_candidate_drc(
             board.name,
@@ -366,6 +407,7 @@ def test_fails_closed_on_process_and_report_errors(
             Settings(workspace=tmp_path, max_drc_report_bytes=1024),
         )
     assert not capture["temporary_root"].exists()
+    assert passes == ([True, False] if with_rules else [False])
 
 
 @pytest.mark.parametrize("mutation", ["source", "rules", "add"])
@@ -396,11 +438,14 @@ def test_discards_evidence_when_original_context_changes(
         else:
             (library.parent / "C.kicad_mod").write_text("(footprint C)", encoding="utf-8")
 
+    capture: dict[str, Any] = {}
     _install_fake_kicad(
         monkeypatch,
+        tmp_path,
         _fake_run(
             _report(board.name),
             after_report=lambda command: mutate(),
+            capture=capture,
         ),
     )
     with pytest.raises(kicad_cli.KiCadCliError, match="candidate DRC was running"):
@@ -410,6 +455,7 @@ def test_discards_evidence_when_original_context_changes(
             profile,
             Settings(workspace=tmp_path, max_drc_report_bytes=4096),
         )
+    assert [item["derivative"] for item in capture["passes"]] == [True, False]
 
 
 @pytest.mark.parametrize("private_mutation", ["board", "rules", "library-add"])
@@ -445,9 +491,11 @@ def test_rejects_private_candidate_context_mutation(
             library.parent.chmod(0o500)
         snapshot_root.chmod(0o500)
 
+    capture: dict[str, Any] = {}
     _install_fake_kicad(
         monkeypatch,
-        _fake_run(_report(board.name), after_report=mutate_private_context),
+        tmp_path,
+        _fake_run(_report(board.name), after_report=mutate_private_context, capture=capture),
     )
     with pytest.raises(kicad_cli.KiCadCliError, match="private KiCad DRC context changed"):
         run_placement_candidate_drc(
@@ -457,6 +505,7 @@ def test_rejects_private_candidate_context_mutation(
             Settings(workspace=tmp_path, max_drc_report_bytes=4096),
         )
     assert board.read_bytes() == source
+    assert [item["derivative"] for item in capture["passes"]] == [True, False]
 
 
 def test_evidence_model_rejects_cross_field_tampering() -> None:
