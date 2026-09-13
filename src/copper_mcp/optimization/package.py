@@ -450,11 +450,16 @@ class ComparisonOutcome(ClosedModel):
             attempts = self.routing_attempts
             if len({attempt.backend for attempt in attempts}) != len(attempts):
                 raise ValueError("routing backend was repeated")
-            if any(attempt.outcome == "composed" for attempt in attempts[:-1]) or (
-                ready and attempts[-1].outcome != "composed"
-            ):
+            if any(
+                attempt.outcome in {"composed", "budget_exhausted"} for attempt in attempts[:-1]
+            ) or (ready and attempts[-1].outcome != "composed"):
                 raise ValueError("routing continued after composition or invented success")
-            if attempts[-1].outcome != "composed" and self.status != attempts[-1].outcome:
+            # The slot/freshness deadline can expire after a real failed attempt, before
+            # another backend starts. Preserve that attempt rather than inventing one.
+            if attempts[-1].outcome != "composed" and self.status not in {
+                attempts[-1].outcome,
+                "budget_exhausted",
+            }:
                 raise ValueError("routing refusal differs from the comparison outcome")
             for field in (
                 "expansions",
@@ -867,6 +872,13 @@ class OptimizationPackageV2(_OptimizationPackageFields):
                 raise OptimizationError(
                     "optimization routing attempts differ from the declared policy"
                 )
+            if (
+                attempted
+                and len(attempted) < len(order)
+                and row.status != "budget_exhausted"
+                and row.routing_attempts[-1].outcome != "composed"
+            ):
+                raise OptimizationError("optimization routing history is incomplete")
         if any(
             row.metrics is not None
             and (

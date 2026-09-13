@@ -7,6 +7,7 @@ manufacturing quality or consent. Real backend acceptance is in external_native.
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import sys
@@ -611,6 +612,22 @@ def test_external_router_mcp_dispatch_compares_and_disposes_complete_candidate(
                 assert {item["backend"] for item in package["backend_provenance"]} == {
                     "internal-layered-v1"
                 }
+                from copper_mcp.optimization.contracts import OptimizationError
+                from copper_mcp.optimization.package import decode_package
+
+                truncated = copy.deepcopy(package)
+                first = truncated["comparison"]["outcomes"][0]
+                first["routing_attempts"] = first["routing_attempts"][:1]
+                first["status"] = first["routing_attempts"][0]["outcome"]
+                first["charged"] = first["routing_attempts"][0]["charged"]
+                with pytest.raises(OptimizationError, match="routing history is incomplete"):
+                    decode_package(json.dumps(truncated)).require_reviewable_for(
+                        service._jobs[job_id].request
+                    )
+                first["status"] = "budget_exhausted"
+                decode_package(json.dumps(truncated)).require_reviewable_for(
+                    service._jobs[job_id].request
+                )
         assert not gateway._artifacts
 
     try:

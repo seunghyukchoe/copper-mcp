@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Hybrid deadline stops retain the actual failed attempt without inventing another backend;
+  truncated retryable routing histories are rejected before package review.
+
 - Historical fill-budget source verification now survives squash merges without depending on
   temporary PR commits; the original reports, source hashes and resource limits are unchanged.
 

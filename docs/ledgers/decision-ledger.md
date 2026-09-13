@@ -605,3 +605,13 @@ plus lint/metadata, strict typing, security and builds. The explicit native regr
 passed 11 cases in 70.98s, including the real SRJ/internal recovery and deterministic replay.
 Merging corrected main `7b4abd8` left that entire tracked tree unchanged. Required hosted and
 protected-merge gates remain open for the hybrid feature; no release or five-area score follows.
+
+2026-09-14 D-285 hybrid review closure: PR305 review found that deadline exhaustion between
+attempts invalidated its own comparison row, and that a retryable partial history could omit an
+authorized fallback. Three deterministic controls reproduced both issues. The terminal row may
+now record budget exhaustion while retaining the real preceding failure; it never invents an
+unexecuted backend. Request validation rejects incomplete retryable prefixes, and no attempt may
+follow composition or budget exhaustion. Fifty-one focused controls passed in 25.18s; independent
+correctness/security and Ponytail review accepted the correction. Limits, source checks, native
+validation and approval/apply authority are unchanged. The earlier full/native evidence retains
+its original source scope; hosted validation of this correction remains a separate gate.
