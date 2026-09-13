@@ -2078,3 +2078,20 @@ part of the result rather than an omission from it.
 | Interpretation | The optional domain experiment now passes, but the shipped per-island cap remains 500,000; overflow remains `invalid_request` and aggregate overflow remains `obstacle_check_budget_exceeded`. Observing a faster counterfactual does not expand supported input. No routing-quality, physics, cross-machine speedup or PR-latency claim. |
 | Historical evidence | B-123 and its August artifact remain byte-identical, including their failed domain experiment. The test verifies its original source blobs at `ddd1819b68ac50c092b5bf9ee8f79dbb42042092`; it separately checks this successor against the current source. No old timing was rebound to new code. |
 | Validation | Six artifact/current-run controls passed. The re-anchored [fill-island mutation spec](../mutants/2026-08-17-layered-fill-island-budget.json) was executed by the committed harness: all five mutants killed, with passing restored-source controls. Full integration and independent review remain separate gates. |
+
+#### Current-source replay — 2026-09-13 UTC, complete-board routing integration
+
+The coincident-opposite-layer intake correction changed the bound adapter source. The fast suite
+correctly refused to treat the September 9 measurement as current. The existing seven-case runner
+was executed once to produce [`2026-09-13-layered-fill-island-budget-v1.json`](../../benchmarks/results/routing/2026-09-13-layered-fill-island-budget-v1.json),
+run `sha256:d53d2e748443247782ed456c77a06efc8ad4f323e443822d80ecff56d5a483ab`.
+No stored timing was rebound. Both prior reports remain byte-identical; tests verify the September
+9 report against source at `0a57d6142a9a4cddc71ee9e90105194bbf8a423d`, alongside the original August control.
+
+The widest case took 0.692s against 5s; the shipped 500,000-vertex case took 8.069s against 12s.
+The one-million-vertex single/split experiments took 15.982s / 15.932s against 20s. All original
+traced-memory gates passed. The 500,000-vertex shipped cap, aggregate limit, refusals and 60-second
+worker deadline are unchanged. This synthetic resource calibration grants no routing-quality,
+physics, cross-machine, hosted-CI or release claim. The mutation spec is unchanged; its previous
+execution is not restamped as current execution. Seven historical/current artifact controls passed
+within the 56-test production-boundary/calibration run. Full integration remains a separate gate.

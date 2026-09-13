@@ -159,6 +159,7 @@ class PreparedOptimization:
     drc_profile: DrcProfileBinding | None = None
     native_import: NativeImportBinding | None = None
     import_output_bytes: int = 0
+    external_router_settings_digest: str | None = None
 
 
 def parse_launch(
@@ -438,6 +439,15 @@ def prepare_optimization(
             required = set(fields["required_domains"]) | set(launch.required_domains)
             if capture_digest is not None:
                 required.add("ERC")
+            external_settings_digest = None
+            if any(backend != "internal-layered-v1" for backend in launch.allowed_backends):
+                from copper_mcp.optimization.external_routing import (
+                    external_router_settings_digest,
+                )
+
+                external_settings_digest = external_router_settings_digest(
+                    settings, tuple(sorted(launch.allowed_backends))
+                )
             fields.update(
                 schema_version="optimization/v2",
                 policy_profile="deterministic-v2",
@@ -460,6 +470,11 @@ def prepare_optimization(
                         "candidate_fill": "native-refill-cache-splice/v1",
                         "copper_metric": "target-net-straight-traces/v1",
                         "copper_repair": "moved-or-disconnected-target-copper-reset/v1",
+                        **(
+                            {"external_router": external_settings_digest}
+                            if external_settings_digest is not None
+                            else {}
+                        ),
                     },
                 ),
                 judge_profile_digest=digest_document(
@@ -498,6 +513,9 @@ def prepare_optimization(
             drc_profile,
             None if imported is None else imported.binding,
             0 if imported is None else imported.output_bytes,
+            external_settings_digest
+            if isinstance(launch, (OptimizationLaunchV2, NativeFullBoardLaunchV2))
+            else None,
         )
     except OptimizationError:
         raise

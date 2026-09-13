@@ -23,15 +23,18 @@ from copper_mcp.optimization.lifecycle import AnyOptimizationJobRecord, Resource
 from copper_mcp.optimization.package import (
     AllocationBasis,
     AnyOptimizationPackage,
-    BackendProvenance,
+    BackendProvenanceV2,
     CandidateBindingV2,
     ClearanceObservation,
     Comparison,
     ComparisonOutcome,
+    CoordinateQuantizationV2,
+    ExternalRunV2,
     ObjectiveMetricsV2,
     OptimizationPackageV2,
     SlotBudget,
     SlotWork,
+    SpecctraDisposalV2,
 )
 from copper_mcp.optimization.placement import search_placements_v2
 from copper_mcp.optimization.repair import CopperRepairBinding
@@ -52,6 +55,33 @@ class SlotProbe(OptimizationExecutionProbe):
         self.validation = False
         self.deadline = time.monotonic() + budget.wall_ms / 1000
         self.stopped = False
+        self.external_runs: tuple[ExternalRunV2, ...] = ()
+
+    def record_external_run(self, run: ExternalRunV2) -> None:
+        if type(run) is not ExternalRunV2 or self.external_runs:
+            raise OptimizationExecutionError("invalid_candidate")
+        self.external_runs = (run,)
+
+    def bind_external_normalization(
+        self,
+        converter_digest: str,
+        route_digest: str,
+        coordinate_quantization: CoordinateQuantizationV2 | None = None,
+        specctra_disposal: SpecctraDisposalV2 | None = None,
+    ) -> None:
+        if len(self.external_runs) != 1:
+            raise OptimizationExecutionError("invalid_candidate")
+        self.external_runs = (
+            ExternalRunV2.model_validate(
+                {
+                    **self.external_runs[0].model_dump(),
+                    "converter_digest": converter_digest,
+                    "normalized_route_digest": route_digest,
+                    "coordinate_quantization": coordinate_quantization,
+                    "specctra_disposal": specctra_disposal,
+                }
+            ),
+        )
 
     def charged_work(self) -> SlotWork:
         return SlotWork(
@@ -108,13 +138,21 @@ class SlotProbe(OptimizationExecutionProbe):
             self.routing_checks = checks
         return self.checkpoint()
 
-    def reserve_search(self, settings: AStarSettings, attempts: int = 1) -> AStarSettings:
-        expansions = min(
-            settings.max_expansions, (self.budget.expansions - self.usage.expansions) // 2
-        )
-        checks = min(
-            settings.max_obstacle_checks, (self.budget.routing_checks - self.routing_checks) // 2
-        )
+    def reserve_search(
+        self, settings: AStarSettings, attempts: int = 1, *, pending_units: int | None = None
+    ) -> AStarSettings:
+        remaining_expansions = (self.budget.expansions - self.usage.expansions) // 2
+        remaining_checks = (self.budget.routing_checks - self.routing_checks) // 2
+        if pending_units is None:
+            expansions = min(settings.max_expansions, remaining_expansions)
+            checks = min(settings.max_obstacle_checks, remaining_checks)
+        else:
+            if attempts < 1 or pending_units < attempts:
+                raise OptimizationExecutionError("invalid_candidate")
+            expansions = min(
+                settings.max_expansions, remaining_expansions * attempts // pending_units
+            )
+            checks = min(settings.max_obstacle_checks, remaining_checks * attempts // pending_units)
         if expansions < 1 or checks < 1:
             raise OptimizationExecutionError("budget_exhausted")
         self.reserve(
@@ -170,15 +208,31 @@ def coordinate_v2(
     from copper_mcp.optimization.provenance import bounded_file_digest, native_implementation_digest
     from copper_mcp.optimization.routing import route_targets
 
-    if prepared.request.allowed_backends != ("internal-layered-v1",):
+    external_backend = prepared.request.allowed_backends != ("internal-layered-v1",)
+    if external_backend and (
+        len(prepared.request.allowed_backends) != 1
+        or prepared.request.allowed_backends[0] == "internal-layered-v1"
+    ):
         raise OptimizationExecutionError("backend_failure")
+    if external_backend:
+        from copper_mcp.optimization.external_routing import _runtime
+
+        _runtime(settings, prepared.request.allowed_backends[0])
     verify_original_context(prepared, settings)
     probe.advance("placing")
     placements = search_placements_v2(prepared, settings, probe)
     allocation, budget = allocate_slots(prepared, probe, len(placements))
     probe.advance("evaluating")
     outcomes: list[ComparisonOutcome] = []
-    evaluated: list[tuple[CandidateBindingV2, ObjectiveMetricsV2, JudgeReportV2, bytes]] = []
+    evaluated: list[
+        tuple[
+            CandidateBindingV2,
+            ObjectiveMetricsV2,
+            JudgeReportV2,
+            bytes,
+            BackendProvenanceV2 | None,
+        ]
+    ] = []
     route_evidence: dict[
         str, tuple[CandidateFillBinding | None, int, CopperRepairBinding | None]
     ] = {}
@@ -189,7 +243,17 @@ def coordinate_v2(
         try:
             patch_failed = False
             try:
-                routed = route_targets(prepared, placed.source, placed.snapshot, settings, slot)
+                if external_backend:
+                    from copper_mcp.optimization.external_routing import route_external_targets
+
+                    execution = route_external_targets(
+                        prepared, placed.source, placed.snapshot, settings, slot
+                    )
+                    routed = execution.composition
+                    backend_provenance = execution.provenance
+                else:
+                    routed = route_targets(prepared, placed.source, placed.snapshot, settings, slot)
+                    backend_provenance = None
             except (
                 KiCadRoutePatchError,
                 KiCadLayeredRoutePatchError,
@@ -325,9 +389,10 @@ def coordinate_v2(
                     metrics=metrics,
                     route_probes=routed.route_probes,
                     charged=slot.charged_work(),
+                    external_runs=slot.external_runs,
                 )
             )
-            evaluated.append((binding, metrics, judge, routed.source))
+            evaluated.append((binding, metrics, judge, routed.source, backend_provenance))
             route_evidence[binding.digest] = (routed.fill, routed.fill_rounds, routed.repair)
         except OptimizationExecutionError as error:
             if error.code in {"cancelled", "stale_revision", "interrupted"}:
@@ -344,6 +409,7 @@ def coordinate_v2(
                         "metrics": None,
                         "route_probes": None,
                         "charged": slot.charged_work(),
+                        "external_runs": slot.external_runs,
                     }
                 )
             )
@@ -364,9 +430,15 @@ def coordinate_v2(
     weights = prepared.request.objective_weights
 
     def rank(
-        row: tuple[CandidateBindingV2, ObjectiveMetricsV2, JudgeReportV2, bytes],
+        row: tuple[
+            CandidateBindingV2,
+            ObjectiveMetricsV2,
+            JudgeReportV2,
+            bytes,
+            BackendProvenanceV2 | None,
+        ],
     ) -> tuple[int, int, int, int, int, int, str]:
-        binding, metrics, _, _ = row
+        binding, metrics, _, _, _ = row
         margin = metrics.clearance.minimum_margin_nm
         return (
             -metrics.fully_connected_target_nets,
@@ -382,7 +454,7 @@ def coordinate_v2(
         )
 
     ordered = sorted(evaluated, key=rank)
-    binding, metrics, judge, source = ordered[0]
+    binding, metrics, judge, source, external_provenance = ordered[0]
     fill, fill_rounds, repair = route_evidence[binding.digest]
     package = OptimizationPackageV2(
         schema_version="optimization/v2",
@@ -397,7 +469,9 @@ def coordinate_v2(
         fill_round_count=fill_rounds,
         repair=repair,
         backend_provenance=(
-            BackendProvenance(
+            external_provenance
+            if external_provenance is not None
+            else BackendProvenanceV2(
                 backend="internal-layered-v1",
                 version=__version__,
                 executable_digest=bounded_file_digest(Path(sys.executable).resolve()),

@@ -424,6 +424,8 @@ class ContainerProcessOwner:
                             else self._limits.max_stderr_bytes
                         )
                         if totals[name] > limit:
+                            if name == "stdout":
+                                output.extend(chunk[: max(0, limit - len(output))])
                             return output, ContainerRunStatus.OUTPUT_LIMIT_EXCEEDED
                         if name == "stdout":
                             output.extend(chunk)

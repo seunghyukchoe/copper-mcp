@@ -31,7 +31,7 @@ net references, and any explicitly movable footprint references into the launch 
 | `required_domains` | V2 only: additional required judge domains. The caller cannot remove mandatory DRC/DFM or project-required ERC. Missing authorities block review. |
 | `placement_grid_nm`, `routing_settings`, `seed` | Bounded existing native search parameters. Manhattan distance may guide the search, never final evidence. |
 | `limits` | Cumulative runtime, candidate, placement, route-attempt, repair, expansion, obstacle-check and output ceilings. Server ceilings may tighten them. |
-| `allowed_backends` | The implemented path is `internal-layered-v1`. External selections currently refuse until the production format bridge is integrated. The [local runtime setup](local-router-runtime.md) is separate. |
+| `allowed_backends` | Select exactly one backend: `internal-layered-v1`, or in v2 `freerouting-dsn-ses-v1` / `simpleroutejson-v1` with the operator-configured [local runtime](local-router-runtime.md). Multi-backend fallback remains unimplemented and refuses. |
 
 The response includes a job record. `get_optimization_job` takes its `job_id` and returns current
 state and bounded judge reports. `cancel_optimization_job` additionally requires
@@ -123,6 +123,43 @@ are unchanged. It neither applies nor saves, and creates no project file beside 
 This controlled test does not prove held-out quality, ordinary-project coverage or real-human
 consent; the synthetic-CLI tests are not substitutes for this native execution.
 
+The `v2-complete-two-net-board` case retains the fixture's separate POWER net, including its
+coincident opposite-side terminals. It verifies both target nets and the complete placement
+comparison under the same declared limits:
+
+```sh
+PYTHONPATH=src python -m pytest --no-cov -n 0 \
+  'tests/test_optimization_workflow_native.py::test_mcp_routes_complete_multilayer_tree_and_exports_without_apply[v2-complete-two-net-board]'
+```
+
+## External-router execution
+
+Configure the server's local runtime using the operator variables in
+[local-router-runtime.md](local-router-runtime.md#server-configuration), then select one external
+backend in the v2 request. Executable paths, images and Docker settings are never MCP arguments.
+Both placement slots use the same fixed backend and their equal nontransferable allocations.
+
+FreeRouting proposes for the whole board. CopperMCP retains exact original copper identities,
+geometry and locks, then admits only supported new copper on the reduced routing target set.
+Known-net out-of-scope additions are discarded and disclosed in `specctra_disposal`; unknown or
+unsupported additions refuse. The native importer never edits the user's board. SRJ output must
+retain the input problem, and its explicit coordinate-grid conversion is disclosed separately.
+Neither backend's success flag or connection claims establish connectivity or DRC acceptance.
+
+With the pinned operator runtime configured, run the real FreeRouting MCP/replay control:
+
+```sh
+COPPER_MCP_TEST_EXTERNAL_WORKFLOW=1 PYTHONPATH=src python -m pytest --no-cov -n 0 \
+  'tests/test_optimization_external_native.py::test_real_external_mcp_compares_placement_routes_every_target_and_replays[freerouting-dsn-ses-v1]'
+```
+
+It compares both placements, checks every target with real KiCad, exports review metadata,
+matches confined executions to their evidence, repeats the run, and requires identical
+candidate/judge digests without modifying source files. The owned four-layer control passed;
+this is not twelve-board acceptance. The corresponding real SRJ control currently refuses its
+incomplete POWER output. Use FreeRouting or internal routing for that case; automatic hybrid
+recovery is not yet implemented, and no terminal or net is silently omitted.
+
 The corresponding real-import control uses the same consumer and leaves snapshot/target selection
 to production intake:
 
@@ -211,8 +248,8 @@ batch above; negotiated repair and wider source semantics remain open. These con
 general zoned-board acceptance. The pinned development audio/supply board-stage diagnostics reached
 required checks but remained blocked by explicit project DRC suppressions; no suppression was
 waived and neither diagnostic claimed project ERC, physics or placement improvement.
-Production FreeRouting/SRJ
-conversion and disposal, older-format project intake, broader project ERC/parity coverage, bounded repair
+Production external conversion/disposal is connected, with real FreeRouting control evidence;
+SRJ incomplete-output recovery, broader ordinary-project intake/ERC/parity coverage, bounded repair
 coordination, Orca advisory scheduling and quality measurement, before/after rendering, the
 held-out corpus, real host UI validation and hosted calibration are unfinished. No 90% routing,
 3x speedup, unqualified ordinary-board coverage or v0.13 release acceptance follows from these

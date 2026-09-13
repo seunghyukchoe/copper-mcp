@@ -8,6 +8,22 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Development `optimization/v2` external-router execution records retain bounded failed-run
+  output accounting and bind the selected local runtime. SRJ coordinates are explicitly projected
+  to the nearest nanometre, with versioned conversion/error-bound/count metadata; widths and drills
+  remain exact. Normalization does not grant connectivity, engineering or apply authority.
+  FreeRouting now completes the real isolated MCP placement/routing/review workflow on the owned
+  four-layer two-net control, with zero hard DRC errors and repeated candidate/judge digests.
+  Private Specctra import preserves original copper identity, geometry and locks; whole-board
+  proposals contribute only new in-scope copper, with accepted/discarded counts and digests.
+  Existing copper is not counted as newly added copper. SRJ incomplete-output recovery,
+  three-profile development demonstrations and held-out/full release acceptance remain open.
+- V2 internal routing reserves proposal/replay work proportionally across remaining net branches
+  and fallback searches instead of letting the first net consume the complete slot. Coincident
+  opposite-layer terminals can route through a checked off-pad via; same-layer coincidence and
+  unsupported via-in-pad remain refused. The complete two-net native MCP placement/routing control
+  passes without raising its limits. Internal/external repair share precharged indexed placement
+  scope checks, preserving locks, sides and the declared movable set. V1 semantics are unchanged.
 - V2 optimization can reroute existing target copper after component movement, and complete
   partially routed targets, in one budgeted private repair batch. Locked/grouped copper and
   unrelated nets remain protected; exported packages bind the removals and complete reroute.

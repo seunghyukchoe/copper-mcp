@@ -13,7 +13,7 @@ from copper_mcp.adapters import (
 from copper_mcp.adapters.kicad_layered_tree_patch import (
     render_kicad_layered_tree_candidate_board,
 )
-from copper_mcp.board_ir import BoardIRSnapshot
+from copper_mcp.board_ir import BoardIRSnapshot, Pad
 from copper_mcp.board_ir.pad_geometry import pad_obstacle_bounds
 from copper_mcp.config import Settings
 from copper_mcp.optimization.contracts import digest_document
@@ -224,8 +224,51 @@ def _repair_connectivity(
         raise OptimizationExecutionError("budget_exhausted") from None
 
 
+def _copper_and_moved_nets(
+    prepared: PreparedOptimization,
+    snapshot: BoardIRSnapshot,
+    probe: OptimizationExecutionProbe,
+) -> tuple[set[str | None], set[str | None]]:
+    """Precharge and index the shared placement/repair scope before either backend runs."""
+    copper = (snapshot.content.segments, snapshot.content.vias, snapshot.content.arcs)
+    probe.reserve(
+        ResourceUsage(
+            obstacle_checks=(
+                sum(map(len, copper))
+                + len(prepared.snapshot.content.footprints)
+                + 3 * len(snapshot.content.footprints)
+                + 2 * len(snapshot.content.pads)
+                + len(prepared.request.placement_scope.movable_footprint_refs)
+            )
+        )
+    )
+    copper_nets = {item.net_id for group in copper for item in group}
+    movable = frozenset(prepared.request.placement_scope.movable_footprint_refs)
+    originals = {item.id: item for item in prepared.snapshot.content.footprints}
+    if set(originals) != {item.id for item in snapshot.content.footprints}:
+        raise OptimizationExecutionError("invalid_candidate")
+    moved = tuple(
+        item
+        for item in snapshot.content.footprints
+        if (item.origin, item.rotation_udeg, item.side)
+        != (originals[item.id].origin, originals[item.id].rotation_udeg, originals[item.id].side)
+    )
+    if any(
+        item.id not in movable or originals[item.id].locked or item.side != originals[item.id].side
+        for item in moved
+    ):
+        raise OptimizationExecutionError("unsupported_geometry")
+    moved_pads = {pad_id for item in moved for pad_id in item.pad_ids}
+    moved_nets = {pad.net_id for pad in snapshot.content.pads if pad.id in moved_pads}
+    return copper_nets, moved_nets
+
+
 def _reserve_search(
-    prepared: PreparedOptimization, probe: OptimizationExecutionProbe, *, attempts: int = 1
+    prepared: PreparedOptimization,
+    probe: OptimizationExecutionProbe,
+    *,
+    attempts: int = 1,
+    pending_units: int | None = None,
 ) -> AStarSettings:
     """Reserve both proposal and serializer replay before either executes."""
 
@@ -234,7 +277,9 @@ def _reserve_search(
 
         if not isinstance(probe, SlotProbe):
             raise OptimizationExecutionError("invalid_candidate")
-        return probe.reserve_search(prepared.routing_settings, attempts)
+        return probe.reserve_search(
+            prepared.routing_settings, attempts, pending_units=pending_units
+        )
     usage = probe.checkpoint().usage
     limits = prepared.request.limits
     expansions = min(
@@ -300,40 +345,7 @@ def route_targets(
             raise OptimizationExecutionError("invalid_candidate")
         if probe.budget.repair_rounds > 0:
             initial_fill = refresh_fill()
-            copper = (snapshot.content.segments, snapshot.content.vias, snapshot.content.arcs)
-            probe.reserve(
-                ResourceUsage(
-                    obstacle_checks=(
-                        sum(map(len, copper))
-                        + len(prepared.snapshot.content.footprints)
-                        + len(snapshot.content.footprints)
-                        + len(snapshot.content.pads)
-                    )
-                )
-            )
-            copper_nets = {item.net_id for group in copper for item in group}
-            original_footprints = {item.id: item for item in prepared.snapshot.content.footprints}
-            if set(original_footprints) != {item.id for item in snapshot.content.footprints}:
-                raise OptimizationExecutionError("invalid_candidate")
-            moved = tuple(
-                item
-                for item in snapshot.content.footprints
-                if (item.origin, item.rotation_udeg, item.side)
-                != (
-                    original_footprints[item.id].origin,
-                    original_footprints[item.id].rotation_udeg,
-                    original_footprints[item.id].side,
-                )
-            )
-            if any(
-                item.id not in prepared.request.placement_scope.movable_footprint_refs
-                or original_footprints[item.id].locked
-                or item.side != original_footprints[item.id].side
-                for item in moved
-            ):
-                raise OptimizationExecutionError("unsupported_geometry")
-            moved_pads = {pad_id for item in moved for pad_id in item.pad_ids}
-            moved_nets = {pad.net_id for pad in snapshot.content.pads if pad.id in moved_pads}
+            copper_nets, moved_nets = _copper_and_moved_nets(prepared, snapshot, probe)
             repair_targets = []
             for net in prepared.target_net_refs:
                 if net not in copper_nets:
@@ -354,26 +366,88 @@ def route_targets(
                 )
                 source, snapshot, repair = reset.source, reset.snapshot, reset.binding
 
+    routing_plan: dict[str, tuple[tuple[Pad, ...], tuple[str, ...], int]] | None = None
+    pending_search_units: int | None = None
+    planned_layers = (
+        tuple(sorted(snapshot.content.copper_layers, key=lambda layer: layer.index))
+        if prepared.request.schema_version == "optimization/v2"
+        else ()
+    )
+    if prepared.request.schema_version == "optimization/v2":
+        probe.reserve(
+            ResourceUsage(
+                obstacle_checks=(
+                    len(prepared.target_net_refs)
+                    + len(snapshot.content.pads)
+                    + len(snapshot.content.copper_layers)
+                )
+            )
+        )
+        pads_by_net: dict[str, list[Pad]] = {net: [] for net in prepared.target_net_refs}
+        for pad in snapshot.content.pads:
+            if pad.net_id in pads_by_net:
+                pads_by_net[pad.net_id].append(pad)
+        probe.reserve(
+            ResourceUsage(
+                obstacle_checks=sum(
+                    len(planned_layers) * len(pads_by_net[net]) for net in prepared.target_net_refs
+                )
+            )
+        )
+        routing_plan = {}
+        pending_search_units = 0
+        for net in prepared.target_net_refs:
+            pads = tuple(pads_by_net[net])
+            branch_units = max(1, len(pads) - 1)
+            common = (
+                tuple(
+                    layer.id
+                    for layer in planned_layers
+                    if layer.kind == "signal" and all(layer.id in pad.layer_ids for pad in pads)
+                )
+                if len(pads) >= 2
+                else ()
+            )
+            net_units = branch_units * (len(common) + 1)
+            routing_plan[net] = pads, common, net_units
+            pending_search_units += net_units
+
     for index, net in enumerate(prepared.target_net_refs):
         probe.checkpoint()
         verified_fill = refresh_fill()
+        if routing_plan is None:
+            pads = tuple(pad for pad in snapshot.content.pads if pad.net_id == net)
+            layers = tuple(sorted(snapshot.content.copper_layers, key=lambda layer: layer.index))
+            common = tuple(
+                layer.id
+                for layer in layers
+                if layer.kind == "signal" and all(layer.id in pad.layer_ids for pad in pads)
+            )
+            remaining_net_units = 0
+        else:
+            pads, common, remaining_net_units = routing_plan[net]
+            layers = planned_layers
         if prepared.request.schema_version == "optimization/v2" and _already_connected(
             prepared, snapshot, net, verified_fill, probe
         ):
             connected.append(net)
+            assert pending_search_units is not None
+            pending_search_units -= remaining_net_units
             continue
-        pads = tuple(pad for pad in snapshot.content.pads if pad.net_id == net)
         if not 2 <= len(pads) <= 32:
             raise OptimizationExecutionError("unsupported_geometry")
-        layers = tuple(sorted(snapshot.content.copper_layers, key=lambda layer: layer.index))
-        common = tuple(
-            layer.id
-            for layer in layers
-            if layer.kind == "signal" and all(layer.id in pad.layer_ids for pad in pads)
-        )
+        branch_units = len(pads) - 1
         routed_source: bytes | None = None
         for layer in common:
-            routing_settings = _reserve_search(prepared, probe, attempts=len(pads) - 1)
+            routing_settings = _reserve_search(
+                prepared,
+                probe,
+                attempts=branch_units,
+                pending_units=pending_search_units,
+            )
+            if pending_search_units is not None:
+                pending_search_units -= branch_units
+                remaining_net_units -= branch_units
             if prepared.request.schema_version == "optimization/v1":
                 probes += 1
             result = AStarRouter().propose(
@@ -391,6 +465,9 @@ def route_targets(
             probe.checkpoint()
             if result.connected is not None:
                 routed_source = source
+                if pending_search_units is not None:
+                    pending_search_units -= remaining_net_units
+                    remaining_net_units = 0
                 break
             if result.candidate is None:
                 continue
@@ -407,9 +484,15 @@ def route_targets(
             candidate_ids.append(result.candidate.candidate_id)
             length += result.candidate.metrics.wire_length_nm
             vias += result.candidate.metrics.vias
+            if pending_search_units is not None:
+                pending_search_units -= remaining_net_units
+                remaining_net_units = 0
             break
         if routed_source is None and len(pads) == 2:
-            routing_settings = _reserve_search(prepared, probe)
+            routing_settings = _reserve_search(prepared, probe, pending_units=pending_search_units)
+            if pending_search_units is not None:
+                pending_search_units -= 1
+                remaining_net_units -= 1
             accesses = [
                 tuple(
                     layer.id
@@ -456,7 +539,15 @@ def route_targets(
                 length += layered.candidate.metrics.wire_length_nm
                 vias += layered.candidate.metrics.vias
         if routed_source is None and len(pads) > 2:
-            routing_settings = _reserve_search(prepared, probe, attempts=len(pads) - 1)
+            routing_settings = _reserve_search(
+                prepared,
+                probe,
+                attempts=branch_units,
+                pending_units=pending_search_units,
+            )
+            if pending_search_units is not None:
+                pending_search_units -= branch_units
+                remaining_net_units -= branch_units
             ordered_pads = tuple(sorted(pads, key=lambda pad: pad.id))
             terminals: list[LayeredTreeTerminal] = []
             for pad in ordered_pads:

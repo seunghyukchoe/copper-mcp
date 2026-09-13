@@ -763,7 +763,7 @@ class LayeredBoardRouter:
                 LayeredRouteFailureCode.INVALID_REQUEST,
                 "requested endpoint layer is not exposed by its pad",
             )
-        if start_pad.center == end_pad.center:
+        if start_pad.center == end_pad.center and start_layer_id == end_layer_id:
             return _diagnostic(
                 LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "coincident route endpoints are unsupported",

@@ -162,6 +162,68 @@ def _two_layer_snapshot(
     return make_snapshot(content)
 
 
+def test_coincident_opposite_side_pads_route_through_legal_off_pad_via():
+    from copper_mcp.routing.layered_candidate_verifier import verify_layered_candidate
+
+    profile = KiCadConstraintProfile(
+        net_classes=(REAL_FIXTURE_NET_CLASS,), default_net_class_id=REAL_FIXTURE_NET_CLASS.id
+    )
+    snapshot = parse_kicad_bytes(
+        (_FIXTURES / "layered-tree-ordinary-4layer.kicad_pcb").read_bytes(), profile
+    ).snapshot
+    assert snapshot is not None
+    net = next(n.id for n in snapshot.content.nets if n.name == "POWER")
+    start, end = sorted(
+        (pad for pad in snapshot.content.pads if pad.net_id == net), key=lambda p: p.id
+    )
+    assert start.center == end.center and start.layer_ids != end.layer_ids
+    request = LayeredRouteRequest(
+        board_revision=snapshot.snapshot_digest,
+        net_id=net,
+        start_pad_id=start.id,
+        end_pad_id=end.id,
+        start_layer_id=start.layer_ids[0],
+        end_layer_id=end.layer_ids[0],
+        grid_step_nm=250_000,
+        settings=LayeredAStarSettings(max_expansions=100_000, max_obstacle_checks=1_000_000),
+    )
+    router = LayeredBoardRouter()
+    result = router.propose(snapshot, request)
+    assert result.candidate is not None, result.diagnostic
+    candidate = result.candidate
+    assert candidate.patch.vias
+    assert all(via.center != start.center for via in candidate.patch.vias)
+    for via in candidate.patch.vias:
+        for pad in (start, end):
+            assert (
+                2 * abs(via.center.x - pad.center.x)
+                >= pad.size_x_nm + via.diameter_nm + 2 * REAL_FIXTURE_NET_CLASS.clearance_nm
+                or 2 * abs(via.center.y - pad.center.y)
+                >= pad.size_y_nm + via.diameter_nm + 2 * REAL_FIXTURE_NET_CLASS.clearance_nm
+            )
+    verified = verify_layered_candidate(candidate, snapshot)
+    assert verified.ok, verified.diagnostic
+    assert router.replay(snapshot, candidate, request).candidate == candidate
+
+
+def test_coincident_same_layer_endpoints_remain_refused():
+    snapshot = _two_layer_snapshot(start=(5000, 5000), end=(5000, 5000))
+    result = LayeredBoardRouter().propose(
+        snapshot,
+        LayeredRouteRequest(
+            board_revision=snapshot.snapshot_digest,
+            net_id=NET_ID,
+            start_pad_id="pad:01",
+            end_pad_id="pad:02",
+            start_layer_id=LAYER_ID,
+            end_layer_id=LAYER_ID,
+            grid_step_nm=1000,
+        ),
+    )
+    assert result.candidate is None
+    assert result.diagnostic.code is LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY
+
+
 def _keepout(
     identifier: str,
     layer_ids: tuple[str, ...],

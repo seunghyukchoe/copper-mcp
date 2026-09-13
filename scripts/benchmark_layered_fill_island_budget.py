@@ -29,7 +29,7 @@ from scripts.benchmark_layered_fill_obstacles import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = Path("scripts/benchmark_layered_fill_island_budget.py")
-OUTPUT = ROOT / "benchmarks/results/routing/2026-09-09-layered-fill-island-budget-v1.json"
+OUTPUT = ROOT / "benchmarks/results/routing/2026-09-13-layered-fill-island-budget-v1.json"
 SCHEMA = "copper-mcp/benchmark/layered-fill-island-budget/v1"
 BOUND_IMPLEMENTATION_FILES = (
     "src/copper_mcp/routing/layered_board_adapter.py",

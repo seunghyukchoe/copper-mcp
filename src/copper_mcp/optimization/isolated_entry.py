@@ -123,6 +123,14 @@ def main() -> None:
         values["workspace"] = Path(values["workspace"])
         if values["kicad_cli"] is not None:
             values["kicad_cli"] = Path(values["kicad_cli"])
+        for name in (
+            "optimization_docker_executable",
+            "optimization_docker_socket",
+            "optimization_docker_config_root",
+            "optimization_specctra_python",
+        ):
+            if values[name] is not None:
+                values[name] = Path(values[name])
         values.update(
             allow_apply=False,
             allow_live_apply=False,

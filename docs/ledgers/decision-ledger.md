@@ -489,3 +489,75 @@ reached 119.259s of its 120s limit before a refill timeout, and the interrupted 
 96.212s. Host contention was severe; no deadline was relaxed and no failure was restamped as a pass.
 This is a draft feature checkpoint, not a main merge, completed v0.13 release or five-area readiness
 claim. Protected review/CI and fresh validation remain gates.
+
+2026-09-12 D-285 external workflow integration continuation: controlled MCP/isolation tests now
+exercise SRJ and FreeRouting normalization/disposal and immutable package export. These are
+synthetic router/native-authority controls, not native capability evidence. The real pinned SRJ
+run exposed canonical layer-alias changes and sub-nanometre coordinates; the producer now supplies
+the exact expected aliases, and coordinate-only nearest-nanometre conversion is explicitly bound
+in v2 execution/provenance metadata. Exact dimensions and mandatory post-conversion checks remain.
+Independent review accepted the numerical policy and required mandatory conversion disclosure;
+that closure was applied and reviewed. Nineteen focused controls and typing of 186 source files
+passed. Real acceptance remains unsuccessful: the captured solver output asserts the coincident
+opposite-side POWER terminals are connected but emits no connecting copper. That assertion is
+refused; no net was dropped and no via was fabricated. The existing internal path is being
+diagnosed on the same full target set before implementing bounded hybrid recovery. No release,
+main merge, engineering certification or readiness percentage follows from this checkpoint.
+
+2026-09-12 D-285 complete native routing/placement and FreeRouting workflow checkpoint: the
+owned four-layer board retains both TREE and POWER in native full-board intake. Coincident
+opposite-side terminals now use a structurally checked off-pad via; v2 search reservations
+leave proportional work for later nets and fallbacks without refunds, larger limits or cross-slot
+transfers. Internal and external repair reuse precharged indexed placement-scope checks.
+The final-source integrated MCP/native placement, routing, fresh-fill and repair suite passed
+10 cases in 57.13s. The pinned FreeRouting 2.2.4 image and KiCad 10.0.5 completed both placement
+slots and repeated runs in 31.71s, with zero hard DRC errors, identical candidate/judge digests,
+and original files unchanged. These are owned development controls, not held-out or physics
+acceptance. Source/input binding is `sha256:84005be1971f2c9aab826e165ba72dd7a07604c1ac232ac7cbb8fe18a3a5678f`
+from the existing 313-entry executable/replay-input manifest; it does not inventory test files.
+
+Specctra handling now locks original copper only in disposable native instances, restores its
+lock bits, verifies complete identity/geometry preservation, classifies every imported addition,
+and reconstructs only new reduced-scope target copper. Packages disclose whole-board proposal
+scope and accepted/discarded counts/digests, with separate added/total copper metrics. Native SES
+diagnostics justified empty `was_is`, the fixed base name and identical repeated padstacks;
+conflicting definitions and pin swaps still refuse. Independent correctness/security review
+accepted allocation, disposal, SES handling and shared scope; Ponytail found no unnecessary
+complexity in the reviewed deltas. A proposed case-insensitivity finding was withdrawn after
+tracing the native lexer's preserved spelling and case-sensitive `FindPADSTACK` implementation.
+
+Preserved failures remain failures: the first real FreeRouting run refused unsupported SES
+metadata (13.52s); after its demonstrated parser fix, a test-only Python-object/JSON decoding
+mismatch stopped the next run (16.71s). The retained package verified with the JSON decoder,
+then the corrected full repeat test passed. There was no identical full-suite retry loop or
+deadline relaxation. Full integration/hosted main validation, SRJ incomplete-output hybrid
+recovery, the three ordinary development profiles and held-out/release acceptance remain open.
+No main landing, human consent, live apply, engineering certification or readiness score is claimed.
+
+2026-09-14 D-285 broad-validation follow-up: the four-worker fast suite exposed a production
+dependency on a benchmark-only numeric helper (1 failed, 4337 passed, 8 skipped, 130.31s).
+The benchmark-isolation guard was retained; production now uses a bounded standard-library
+Decimal conversion. Independent review exposed inherited exponent/trap state as an exactness
+problem; an explicit private context and tiny-value/ambient-context regressions close that case.
+The next fast run exposed stale fill-budget source evidence (1 failed, 6052 passed, 58 skipped,
+176.77s). B-144 records a fresh execution with unchanged resource gates and preserved old reports.
+The combined production-boundary and historical/current calibration controls pass 56 tests in
+19.87s. Security scanning and dependency audit pass. These are demonstrated fixes before another
+broad attempt, not repeated same-source full runs or waiver of the failed results. Complete
+validation and protected feature landing remain pending.
+
+2026-09-14 D-285 complete-validation checkpoint: staged tree
+`7f838aaed576ba5f19614a561655b6a3e4fcfbb1` passed `make check` with canonical Python 3.12,
+four loadfile workers and coverage: 6248 passed, 76 skipped in 382.40s, 88% aggregate coverage,
+plus lint/metadata, strict typing, secret/dependency checks and wheel/sdist builds. The first
+preflight invocation stopped before tests at a duplicate continuation heading; the heading was
+corrected without allocating another benchmark decision and the failed log was retained.
+
+Independent review then closed the last numeric-context defect by removing a redundant
+context-sensitive absolute-value check after the tighter exact extent bound. A valid dimension
+inside the hostile-context regression proves the closure. This final two-line code/test delta
+passed 82 focused controls with two real-router opt-in skips in 19.66s, plus Ruff and strict typing.
+The full result above belongs to its stated preceding tree, not to a newly invented full rerun
+after that delta. Ponytail and correctness reviews accepted the narrowly scoped closure.
+Hosted validation of the resulting commit, protected main landing and the broader program gates
+remain separate. No release or five-area completion claim is made.

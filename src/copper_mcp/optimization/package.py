@@ -76,6 +76,77 @@ class BackendProvenance(ClosedModel):
     normalized_output_digest: Digest
 
 
+class CoordinateQuantizationV2(ClosedModel):
+    """Declared coordinate conversion, not a clearance or physical-accuracy claim."""
+
+    method: Literal["nearest-nm-half-away-from-zero/v1"] = "nearest-nm-half-away-from-zero/v1"
+    grid_nm: Literal[1] = 1
+    maximum_coordinate_error_pm: Literal[500] = 500
+    coordinate_count: Annotated[int, Field(ge=1, le=32768)]
+    rounded_coordinate_count: Counter
+
+    @model_validator(mode="after")
+    def bounded_count(self) -> CoordinateQuantizationV2:
+        if self.rounded_coordinate_count > self.coordinate_count:
+            raise ValueError("rounded coordinate count exceeds the converted population")
+        return self
+
+
+class SpecctraDisposalV2(ClosedModel):
+    """Whole-board proposal cost and the strictly narrower admitted copper scope."""
+
+    method: Literal["preserve-original-target-only/v1"] = "preserve-original-target-only/v1"
+    proposal_scope: Literal["whole-board"] = "whole-board"
+    original_target_scope_digest: Digest
+    routing_target_scope_digest: Digest
+    original_target_count: Annotated[int, Field(ge=1, le=4096)]
+    routing_target_count: Annotated[int, Field(ge=1, le=4096)]
+    retained_copper_count: Counter
+    accepted_copper_count: Counter
+    discarded_copper_count: Counter
+    accepted_copper_digest: Digest
+    discarded_copper_digest: Digest
+
+    @model_validator(mode="after")
+    def narrowed_scope(self) -> SpecctraDisposalV2:
+        if self.routing_target_count > self.original_target_count:
+            raise ValueError("routing scope exceeds original target scope")
+        if (self.routing_target_count == self.original_target_count) != (
+            self.routing_target_scope_digest == self.original_target_scope_digest
+        ):
+            raise ValueError("routing scope cardinality and identity disagree")
+        return self
+
+
+class BackendProvenanceV2(BackendProvenance):
+    identity_namespace = "copper-mcp/optimization/v2/backend-provenance"
+    image_digest: Digest | None = None
+    router_input_digest: Digest | None = None
+    router_output_digest: Digest | None = None
+    converter_digest: Digest | None = None
+    coordinate_quantization: CoordinateQuantizationV2 | None = None
+    specctra_disposal: SpecctraDisposalV2 | None = None
+
+    @model_validator(mode="after")
+    def external_execution(self) -> BackendProvenanceV2:
+        external = self.backend != "internal-layered-v1"
+        bound = (
+            self.image_digest,
+            self.router_input_digest,
+            self.router_output_digest,
+            self.converter_digest,
+        )
+        if external != all(value is not None for value in bound) or (
+            not external and any(value is not None for value in bound)
+        ):
+            raise ValueError("backend execution provenance is incomplete")
+        if (self.coordinate_quantization is not None) != (self.backend == "simpleroutejson-v1"):
+            raise ValueError("SRJ coordinate quantization must be disclosed")
+        if (self.specctra_disposal is not None) != (self.backend == "freerouting-dsn-ses-v1"):
+            raise ValueError("Specctra whole-board proposal disposal must be disclosed")
+        return self
+
+
 class CandidateBindingV2(CandidateBinding):
     identity_namespace = "copper-mcp/optimization/v2/candidate"
     final_snapshot_digest: Digest
@@ -177,6 +248,80 @@ class SlotWork(ClosedModel):
     )
 
 
+class ExternalRunV2(ClosedModel):
+    """Serialized validated `ContainerRunRecord` plus consumer-side bindings."""
+
+    identity_namespace = "copper-mcp/optimization/v2/external-run"
+    backend: Backend
+    version: BackendVersion
+    status: Literal[
+        "success",
+        "daemon_unavailable",
+        "image_unavailable",
+        "cancelled",
+        "deadline_exceeded",
+        "output_limit_exceeded",
+        "empty_output",
+        "process_io_failed",
+        "exited_nonzero",
+        "launch_failed",
+        "cleanup_failed",
+    ]
+    image_digest: Digest
+    image_identity_kind: Literal["local_image_id", "repo_digest"]
+    command_digest: Digest | None
+    input_digest: Digest | None
+    output_digest: Digest | None
+    input_bytes: Counter
+    output_bytes: Counter
+    exit_code: Annotated[int, Field(ge=-255, le=255)] | None
+    executable_digest: Digest | None
+    settings_digest: Digest
+    converter_digest: Digest | None = None
+    normalized_route_digest: Digest | None = None
+    coordinate_quantization: CoordinateQuantizationV2 | None = None
+    specctra_disposal: SpecctraDisposalV2 | None = None
+    charge_status: Literal["charged"] = "charged"
+
+    @model_validator(mode="after")
+    def normalized_pair(self) -> ExternalRunV2:
+        if (self.converter_digest is None) != (self.normalized_route_digest is None):
+            raise ValueError("external run normalization binding is incomplete")
+        if (self.coordinate_quantization is not None) != (
+            self.backend == "simpleroutejson-v1" and self.normalized_route_digest is not None
+        ):
+            raise ValueError("normalized SRJ coordinate quantization must be disclosed")
+        if (self.specctra_disposal is not None) != (
+            self.backend == "freerouting-dsn-ses-v1" and self.normalized_route_digest is not None
+        ):
+            raise ValueError("normalized Specctra proposal disposal must be disclosed")
+        if (
+            self.specctra_disposal is not None
+            and self.specctra_disposal.accepted_copper_digest != self.normalized_route_digest
+        ):
+            raise ValueError("Specctra accepted copper differs from the normalized route")
+        if self.status == "success":
+            if (
+                any(
+                    value is None
+                    for value in (
+                        self.command_digest,
+                        self.input_digest,
+                        self.output_digest,
+                        self.exit_code,
+                        self.executable_digest,
+                    )
+                )
+                or self.exit_code != 0
+                or self.input_bytes < 1
+                or self.output_bytes < 1
+            ):
+                raise ValueError("successful external run evidence is incomplete")
+        elif self.normalized_route_digest is not None:
+            raise ValueError("failed external run claims normalized copper")
+        return self
+
+
 class AllocationBasis(ClosedModel):
     limits: ResourceLimitsV2
     used_expansions: Counter
@@ -242,6 +387,7 @@ class ComparisonOutcome(ClosedModel):
     metrics: ObjectiveMetricsV2 | None
     route_probes: Counter | None
     charged: SlotWork
+    external_runs: Annotated[tuple[ExternalRunV2, ...], Field(max_length=1)] = ()
 
     @model_validator(mode="after")
     def observed(self) -> ComparisonOutcome:
@@ -254,6 +400,16 @@ class ComparisonOutcome(ClosedModel):
             raise ValueError("successful probe accounting is inconsistent")
         if self.route_probes is not None and self.route_probes > self.charged.route_attempts:
             raise ValueError("comparison work was not charged")
+        if self.external_runs:
+            run = self.external_runs[0]
+            if (
+                self.charged.route_attempts < 1
+                or self.charged.external_output_bytes < run.output_bytes
+                # Normalization may succeed before connectivity or engineering checks refuse.
+                # Retain that execution evidence without making the failed slot reviewable.
+                or (ready and run.normalized_route_digest is None)
+            ):
+                raise ValueError("comparison external run is inconsistent")
         return self
 
 
@@ -402,6 +558,9 @@ class OptimizationPackageV2(_OptimizationPackageFields):
     zone_fill: CandidateFillBinding | None = None
     fill_round_count: Counter = 0
     repair: CopperRepairBinding | None = None
+    backend_provenance: Annotated[
+        tuple[BackendProvenanceV2, ...], Field(min_length=1, max_length=32)
+    ]
 
     def _allows_zero_probe_identity(self, request: AnyOptimizationRequest) -> bool:
         """Structural half of the v2 identity exception; the worker also checks raw equality."""
@@ -496,6 +655,42 @@ class OptimizationPackageV2(_OptimizationPackageFields):
             or selected[0].status != "reviewable"
         ):
             raise ValueError("selected comparison result is inconsistent")
+        external = tuple(
+            row for row in self.backend_provenance if row.backend != "internal-layered-v1"
+        )
+        runs = tuple(row.external_runs for row in self.comparison.outcomes)
+        if external:
+            selected_runs = selected[0].external_runs
+            run = selected_runs[0] if len(selected_runs) == 1 else None
+            provenance = external[0] if len(external) == 1 else None
+            if (
+                run is None
+                or provenance is None
+                or run.normalized_route_digest is None
+                or run.backend != provenance.backend
+                or run.version != provenance.version
+                or run.executable_digest != provenance.executable_digest
+                or run.image_digest != provenance.image_digest
+                or run.command_digest != provenance.command_digest
+                or run.settings_digest != provenance.settings_digest
+                or run.input_digest != provenance.router_input_digest
+                or run.output_digest != provenance.router_output_digest
+                or run.converter_digest != provenance.converter_digest
+                or run.coordinate_quantization != provenance.coordinate_quantization
+                or run.specctra_disposal != provenance.specctra_disposal
+            ):
+                raise ValueError("selected external attempt lacks bound execution provenance")
+            if any(
+                row.status == "reviewable"
+                and not (
+                    len(row.external_runs) == 1
+                    and row.external_runs[0].normalized_route_digest is not None
+                )
+                for row in self.comparison.outcomes
+            ):
+                raise ValueError("external comparison run evidence is inconsistent")
+        elif any(item for item in runs):
+            raise ValueError("internal comparison invents external attempts")
         others = tuple(
             sorted(
                 row.candidate_id
@@ -535,6 +730,21 @@ class OptimizationPackageV2(_OptimizationPackageFields):
             and self.judge.project_evidence.libraries_digest != request.project_libraries_digest
         ):
             raise OptimizationError("optimization project libraries were changed")
+        if any(
+            run.backend not in request.allowed_backends
+            or run.settings_digest != request.routing_profile_digest
+            or (
+                run.specctra_disposal is not None
+                and (
+                    run.specctra_disposal.original_target_count != request.target_net_count
+                    or run.specctra_disposal.original_target_scope_digest
+                    != request.target_net_scope_digest
+                )
+            )
+            for row in self.comparison.outcomes
+            for run in row.external_runs
+        ):
+            raise OptimizationError("optimization comparison execution differs from its request")
         if any(
             row.metrics is not None
             and (

@@ -32,28 +32,31 @@ _FIXTURE = Path(__file__).parent / "fixtures/route-candidate/layered-tree-ordina
 @pytest.mark.real_kicad
 @pytest.mark.skipif(not _CONFIGURED_CLI, reason="requires explicitly configured real KiCad")
 @pytest.mark.parametrize(
-    "version,movement,input_mode",
+    "version,movement,input_mode,complete_targets",
     [
-        ("optimization/v1", False, "observed-snapshot"),
-        ("optimization/v2", False, "observed-snapshot"),
-        ("optimization/v2", True, "observed-snapshot"),
-        ("optimization/v2", True, "native-full-board"),
+        ("optimization/v1", False, "observed-snapshot", False),
+        ("optimization/v2", False, "observed-snapshot", False),
+        ("optimization/v2", True, "observed-snapshot", False),
+        ("optimization/v2", True, "native-full-board", False),
+        ("optimization/v2", True, "native-full-board", True),
     ],
     ids=[
         "v1-routing",
         "v2-routing",
         "v2-placement-and-routing",
         "v2-native-full-board-placement-and-routing",
+        "v2-complete-two-net-board",
     ],
 )
 def test_mcp_routes_complete_multilayer_tree_and_exports_without_apply(
-    tmp_path, version, movement, input_mode
+    tmp_path, version, movement, input_mode, complete_targets
 ):
     source = _FIXTURE.read_bytes()
     assert source.count(b'(net "POWER")') == 2
-    source = source.replace(b'(net "POWER")', b'(net "BLOCKER_F")', 1).replace(
-        b'(net "POWER")', b'(net "BLOCKER_B")', 1
-    )
+    if not complete_targets:
+        source = source.replace(b'(net "POWER")', b'(net "BLOCKER_F")', 1).replace(
+            b'(net "POWER")', b'(net "BLOCKER_B")', 1
+        )
     board = tmp_path / "board.kicad_pcb"
     board.write_bytes(source)
     project = board.with_suffix(".kicad_pro")
@@ -200,7 +203,9 @@ def test_mcp_routes_complete_multilayer_tree_and_exports_without_apply(
             package = exported["package"]
             assert package["schema_version"] == version
             assert package["binding"]["board_revision"] == launch["expect_board_revision"]
-            assert package["metrics"]["fully_connected_target_nets"] == 1
+            assert package["metrics"]["fully_connected_target_nets"] == (
+                2 if complete_targets else 1
+            )
             assert package["metrics"]["hard_drc_errors"] == 0
             assert package["metrics"]["via_count"] > 0
             if input_mode == "native-full-board":

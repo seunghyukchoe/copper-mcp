@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from typing import Any
 
+import pytest
+
 from scripts import benchmark_layered_fill_island_budget as benchmark
 
 
@@ -17,17 +19,35 @@ def _artifact() -> dict[str, Any]:
     return value
 
 
-def test_original_calibration_remains_bound_to_its_original_source() -> None:
+@pytest.mark.parametrize(
+    "date,revision,run_id,domain_passed",
+    [
+        (
+            "2026-08-17",
+            "ddd1819b68ac50c092b5bf9ee8f79dbb42042092",
+            "sha256:99cc07e4047e95beb0f82be8c10da8641ed33f0ad36d87376007cb887e57d5a6",
+            False,
+        ),
+        (
+            "2026-09-09",
+            "0a57d6142a9a4cddc71ee9e90105194bbf8a423d",
+            "sha256:0e5578b780cbcbe0a919bc44d22c2f2c5ad75445f7e0992bb56e2722cb5d8d1f",
+            True,
+        ),
+    ],
+)
+def test_original_calibration_remains_bound_to_its_original_source(
+    date, revision, run_id, domain_passed
+) -> None:
     original = json.loads(
         (
-            benchmark.ROOT
-            / "benchmarks/results/routing/2026-08-17-layered-fill-island-budget-v1.json"
+            benchmark.ROOT / f"benchmarks/results/routing/{date}-layered-fill-island-budget-v1.json"
         ).read_bytes()
     )
     recorded = original.pop("run_id")
-    assert recorded == "sha256:99cc07e4047e95beb0f82be8c10da8641ed33f0ad36d87376007cb887e57d5a6"
+    assert recorded == run_id
     assert recorded == benchmark._canonical_digest(original)
-    assert original["metrics"]["gates"]["fill_domain_ceiling_single_and_split"] is False
+    assert original["metrics"]["gates"]["fill_domain_ceiling_single_and_split"] is domain_passed
     configuration = original["configuration"]
     files = {
         **configuration["implementation_sha256"],
@@ -38,7 +58,7 @@ def test_original_calibration_remains_bound_to_its_original_source() -> None:
     assert git is not None
     for name, expected in files.items():
         source = subprocess.run(  # noqa: S603 - fixed commit and digest-pinned artifact paths
-            [git, "show", f"ddd1819b68ac50c092b5bf9ee8f79dbb42042092:{name}"],
+            [git, "show", f"{revision}:{name}"],
             cwd=benchmark.ROOT,
             check=True,
             capture_output=True,

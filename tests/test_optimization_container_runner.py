@@ -279,6 +279,28 @@ def test_nonzero_exit_is_not_success(tmp_path: Path) -> None:
     assert status is None and process.returncode == 17
 
 
+@pytest.mark.parametrize("exit_code,output", [(17, b"partial"), (-15, b"signal"), (0, b"x" * 300)])
+def test_failed_run_keeps_bounded_byte_accounting_but_discards_payload(tmp_path, exit_code, output):
+    value, _ = runner(
+        tmp_path,
+        [
+            FakeProcess(),
+            image_inspect(),
+            FakeProcess(returncode=exit_code, stdout=output),
+            FakeProcess(),
+        ],
+    )
+    result = value.run(request())
+    assert result.record.status is (
+        ContainerRunStatus.OUTPUT_LIMIT_EXCEEDED
+        if len(output) > 256
+        else ContainerRunStatus.EXITED_NONZERO
+    )
+    assert result.output is None and result.record.output_digest is None
+    assert result.record.output_bytes == min(len(output), 256)
+    assert result.record.exit_code == exit_code
+
+
 def test_held_descendant_pipes_prevent_success_until_deadline(tmp_path: Path) -> None:
     script = (
         "import subprocess,sys; "

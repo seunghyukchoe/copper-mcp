@@ -169,6 +169,14 @@ def run_isolated_job(
     values = asdict(settings)
     values["workspace"] = str(settings.workspace)
     values["kicad_cli"] = None if settings.kicad_cli is None else str(settings.kicad_cli)
+    for name in (
+        "optimization_docker_executable",
+        "optimization_docker_socket",
+        "optimization_docker_config_root",
+        "optimization_specctra_python",
+    ):
+        value = getattr(settings, name)
+        values[name] = None if value is None else str(value)
     deadline = prepared.started_at + prepared.request.limits.max_runtime_ms / 1000
     payload = json.dumps(
         {

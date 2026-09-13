@@ -106,6 +106,14 @@ class Settings:
     # Operator attestation that the connected local MCP host presents elicitation to a human.
     # Capability negotiation alone is insufficient: an agent client can auto-answer elicitation.
     optimization_host_confirmation: bool = False
+    # Operator-only external-router configuration. Requests select a registered backend identity;
+    # they never supply executables, sockets, images, command fragments, or converter paths.
+    optimization_docker_executable: Path | None = None
+    optimization_docker_socket: Path | None = None
+    optimization_docker_config_root: Path | None = None
+    optimization_freerouting_image: str | None = None
+    optimization_simpleroutejson_image: str | None = None
+    optimization_specctra_python: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -300,6 +308,15 @@ class Settings:
             # consent that authorizes mutating a document the operator has open in front of
             # them, and no ambiguous spelling may switch it on.
             raise ConfigurationError('COPPER_MCP_ALLOW_LIVE_APPLY must be exactly "0" or "1"')
+
+        def optional_path(name: str) -> Path | None:
+            raw = os.environ.get(name, "").strip()
+            return Path(raw).expanduser() if raw else None
+
+        def optional_text(name: str) -> str | None:
+            raw = os.environ.get(name, "").strip()
+            return raw or None
+
         return cls(
             workspace=workspace,
             transport=transport,
@@ -332,4 +349,14 @@ class Settings:
             allow_live_ipc=raw_allow_live_ipc == "1",
             allow_live_apply=raw_allow_live_apply == "1",
             optimization_host_confirmation=raw_host_confirmation == "1",
+            optimization_docker_executable=optional_path("COPPER_MCP_OPTIMIZATION_DOCKER"),
+            optimization_docker_socket=optional_path("COPPER_MCP_OPTIMIZATION_DOCKER_SOCKET"),
+            optimization_docker_config_root=optional_path(
+                "COPPER_MCP_OPTIMIZATION_DOCKER_CONFIG_ROOT"
+            ),
+            optimization_freerouting_image=optional_text(
+                "COPPER_MCP_OPTIMIZATION_FREEROUTING_IMAGE"
+            ),
+            optimization_simpleroutejson_image=optional_text("COPPER_MCP_OPTIMIZATION_SRJ_IMAGE"),
+            optimization_specctra_python=optional_path("COPPER_MCP_OPTIMIZATION_SPECCTRA_PYTHON"),
         )

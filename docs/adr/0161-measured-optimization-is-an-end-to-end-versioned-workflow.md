@@ -214,3 +214,49 @@ measurement calls; v2 roundtrip/reopen, fair budgets, failed controls, signed/un
 project/candidate freshness, cancellation and malformed-child refusal. Real-host approval,
 three-profile development demonstrations, external conversion/fill/repair and held-out quality
 remain required portions of the milestone/program, not implied by unit success.
+
+### External coordinate conversion and refusal evidence
+
+The SRJ adapter supplies canonical physical-layer aliases (`layers`, `zLayers`, `__zLayers`)
+required by the pinned solver. Its returned source problem must still match exactly. The real
+solver emits sub-nanometre coordinate values; retaining its extra decimals in a KiCad file would
+delegate truncation to the native reader. Instead, only external coordinates use the declared
+`nearest-nm-half-away-from-zero/v1` conversion before exact integer-nanometre serialization.
+Widths and drill/diameter values retain exact admission. The versioned package records the 1 nm
+grid, 500 pm per-coordinate conversion bound, coordinate population and rounded count; selected
+provenance must agree with its execution record. These facts are not clearance or physical
+calibration evidence. See [KiCad board coordinates](https://dev-docs.kicad.org/en/file-formats/sexpr-intro/#_board_coordinates).
+
+After conversion, layer transitions, complete reconstructed connectivity, applicable fresh fill
+and mandatory native checks still govern the candidate. A point-only `connectsTo` assertion does
+not create a wire or via. A successful normalization followed by failed connectivity or judgement
+retains its execution evidence, but has no reviewable candidate. Failed router output consumes
+its bounded retained-prefix allocation even though its payload is discarded. V1 interpretation
+and all approval/apply boundaries are unchanged. Hybrid recovery and real whole-board acceptance
+remain open until demonstrated, not implied by this conversion contract.
+
+### Whole-board external proposals and retained copper
+
+The pinned headless FreeRouting process proposes for the whole exported board; do not describe
+it as backend-scoped routing. Lock original copper only in disposable native board instances
+before DSN export and SES import, then restore its original lock bits. Validate original IDs,
+types, geometry, layers, nets and lock states, together with all non-copper modeled state. Missing
+or modified originals refuse. Only supported new copper on the reduced routing target set is
+reconstructed onto the original private source; known-net out-of-scope additions are discarded.
+Unknown nets, unsupported geometry/rules and duplicate geometry refuse rather than being hidden
+by disposal. Candidate connectivity, fresh applicable fill and full native checks remain mandatory.
+
+V2 execution/provenance records disclose whole-board proposal scope, original/reduced target
+digests and counts, retained copper count, and accepted/discarded copper counts and digests.
+Execution and selected provenance must agree. Added-copper metrics use only admitted additions;
+complete target-net metrics continue to include retained copper. V1 is not reinterpreted.
+
+The pinned SES grammar uses `base_design input` and may emit empty `was_is` and repeated identical
+via-padstack definitions. Admit those cases, refuse pin swaps and conflicting definitions, and
+preserve identifier spelling: the pinned native importer uses case-sensitive padstack lookup.
+Parser metadata alone does not establish lookup semantics. Private import is never apply authority.
+
+Internal v2 search preplans bounded branch units for every common-layer attempt and layered
+fallback, then allocates remaining proposal/replay reservations proportionally. A successful or
+already-connected net removes only its unreserved future units. Failed reservations remain spent;
+no unused allowance transfers between placement slots, and no global or per-slot limit increases.
