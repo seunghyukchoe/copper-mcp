@@ -6,6 +6,7 @@ import json
 import os
 import select
 import signal
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -20,6 +21,43 @@ from copper_mcp.optimization.isolated import run_isolated_job
 from copper_mcp.optimization.isolated_entry import _inventory, _SourceOnlyFinder
 from copper_mcp.optimization.repository import OptimizationJobRepository
 from copper_mcp.routing import AStarRouter
+
+
+def test_cancellation_poll_does_not_compete_with_the_child_writer(launch, tmp_path, monkeypatch):
+    from copper_mcp.optimization import isolated
+
+    class ObservedReadOnlyPollError(RuntimeError):
+        pass
+
+    settings = Settings(workspace=tmp_path)
+    prepared = prepare_optimization(launch, settings)
+    owner = "sha256:" + "a" * 64
+    with OptimizationJobRepository(tmp_path / "poll.sqlite3") as repository:
+        record = repository.create(prepared.request, owner)
+        repository._connection.execute("PRAGMA busy_timeout = 0")
+        writer = sqlite3.connect(repository.path, isolation_level=None)
+        try:
+            writer.execute("BEGIN IMMEDIATE")
+
+            def exchange(_payload, _deadline, cancelled):
+                assert cancelled() is False
+                raise ObservedReadOnlyPollError
+
+            monkeypatch.setattr(isolated, "_exchange", exchange)
+            with pytest.raises(ObservedReadOnlyPollError):
+                run_isolated_job(
+                    repository,
+                    record.job_id,
+                    prepared,
+                    owner,
+                    settings,
+                    launch,
+                    lambda *_args: None,
+                    lambda *_args: None,
+                )
+        finally:
+            writer.rollback()
+            writer.close()
 
 
 def owned_guard_command(command, worker_code):
@@ -388,10 +426,10 @@ def test_parent_deadline_covers_decoding_and_callback_delivery(
 
         observed, retained = [], []
 
-        get = repository.get
+        cancellation_requested = repository.cancellation_requested
 
         def late_status_read(*args, **kwargs):
-            result = get(*args, **kwargs)
+            result = cancellation_requested(*args, **kwargs)
             if retained:
                 expire("final_status_read")
             return result
@@ -404,7 +442,7 @@ def test_parent_deadline_covers_decoding_and_callback_delivery(
         monkeypatch.setattr(isolated._Response, "model_validate_json", classmethod(late_parse))
         monkeypatch.setattr(isolated.base64, "b64decode", late_decode)
         monkeypatch.setattr(isolated.hashlib, "sha256", late_hash)
-        monkeypatch.setattr(repository, "get", late_status_read)
+        monkeypatch.setattr(repository, "cancellation_requested", late_status_read)
         result = run_isolated_job(
             repository,
             record.job_id,
