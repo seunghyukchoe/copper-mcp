@@ -30,7 +30,7 @@ def _artifact() -> dict[str, Any]:
         ),
         (
             "2026-09-09",
-            "0a57d6142a9a4cddc71ee9e90105194bbf8a423d",
+            "33bad62ea794ab54079a518d2dd7a35671a48b2f",
             "sha256:0e5578b780cbcbe0a919bc44d22c2f2c5ad75445f7e0992bb56e2722cb5d8d1f",
             True,
         ),
@@ -64,6 +64,23 @@ def test_original_calibration_remains_bound_to_its_original_source(
             capture_output=True,
             timeout=10,
         ).stdout
+        if date == "2026-09-09":
+            # The original PR-only commit is not reachable after a squash merge. Recover its
+            # exact bytes from durable main history; the original report hashes remain authority.
+            changes = {
+                "scripts/benchmark_layered_fill_island_budget.py": (
+                    b"2026-09-13-layered-fill-island-budget-v1.json",
+                    b"2026-09-09-layered-fill-island-budget-v1.json",
+                ),
+                "src/copper_mcp/routing/layered_board_adapter.py": (
+                    b"if start_pad.center == end_pad.center and start_layer_id == end_layer_id:",
+                    b"if start_pad.center == end_pad.center:",
+                ),
+            }
+            if name in changes:
+                current, historical = changes[name]
+                assert source.count(current) == 1
+                source = source.replace(current, historical, 1)
         assert "sha256:" + hashlib.sha256(source).hexdigest() == expected
 
 
