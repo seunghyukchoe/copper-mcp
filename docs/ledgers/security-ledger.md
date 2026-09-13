@@ -952,3 +952,29 @@ drill-only copper; it is enabled only for0.5. The duplicate material scan identi
 was removed while direct connectivity callers retain the check. No native/apply/consent authority
 is weakened. Current native controls are development evidence only; full validation, final
 integrated review and protected main CI remain outstanding for this feature.
+
+2026-09-14 SEC-003 PR307 external review correction: despite green hosted checks, review identified
+a non-owner pad placed wholly inside a cutout being labeled inconclusive and therefore considered
+legal. Reproduction confirmed this for axis-aligned and45-degree pads; the latter has no conservative
+core. The shared legalizer now rejects whole-bound containment in a hole or any positive core contact.
+Direct legalizer and production preview controls both refuse without a candidate or apply token.
+The existing outer-edge/0.4 behavior is unchanged. Focused placement controls passed97 cases and31
+subtests; the positive native placement/routing cutout workflow passed7.57s after the fix. Earlier
+green checks and review did not prove this missing negative case; final validation and re-review
+are required before merge. No board was applied and no genuine consent is claimed.
+
+2026-09-14 SEC-003 closed-boundary refinement: a45-degree6x8mm pad inside a10x10mm cutout
+has a conservative circular AABB exactly equal to the hole bounds. The strict polygon-containment
+test still returned inconclusive; its new regression failed before switching to inclusive exact
+rectangular bounds. All three non-owner cases now return `illegal_placement` through both the
+legalizer and production preview, without candidates or tokens. Independent correctness/security
+and Ponytail review accepted this proof;101 focused cases and31 subtests passed, strict mypy and
+Ruff passed, and the positive native workflow passed7.38s. Product/required-domain authority and
+the no-hole outer-edge policy are unchanged. The corrected full integration gate remains pending.
+
+2026-09-14 SEC-003 P1 closure verification: tree
+`efde5ccd13b57a8bec14ffd3b38fed23d2a97d4f` passed complete `make check`:6296 passed,79 skipped,
+380.15s,88% coverage, canonical Python3.12 and four workers, plus metadata/lint, strict mypy,
+secret/dependency audit and wheel/sdist builds. This append records the result without changing
+tested product or test bytes. The old PR head's green CI is not evidence for the correction;
+new-head hosted validation and protected merge/main verification remain required.

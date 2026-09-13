@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Placement rejects pads wholly inside a board cutout, including rotated pads without a
+  conservative core; those proven missing-material placements cannot become applicable previews.
+
 - Hybrid deadline stops retain the actual failed attempt without inventing another backend;
   truncated retryable routing histories are rejected before package review.
 

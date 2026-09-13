@@ -28,6 +28,14 @@ retaining a hole. Ownership is not KiCad's lock flag. Scope admission, search, l
 projection prevent moving the owner; the native placement renderer independently refuses moving
 any footprint carrying Edge.Cuts. Other declared footprints can still move.
 
+Every pad must also respect the cutout's missing material: an over-approximating pad bound within
+the closed rectangular hole proves the pad is removed, and any under-approximating core contact
+proves intrusion. Inclusive bounds also cover a rotated pad whose enclosing circle reaches the
+cut boundary while its actual copper remains inside.
+Both are `violated`, not `inconclusive`, even when native edge-only DRC misses a pad wholly remote
+from the cut edge. This is an explicit material constraint, not an asserted native parity result.
+The pre-existing outer-edge bracket and no-hole behavior remain unchanged.
+
 A native multi-layer solid zone is represented by per-layer Zone objects with an explicit
 `source_zone_id`, identical source-derived rules and boundary, and unique source/layer identities.
 The native source zone is never split or rewritten. Fresh fill still runs on the complete native

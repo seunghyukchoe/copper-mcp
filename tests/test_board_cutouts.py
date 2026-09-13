@@ -354,6 +354,50 @@ def test_cutout_owner_stays_fixed_while_other_footprints_remain_movable():
     assert refused.candidate is None
 
 
+@pytest.mark.parametrize("pad_angle,pad_size", [(0, b"2 2"), (45, b"2 2"), (45, b"6 8")])
+def test_non_owner_placement_wholly_inside_cutout_is_illegal(pad_angle, pad_size, tmp_path):
+    from copper_mcp.config import Settings
+    from copper_mcp.placement import build_placement_view, parse_placement_intent
+    from copper_mcp.placement.legalizer import evaluate_placement
+    from copper_mcp.placement_preview import preview_placement
+
+    source = (
+        FIXTURE.read_bytes()
+        .replace(
+            b'(pad "1" smd rect (at 0 0)', f'(pad "1" smd rect (at 0 0 {pad_angle})'.encode(), 1
+        )
+        .replace(b"(size 2 2)", b"(size " + pad_size + b")", 1)
+    )
+    converted = parse_kicad_bytes(source, profile())
+    assert converted.snapshot is not None
+    snapshot = converted.snapshot
+    view = build_placement_view(source, snapshot)
+    subject = next(item.ref_id for item in view.footprints.values() if item.origin.x == 10_000_000)
+    request = {
+        "board": FIXTURE.name,
+        "subjects": [subject],
+        "constraints": {
+            "clearance_nm": 250_000,
+            "track_width_nm": 250_000,
+            "via_diameter_nm": 800_000,
+            "via_drill_nm": 400_000,
+        },
+        "proposals": [{"subject": subject, "offset_x_nm": 15_000_000}],
+    }
+    intent = parse_placement_intent(request)
+    result = evaluate_placement(intent, snapshot, view)
+    assert result.candidate is None
+    assert result.diagnostic is not None and result.diagnostic.code == "illegal_placement"
+    assert result.diagnostic.legality is not None
+    assert result.diagnostic.legality.outline_containment == "violated"
+    (tmp_path / FIXTURE.name).write_bytes(source)
+    preview = preview_placement(request, Settings(workspace=tmp_path))
+    assert preview.candidate is None and preview.apply_token is None
+    assert preview.diagnostic is not None and preview.diagnostic.code == "illegal_placement"
+    assert preview.diagnostic.legality is not None
+    assert preview.diagnostic.legality.outline_containment == "violated"
+
+
 @pytest.mark.parametrize(
     "replacement",
     [
