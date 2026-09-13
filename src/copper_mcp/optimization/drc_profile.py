@@ -1,4 +1,8 @@
-"""Private v2 promotion of exactly the five native-default suppressed DRC checks."""
+"""Private v2 DRC profiles, with an explicit pinned native editable-error floor.
+
+https://gitlab.com/kicad/code/kicad/-/blob/18fb9289ff0efdca53c0352ed81a0973f0a6b58c/pcbnew/board_design_settings.cpp
+https://gitlab.com/kicad/code/kicad/-/blob/18fb9289ff0efdca53c0352ed81a0973f0a6b58c/pcbnew/drc/drc_item.cpp
+"""
 
 from __future__ import annotations
 
@@ -25,6 +29,46 @@ DEFAULT_IGNORED_CHECKS = (
 _CheckName = Annotated[str, StringConstraints(min_length=1, max_length=256)]
 _Severity = Literal["warning", "error"]
 
+DrcErrorFloor = Literal["kicad-10.0.5-editable-errors/v1"]
+# Pinned 10.0.5: board_design_settings.cpp defaults, filtered through the editable
+# allItemTypes section of drc/drc_item.cpp. Internal/non-configurable codes are excluded.
+# Source revision: 18fb9289ff0efdca53c0352ed81a0973f0a6b58c.
+NATIVE_ERROR_CHECKS = (
+    "annular_width",
+    "clearance",
+    "copper_edge_clearance",
+    "courtyards_overlap",
+    "creepage",
+    "diff_pair_gap_out_of_range",
+    "diff_pair_uncoupled_length_too_long",
+    "drill_out_of_range",
+    "footprint",
+    "hole_clearance",
+    "invalid_outline",
+    "item_on_disabled_layer",
+    "items_not_allowed",
+    "length_out_of_range",
+    "malformed_courtyard",
+    "microvia_drill_out_of_range",
+    "npth_inside_courtyard",
+    "pth_inside_courtyard",
+    "shorting_items",
+    "skew_out_of_range",
+    "solder_mask_bridge",
+    "starved_thermal",
+    "text_on_edge_cuts",
+    "through_hole_pad_without_hole",
+    "too_many_vias",
+    "track_angle",
+    "track_on_post_machined_layer",
+    "track_segment_length",
+    "track_width",
+    "tracks_crossing",
+    "unconnected_items",
+    "unresolved_variable",
+    "zones_intersect",
+)
+
 
 class DrcProfileBinding(ClosedModel):
     identity_namespace = "copper-mcp/optimization/v2/drc-profile"
@@ -48,6 +92,28 @@ class DrcProfileBinding(ClosedModel):
         ).issubset(DEFAULT_IGNORED_CHECKS):
             raise ValueError("DRC profile promotions are inconsistent")
         return self
+
+
+class NativeErrorFloorBinding(DrcProfileBinding):
+    """Versioned addition to the unchanged five-check profile; no source mutation."""
+
+    identity_namespace = "copper-mcp/optimization/v2/drc-error-floor"
+    error_floor: DrcErrorFloor
+    raised_error_checks: Annotated[tuple[_CheckName, ...], Field(max_length=128)]
+
+    @model_validator(mode="after")
+    def native_error_inventory(self) -> NativeErrorFloorBinding:
+        inventory = dict(self.enabled_inventory)
+        if any(inventory.get(name) != "error" for name in NATIVE_ERROR_CHECKS):
+            raise ValueError("native error floor is incomplete")
+        if tuple(sorted(set(self.raised_error_checks))) != self.raised_error_checks or not set(
+            self.raised_error_checks
+        ).issubset(NATIVE_ERROR_CHECKS):
+            raise ValueError("native error promotions are inconsistent")
+        return self
+
+
+AnyDrcProfileBinding = DrcProfileBinding | NativeErrorFloorBinding
 
 
 def _check(deadline: float) -> None:
@@ -79,8 +145,13 @@ def _context_digest(context: dict[str, bytes], deadline: float) -> str:
 
 
 def prepare_drc_profile(
-    context: dict[str, bytes], board_relative: str, settings: Settings, deadline: float
-) -> tuple[dict[str, bytes], DrcProfileBinding]:
+    context: dict[str, bytes],
+    board_relative: str,
+    settings: Settings,
+    deadline: float,
+    *,
+    error_floor: DrcErrorFloor | None = None,
+) -> tuple[dict[str, bytes], AnyDrcProfileBinding]:
     """Preserve source bytes; add or replace only the private project companion."""
 
     admit_rule_liveness_context(
@@ -110,6 +181,21 @@ def prepare_drc_profile(
     if type(severities) is not dict or len(severities) > 4096:
         raise OptimizationError("optimization DRC project is malformed")
     promoted = []
+    raised = []
+    if error_floor is not None:
+        if error_floor != "kicad-10.0.5-editable-errors/v1":
+            raise OptimizationError("optimization DRC error floor is unsupported")
+        for key in NATIVE_ERROR_CHECKS:
+            _check(deadline)
+            original_severity = severities.get(key)
+            if key in severities and (
+                type(original_severity) is not str
+                or original_severity not in {"ignore", "warning", "error"}
+            ):
+                raise OptimizationError("optimization DRC project is malformed")
+            if original_severity in {"ignore", "warning"}:
+                raised.append(key)
+            severities[key] = "error"
     for key in DEFAULT_IGNORED_CHECKS:
         _check(deadline)
         if key not in severities or severities[key] == "ignore":
@@ -149,13 +235,20 @@ def prepare_drc_profile(
         max_context_bytes=settings.max_drc_context_bytes,
         deadline=deadline,
     )
-    profile = DrcProfileBinding(
-        original_context_digest=_context_digest(context, deadline),
-        effective_context_digest=_context_digest(effective, deadline),
-        original_project_digest=None if original is None else _sha(original, deadline),
-        effective_project_digest=_sha(payload, deadline),
-        promoted_checks=tuple(promoted),
-        enabled_inventory=tuple(sorted(inventory)),
+    fields = {
+        "original_context_digest": _context_digest(context, deadline),
+        "effective_context_digest": _context_digest(effective, deadline),
+        "original_project_digest": None if original is None else _sha(original, deadline),
+        "effective_project_digest": _sha(payload, deadline),
+        "promoted_checks": tuple(promoted),
+        "enabled_inventory": tuple(sorted(inventory)),
+    }
+    profile = (
+        DrcProfileBinding.model_validate(fields)
+        if error_floor is None
+        else NativeErrorFloorBinding.model_validate(
+            {**fields, "error_floor": error_floor, "raised_error_checks": tuple(raised)}
+        )
     )
     _check(deadline)
     return effective, profile

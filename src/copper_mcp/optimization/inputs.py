@@ -42,7 +42,11 @@ from copper_mcp.optimization.contracts import (
     bounded_json,
     digest_document,
 )
-from copper_mcp.optimization.drc_profile import DrcProfileBinding, prepare_drc_profile
+from copper_mcp.optimization.drc_profile import (
+    AnyDrcProfileBinding,
+    DrcErrorFloor,
+    prepare_drc_profile,
+)
 from copper_mcp.optimization.native_import import NativeImportBinding, import_native_board
 from copper_mcp.optimization.provenance import native_implementation_digest
 from copper_mcp.parse_budgets import parse_limits_for
@@ -123,6 +127,7 @@ class OptimizationLaunchV2(OptimizationLaunch):
     limits: ResourceLimitsV2 = Field(default_factory=default_limits_v2)
     required_domains: Annotated[tuple[Domain, ...], Field(max_length=7)] = ()
     project: ProjectDeclaration | None = None
+    drc_error_floor: DrcErrorFloor | None = None
     input_mode: Literal["observed-snapshot"] = "observed-snapshot"
 
 
@@ -135,6 +140,7 @@ class NativeFullBoardLaunchV2(_OptimizationLaunchFields):
     limits: ResourceLimitsV2 = Field(default_factory=default_limits_v2)
     required_domains: Annotated[tuple[Domain, ...], Field(max_length=7)] = ()
     project: ProjectDeclaration | None = None
+    drc_error_floor: DrcErrorFloor | None = None
 
 
 @dataclass(frozen=True)
@@ -156,7 +162,7 @@ class PreparedOptimization:
     electrical_source: bytes | None = None
     input_artifact_bindings: tuple[tuple[str, str], ...] = ()
     project: ProjectDeclaration | None = None
-    drc_profile: DrcProfileBinding | None = None
+    drc_profile: AnyDrcProfileBinding | None = None
     native_import: NativeImportBinding | None = None
     import_output_bytes: int = 0
     external_router_settings_digest: str | None = None
@@ -428,7 +434,15 @@ def prepare_optimization(
             if launch.project is not None and electrical_source is not None:
                 raise OptimizationError("optimization electrical inputs are ambiguous")
             _effective_context, drc_profile = prepare_drc_profile(
-                context, relative, settings, active_deadline
+                context,
+                relative,
+                settings,
+                active_deadline,
+                **(
+                    {"error_floor": launch.drc_error_floor}
+                    if launch.drc_error_floor is not None
+                    else {}
+                ),
             )
             capture_digest = library_digest = None
             if launch.project is not None:

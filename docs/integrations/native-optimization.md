@@ -29,6 +29,7 @@ net references, and any explicitly movable footprint references into the launch 
 | `electrical_intent_path` | Optional bounded, self-digesting Circuit Intent JSON snapshot. Supplying it makes ERC mandatory. It cannot be combined with v2 `project`. |
 | `project` | V2 only: declared schematic `root_path`, digest-bound `files` (`path`, `digest`) and `libraries` (`name`, `path`, `digest`). Captured project ERC and separate candidate-bound PCB parity are mandatory. Unsupported projects refuse. |
 | `required_domains` | V2 only: additional required judge domains. The caller cannot remove mandatory DRC/DFM or project-required ERC. Missing authorities block review. |
+| `drc_error_floor` | Optional v2 policy `kicad-10.0.5-editable-errors/v1`: restore all 33 editable native error checks to error in the private project, without changing the source. Omit for unchanged existing behavior. |
 | `placement_grid_nm`, `routing_settings`, `seed` | Bounded existing native search parameters. Manhattan distance may guide the search, never final evidence. |
 | `limits` | Cumulative runtime, candidate, placement, route-attempt, repair, expansion, obstacle-check and output ceilings. Server ceilings may tighten them. |
 | `allowed_backends` | V1 uses `internal-layered-v1`. V2 permits a declared pool of `internal-layered-v1`, `freerouting-dsn-ses-v1` and `simpleroutejson-v1`; external backends use the operator-configured [local runtime](local-router-runtime.md). External routers are tried first, internal only when explicitly included. |
@@ -104,6 +105,20 @@ expressions remain intact. The older file-apply serializer's supported subset is
 V2 enables five native-default suppressed checks as warnings in a bound private DRC profile,
 without changing the source project or weakening stronger explicit severities. Any remaining
 suppression still blocks review. See [the versioned workflow contract](../adr/0161-measured-optimization-is-an-end-to-end-versioned-workflow.md).
+
+Projects can explicitly suppress checks that native KiCad normally treats as errors. To evaluate
+such a project without editing its source, request `drc_error_floor` above. This versioned overlay
+sets the pinned editable error-check inventory to `error`, including PTH/NPTH inside courtyards,
+and retains the existing five default-ignored promotions. Other settings and unknown suppressions
+are not silently removed. Malformed settings refuse. The policy requires KiCad 10.0.5 evidence;
+a different backend version remains inconclusive. A finding for a floor check cannot pass even
+if the backend reports it as a warning.
+
+The judge's `drc_profile` includes `error_floor`, `raised_error_checks`, and both original/effective
+context and project digests. Review reconstruction must reproduce the same binding. This is a
+stricter board-checking policy, not fabrication certification or circuit/physics analysis. The
+original audio/supply development projects retained all existing target connections and passed
+this board-stage check, with no component movement or new routing; ERC inputs were not supplied.
 
 ## Reproduce the native placement-and-routing control
 

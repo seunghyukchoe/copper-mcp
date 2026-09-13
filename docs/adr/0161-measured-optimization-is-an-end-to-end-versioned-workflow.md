@@ -286,3 +286,23 @@ or resource ceilings. Final target references remain canonical and no failed tar
 The owned default-grid hybrid control has a failed identity slot and a fully routed, DRC-checked
 moved candidate; its comparison explicitly claims no improvement. Held-out placement acceptance
 still requires a measured baseline and the previously frozen quality objective.
+
+### Explicit native editable-error floor
+
+V2 launch input may select `drc_error_floor: kicad-10.0.5-editable-errors/v1`. Omission preserves
+the original five-check policy and its canonical representation. The overlay's 33 keys are the
+intersection of KiCad 10.0.5's default-error severities and its user-editable DRC item inventory,
+from source revision `18fb9289ff0efdca53c0352ed81a0973f0a6b58c`. Non-editable/internal codes are
+excluded. The source references are recorded beside the implemented inventory.
+
+Set those keys explicitly to error only in the captured private project, refusing malformed
+values. Record raised warning/ignore entries and bind original/effective project/context hashes.
+The `NativeErrorFloorBinding` is a versioned overlay with its own identity namespace; the old
+binding and v1 behavior remain intact. Its digest already enters the immutable request, and
+evaluation/review must reproduce it from the original capture. This adds no file-apply permission.
+
+Require observed backend version 10.0.5. Any reported floor-key violation fails the policy even
+when its reported severity is warning; excluded/suppressed evidence remains non-reviewable.
+Thus custom severity changes cannot turn a native error finding into a policy pass. Native
+good/bad controls and production MCP exports verify the policy separately from project ERC,
+general DFM, physical calibration, live mutation and release readiness.
