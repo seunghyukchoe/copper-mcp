@@ -197,7 +197,7 @@ def run_isolated_job(
         raise OptimizationError("isolated native input exceeds its byte budget")
 
     def cancelled() -> bool:
-        return repository.get(job_id, owner).status == "cancelled"
+        return repository.cancellation_requested(job_id, owner)
 
     def checkpoint() -> None:
         # The status query can block behind SQLite work. Bound it on both sides so even the

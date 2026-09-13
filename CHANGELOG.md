@@ -6,6 +6,12 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Isolated optimization cancellation polling now reads committed owner-bound status without
+  acquiring SQLite's writer lock. This prevents contention with a publishing child from failing
+  otherwise valid jobs. Expiry/corruption checks, write-side fencing and delivery deadlines remain.
+
 ### Added
 
 - Development `optimization/v2` external-router execution records retain bounded failed-run

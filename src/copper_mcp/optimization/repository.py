@@ -457,6 +457,21 @@ class OptimizationJobRepository:
                 self._rollback()
                 raise
 
+    def cancellation_requested(self, job_id: str, owner_binding: str) -> bool:
+        """Read committed owner-bound status without competing for SQLite's writer lock.
+
+        Worker/public operations still own expiry maintenance and lease fencing. A supervisor
+        poll must not begin a write transaction merely to observe cancellation during that work.
+        """
+        timestamp = self._time(None)
+        with self._lock:
+            stored = self._require_locked(job_id, owner_binding)
+            if stored.expires_at_ms <= timestamp and (
+                stored.lease_expires_at_ms is None or stored.lease_expires_at_ms <= timestamp
+            ):
+                raise OptimizationJobUnavailableError("optimization job is unavailable")
+            return stored.record.status == "cancelled"
+
     def get(
         self,
         job_id: str,

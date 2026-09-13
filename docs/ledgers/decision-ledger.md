@@ -561,3 +561,18 @@ The full result above belongs to its stated preceding tree, not to a newly inven
 after that delta. Ponytail and correctness reviews accepted the narrowly scoped closure.
 Hosted validation of the resulting commit, protected main landing and the broader program gates
 remain separate. No release or five-area completion claim is made.
+
+2026-09-14 D-285 hosted contention correction: PR303 head `1cb7834` passed Python 3.12/3.13
+compatibility and all source-evidence replays, but the Python 3.11 job in run `34767936844`
+failed during cancellation polling with `sqlite3.OperationalError: database is locked`
+(6154 passed, 164 skipped, one failed). Its required aggregate gate remained blocked. The parent
+poll used `get`, which performs maintenance with `BEGIN IMMEDIATE`, competing with the child's
+writer. A controlled second writer reproduces that exact failure without timing luck.
+
+The supervisor now uses a read-only committed-row query with the existing owner, bounded decode,
+stored-column consistency and expiry checks. Public reads/maintenance, leases, CAS, final package
+validation, busy timeout and before/after delivery deadline checks are unchanged. The deterministic
+regression passes after the fix; all 62 repository/isolation/deadline controls pass on Python
+3.12.13 (13.84s) and local 3.11.15 (13.15s). The CI interpreter was Linux 3.11.16, so local evidence
+is not presented as that hosted rerun. Independent correctness/security and Ponytail reviews
+accepted the correction. Hosted current-head verification and protected main landing remain open.
