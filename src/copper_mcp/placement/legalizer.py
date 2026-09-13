@@ -266,6 +266,10 @@ def _place(
         if proposal is not None:
             if footprint.locked:
                 raise _UnsupportedError("moving a locked footprint is not authorized")
+            if footprint.owns_outline:
+                raise _UnsupportedError(
+                    "moving a footprint that defines board material is unsupported"
+                )
             anchor = footprint if proposal.anchor is None else view.resolve(proposal.anchor)
             if anchor is None:
                 _reject_padless(view, proposal.anchor or "")

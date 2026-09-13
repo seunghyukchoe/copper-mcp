@@ -5,7 +5,7 @@ status and links to superseding records.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) and assign the next unused number — currently **0162**.
+1. Copy [`template.md`](template.md) and assign the next unused number — currently **0163**.
 2. Fill in `Status`, `Date`, `Owners`, and `Related` as bullets at the top, before `## Context`.
 3. Link the ADR from the [decision ledger](../ledgers/decision-ledger.md) in the same pull request.
 
@@ -238,6 +238,7 @@ never silently widens it.
 | [0159](0159-composed-clearance-is-an-input-bound-measurement.md) | Composed clearance is an input-bound measurement | Proposed |
 | [0160](0160-custom-rule-loading-needs-native-witness.md) | Custom-rule loading needs a native witness | Proposed |
 | [0161](0161-measured-optimization-is-an-end-to-end-versioned-workflow.md) | Measured optimization is an end-to-end versioned workflow | Proposed |
+| [0162](0162-cutouts-survive-the-ordinary-board-workflow.md) | Cutouts survive the ordinary-board workflow | Proposed |
 
 
 One hundred and thirty-five numbers allocated, one hundred and thirty records, no duplicates — and

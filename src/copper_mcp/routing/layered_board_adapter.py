@@ -63,6 +63,7 @@ from copper_mcp.routing.layered_contracts import (
 _Rect: TypeAlias = tuple[int, int, int, int]
 CancellationCheck: TypeAlias = Callable[[], bool]
 LAYERED_ROUTER_VERSION = "layered-board-a-star/0.1.0"
+LAYERED_CUTOUT_ROUTER_VERSION = "layered-board-a-star/0.2.0"
 LAYERED_ROUTING_POLICY = "board-layered-a-star-v1"
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 _MAX_SAFE_INT = (1 << 53) - 1
@@ -700,11 +701,7 @@ class LayeredBoardRouter:
                 LayeredRouteFailureCode.UNSUPPORTED_CONSTRAINT,
                 "the selected net has an unmodeled length or differential constraint",
             )
-        outline = (
-            snapshot.content.outline[0].outer
-            if len(snapshot.content.outline) == 1 and not snapshot.content.outline[0].holes
-            else None
-        )
+        outline = snapshot.content.outline[0].outer if len(snapshot.content.outline) == 1 else None
         board = _axis_aligned_rectangle(outline) if outline is not None else None
         if board is None:
             return _diagnostic(
@@ -854,6 +851,21 @@ class LayeredBoardRouter:
             )
             (via_obstacles if via else track_obstacles).append(obstacle)
             return True
+
+        for hole in snapshot.content.outline[0].holes:
+            rectangle = _axis_aligned_rectangle(hole)
+            if rectangle is None:
+                return _diagnostic(
+                    LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY, "cutout is not rectangular"
+                )
+            for layer in range(len(layers)):
+                if not add_obstacle(rectangle, layer, half_width) or not add_obstacle(
+                    rectangle, layer, via_half, via=True
+                ):
+                    return _diagnostic(
+                        LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                        "cutout obstacle budget is exhausted",
+                    )
 
         for pad in snapshot.content.pads:
             if pad.id in {start_pad.id, end_pad.id}:
@@ -1083,7 +1095,9 @@ class LayeredBoardRouter:
             cost=cost,
             metrics=metrics,
             settings=request.settings,
-            router_version=LAYERED_ROUTER_VERSION,
+            router_version=LAYERED_CUTOUT_ROUTER_VERSION
+            if snapshot.content.outline[0].holes
+            else LAYERED_ROUTER_VERSION,
             policy=LAYERED_ROUTING_POLICY,
             seed=request.seed,
             fill_binding=fill_binding_for(request.verified_fill),

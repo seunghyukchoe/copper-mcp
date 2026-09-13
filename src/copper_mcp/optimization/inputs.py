@@ -316,6 +316,8 @@ def prepare_optimization(
         footprints = {item.id: item for item in snapshot.content.footprints}
         if any(ref not in footprints or footprints[ref].locked for ref in movable):
             raise OptimizationError("optimization movable scope is unavailable or locked")
+        if any(footprints[ref].owns_outline for ref in movable):
+            raise OptimizationError("optimization cannot move a footprint defining board material")
         placement_document: dict[str, Any] = {}
         artifact_bindings: list[tuple[str, str]] = []
         if launch.placement_intent_path is not None:

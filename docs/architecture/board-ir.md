@@ -1,7 +1,9 @@
 # Board IR and KiCad Adapter Contracts
 
 Board IR is the deterministic board snapshot shared by routing, replay, placement, benchmark, and
-MCP application layers. The current contract is `copper.board-ir` version `0.4.0`. It is implemented
+MCP application layers. The default contract is `copper.board-ir` version `0.4.0`; explicit `0.5.0`
+adds the [ordinary-board cutout workflow](../adr/0162-cutouts-survive-the-ordinary-board-workflow.md).
+It is implemented
 as a pure domain package, strict JSON codec, JSON Schema, and a narrow read-only KiCad converter.
 
 See [ADR-0005](../adr/0005-canonical-board-ir.md) for the original integer/digest contract and
@@ -14,9 +16,10 @@ See [ADR-0005](../adr/0005-canonical-board-ir.md) for the original integer/diges
 | `copper_mcp.board_ir.types` | Immutable typed units, geometry, constraints, items, and snapshot envelope. |
 | `copper_mcp.board_ir.validation` | Reference, identity, budget, degeneracy, and exact polygon-topology checks. |
 | `copper_mcp.board_ir.canonical` | Normalization, canonical JSON bytes, constraint digest, and snapshot digest. |
-| `copper_mcp.board_ir.codec` | Strict bounded decoding of untrusted `0.4.0` JSON. |
+| `copper_mcp.board_ir.codec` | Strict bounded decoding of untrusted `0.4.0` and `0.5.0` JSON. |
 | `copper_mcp.adapters.kicad_board_ir` | Fail-closed conversion of the documented KiCad subset from bytes. |
 | [`0.4.0.schema.json`](../../schemas/board-ir/0.4.0.schema.json) | Active portable serialized-envelope contract. |
+| [`0.5.0.schema.json`](../../schemas/board-ir/0.5.0.schema.json) | Explicit footprint-owned rectangular cutouts and per-layer zones bound to a shared native source. |
 | [`0.3.0.schema.json`](../../schemas/board-ir/0.3.0.schema.json) | Byte-frozen predecessor; it cannot carry custom-pad copper envelopes. |
 | [`0.2.0.schema.json`](../../schemas/board-ir/0.2.0.schema.json) | Byte-frozen by ADR-0105; the copy a `v0.5.0`–`v0.8.0` consumer holds. |
 | [`0.1.0.schema.json`](../../schemas/board-ir/0.1.0.schema.json) | Immutable legacy compatibility contract. |
@@ -213,6 +216,12 @@ envelope whose content is not already canonical. Public snapshot writers also en
 decoder's byte, node, depth, string, and per-container budgets.
 
 ## KiCad read-only subset
+
+The matrix below describes the original 0.4 subset. The explicit 0.5 extension additionally
+admits footprint-owned rectangular cutouts and multi-layer solid zones with shared-source
+bindings, under [ADR-0162](../adr/0162-cutouts-survive-the-ordinary-board-workflow.md). All other
+refusals remain. A cutout is missing board material, not a keepout approximation; its footprint
+cannot move during optimization. The original native zone remains intact for fill and DRC.
 
 `parse_kicad_bytes(source, profile, limits)` parses exactly one bounded UTF-8 S-expression and
 returns a `ConversionResult`. A successful result contains a verified snapshot. Any conversion error

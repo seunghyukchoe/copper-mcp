@@ -47,6 +47,7 @@ class FootprintView:
     far_side_courtyards: tuple[Ring, ...] = ()
     #: Circular courtyard keep-outs on the layer opposite ``side``.
     far_side_courtyard_circles: tuple[CourtyardCircle, ...] = ()
+    owns_outline: bool = False
 
     def __post_init__(self) -> None:
         if not self.ref_id.startswith("footprint:"):
@@ -57,6 +58,8 @@ class FootprintView:
             raise PlacementViewError("a placeable footprint must own at least one pad")
         if not isinstance(self.locked, bool):
             raise PlacementViewError("footprint locked state must be boolean")
+        if not isinstance(self.owns_outline, bool):
+            raise PlacementViewError("footprint outline ownership must be boolean")
         for rings in (self.courtyards, self.far_side_courtyards):
             if not isinstance(rings, tuple) or not all(isinstance(ring, Ring) for ring in rings):
                 raise PlacementViewError("footprint courtyards must be immutable rings")
@@ -169,7 +172,7 @@ def build_placement_view(
         # Enforce caller-tightened ceilings before canonical digest work. ``verify_snapshot``
         # then applies the default contract limits, canonical-order check, and digest binding.
         if limits is not None:
-            validate_content(snapshot.content, limits)
+            validate_content(snapshot.content, limits, schema_version=snapshot.schema_version)
         verify_snapshot(snapshot)
     except BoardIRValidationError as error:
         raise PlacementViewError("Board IR snapshot failed placement-view validation") from error
@@ -223,6 +226,7 @@ def build_placement_view(
             side=footprint.side.value,
             pad_ids=footprint.pad_ids,
             locked=footprint.locked,
+            owns_outline=footprint.owns_outline,
             hull=hull,
             courtyards=footprint.courtyards,
             courtyard_circles=footprint.courtyard_circles,

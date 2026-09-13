@@ -115,6 +115,12 @@ _SCHEMA_COVERAGE: dict[str, _Proof] = {
         kind=_EMITTED,
         note="DrcSummary.to_dict(), the payload issue #11 found the schema rejecting",
     ),
+    "board-ir/0.5.0.schema.json": _Proof(
+        module="tests/test_board_cutouts.py",
+        test="test_cutout_snapshot_satisfies_published_schema",
+        kind=_EMITTED,
+        note="Actual footprint-cutout adapter output with bound owner geometry",
+    ),
     "board-ir/0.4.0.schema.json": _Proof(
         module="tests/test_board_ir_schema.py",
         test="test_adapter_output_matches_golden_fixture_and_schema",

@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from copper_mcp.board_ir.limits import ParseBudget, ParseLimits
-from copper_mcp.board_ir.types import BoardIRContent, Footprint, PointNM, Ring
+from copper_mcp.board_ir.types import (
+    BOARD_IR_CUTOUT_SCHEMA_VERSION,
+    BOARD_IR_SCHEMA_VERSION,
+    BOARD_IR_SUPPORTED_VERSIONS,
+    BoardIRContent,
+    Footprint,
+    PointNM,
+    Ring,
+    Zone,
+)
 
 _SCHEMA_MAX_COPPER_LAYERS = 64
 _SCHEMA_MAX_NET_CLASSES = 10_000
@@ -210,21 +219,36 @@ def validate_ring_topology(ring: Ring, *, locator: str, limits: ParseLimits | No
     )
 
 
-def validate_content(content: BoardIRContent, limits: ParseLimits | None = None) -> None:
+def validate_content(
+    content: BoardIRContent,
+    limits: ParseLimits | None = None,
+    *,
+    schema_version: str = BOARD_IR_SCHEMA_VERSION,
+) -> None:
     """Validate budgets, references, identities, and exact polygon topology."""
 
     limits = limits or ParseLimits()
+    if type(schema_version) is not str or schema_version not in BOARD_IR_SUPPORTED_VERSIONS:
+        raise BoardIRValidationError("schema.version", "Board IR version is unsupported")
     if len(content.outline) != 1:
         raise BoardIRValidationError(
-            "unsupported.topology", "Board IR v0.2 requires exactly one outline contour", "outline"
+            "unsupported.topology", "Board IR requires exactly one outline contour", "outline"
         )
-    if content.outline[0].holes:
+    if schema_version != BOARD_IR_CUTOUT_SCHEMA_VERSION and (
+        content.outline[0].holes or any(footprint.owns_outline for footprint in content.footprints)
+    ):
         raise BoardIRValidationError(
-            "unsupported.topology", "Board IR v0.2 does not support outline holes", "outline"
+            "unsupported.topology", "Board IR 0.4 does not support outline holes", "outline"
         )
     if len(content.copper_layers) > _SCHEMA_MAX_COPPER_LAYERS:
         raise BoardIRValidationError(
             "schema.limit", "copper-layer schema limit exceeded", "copper_layers"
+        )
+    if schema_version != BOARD_IR_CUTOUT_SCHEMA_VERSION and any(
+        zone.source_zone_id is not None for zone in content.zones
+    ):
+        raise BoardIRValidationError(
+            "schema.version", "projected source zones require Board IR 0.5"
         )
     if len(content.constraints.net_classes) > _SCHEMA_MAX_NET_CLASSES:
         raise BoardIRValidationError(
@@ -397,6 +421,10 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
     rings.extend((f"{zone.id}.boundary", zone.boundary) for zone in content.zones)
     rings.extend((f"{keepout.id}.boundary", keepout.boundary) for keepout in content.keepouts)
     for footprint in content.footprints:
+        rings.extend(
+            (f"{footprint.id}.outline_cutouts[{index}]", ring)
+            for index, ring in enumerate(footprint.outline_cutouts)
+        )
         for index, courtyard in enumerate(footprint.courtyards):
             locator = f"{footprint.id}.courtyards[{index}]"
             _require_octilinear_courtyard(courtyard, locator)
@@ -411,6 +439,22 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
             ParseBudget.TOTAL_VERTICES.value, "total vertex budget exceeded"
         )
     intersection_budget = [0]
+    projections: dict[str, list[Zone]] = {}
+    for zone in content.zones:
+        if zone.source_zone_id is not None:
+            projections.setdefault(zone.source_zone_id, []).append(zone)
+    for group in projections.values():
+        first = group[0]
+        if (
+            len(group) < 2
+            or len({zone.layer_id for zone in group}) != len(group)
+            or any(
+                replace(zone, id=first.id, layer_id=first.layer_id) != first for zone in group[1:]
+            )
+        ):
+            raise BoardIRValidationError(
+                "reference.ambiguous", "shared source-zone projections disagree"
+            )
     for locator, ring in rings:
         _validate_ring(
             ring,
@@ -418,3 +462,64 @@ def validate_content(content: BoardIRContent, limits: ParseLimits | None = None)
             limits=limits,
             intersection_budget=intersection_budget,
         )
+    holes = content.outline[0].holes
+    if len(holes) > 128:
+        raise BoardIRValidationError("schema.limit", "outline cutout count exceeds its limit")
+    owned_cutouts = [ring for footprint in content.footprints for ring in footprint.outline_cutouts]
+    if len(owned_cutouts) != len(holes) or {frozenset(ring.points) for ring in owned_cutouts} != {
+        frozenset(ring.points) for ring in holes
+    }:
+        raise BoardIRValidationError(
+            "unsupported.topology", "every cutout requires exactly one footprint owner"
+        )
+    bounds: list[tuple[int, int, int, int]] = []
+    outer = content.outline[0].outer.points
+    for hole in holes:
+        points = hole.points
+        xs, ys = {point.x for point in points}, {point.y for point in points}
+        if (
+            len(points) != 4
+            or len(xs) != 2
+            or len(ys) != 2
+            or {(p.x, p.y) for p in points} != {(x, y) for x in xs for y in ys}
+            or any(
+                a.x != b.x and a.y != b.y
+                for a, b in zip(points, points[1:] + points[:1], strict=True)
+            )
+        ):
+            raise BoardIRValidationError(
+                "unsupported.topology", "outline cutouts must be exact axis-aligned rectangles"
+            )
+        intersection_budget[0] += 5 * len(outer) + len(bounds)
+        if intersection_budget[0] > limits.max_intersection_tests:
+            raise BoardIRValidationError(
+                ParseBudget.INTERSECTION_TESTS.value, "cutout topology budget exceeded"
+            )
+        for a, b in zip(points, points[1:] + points[:1], strict=True):
+            if any(
+                _segments_intersect(a, b, c, d)
+                for c, d in zip(outer, outer[1:] + outer[:1], strict=True)
+            ):
+                raise BoardIRValidationError(
+                    "unsupported.topology", "cutout touches or crosses the board boundary"
+                )
+        point = points[0]
+        inside = False
+        for a, b in zip(outer, outer[1:] + outer[:1], strict=True):
+            if (a.y > point.y) != (b.y > point.y):
+                cross = (b.x - a.x) * (point.y - a.y) - (point.x - a.x) * (b.y - a.y)
+                if (cross > 0) == (b.y > a.y):
+                    inside = not inside
+        if not inside:
+            raise BoardIRValidationError(
+                "unsupported.topology", "cutout is not strictly inside the board"
+            )
+        box = (min(xs), min(ys), max(xs), max(ys))
+        if any(
+            not (box[2] < other[0] or other[2] < box[0] or box[3] < other[1] or other[3] < box[1])
+            for other in bounds
+        ):
+            raise BoardIRValidationError(
+                "unsupported.topology", "outline cutouts must be disjoint and non-touching"
+            )
+        bounds.append(box)

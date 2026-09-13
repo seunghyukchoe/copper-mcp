@@ -32,13 +32,14 @@ _FIXTURE = Path(__file__).parent / "fixtures/route-candidate/layered-tree-ordina
 @pytest.mark.real_kicad
 @pytest.mark.skipif(not _CONFIGURED_CLI, reason="requires explicitly configured real KiCad")
 @pytest.mark.parametrize(
-    "version,movement,input_mode,complete_targets",
+    "version,movement,input_mode,complete_targets,cutout",
     [
-        ("optimization/v1", False, "observed-snapshot", False),
-        ("optimization/v2", False, "observed-snapshot", False),
-        ("optimization/v2", True, "observed-snapshot", False),
-        ("optimization/v2", True, "native-full-board", False),
-        ("optimization/v2", True, "native-full-board", True),
+        ("optimization/v1", False, "observed-snapshot", False, False),
+        ("optimization/v2", False, "observed-snapshot", False, False),
+        ("optimization/v2", True, "observed-snapshot", False, False),
+        ("optimization/v2", True, "native-full-board", False, False),
+        ("optimization/v2", True, "native-full-board", True, False),
+        ("optimization/v2", True, "native-full-board", True, True),
     ],
     ids=[
         "v1-routing",
@@ -46,12 +47,25 @@ _FIXTURE = Path(__file__).parent / "fixtures/route-candidate/layered-tree-ordina
         "v2-placement-and-routing",
         "v2-native-full-board-placement-and-routing",
         "v2-complete-two-net-board",
+        "v2-complete-two-net-board-with-cutout",
     ],
 )
 def test_mcp_routes_complete_multilayer_tree_and_exports_without_apply(
-    tmp_path, version, movement, input_mode, complete_targets
+    tmp_path, version, movement, input_mode, complete_targets, cutout
 ):
     source = _FIXTURE.read_bytes()
+    if cutout:
+        source = (
+            source.rsplit(b")", 1)[0]
+            + b"""
+        (footprint "CopperMCP_CutoutOwner" (layer "F.Cu") (at 15 15)
+          (uuid "70000000-0000-0000-0000-000000000021")
+          (fp_rect (start -1 -3) (end 1 3) (stroke (width 0.05) (type default))
+            (fill no) (layer "Edge.Cuts") (uuid "70000000-0000-0000-0000-000000000022"))
+          (pad "M" smd rect (at -5 8) (size 1 1) (layers "F.Cu" "F.Mask" "F.Paste")
+            (uuid "70000000-0000-0000-0000-000000000023")))
+        )"""
+        )
     assert source.count(b'(net "POWER")') == 2
     if not complete_targets:
         source = source.replace(b'(net "POWER")', b'(net "BLOCKER_F")', 1).replace(
@@ -136,6 +150,12 @@ def test_mcp_routes_complete_multilayer_tree_and_exports_without_apply(
     }
     if version == "optimization/v2":
         launch["schema_version"] = version
+    if cutout:
+        # Four-layer cutout exclusions and the extra footprint increase predicate work.
+        # Both placement slots receive this same declared development-board allowance;
+        # production maxima, native checks and the 120-second deadline are unchanged.
+        launch["routing_settings"]["max_obstacle_checks"] = 300_000
+        launch["limits"]["max_obstacle_checks"] = 3_000_000
     if input_mode == "native-full-board":
         # The production intake derives the complete target scope and working snapshot.
         # The client still binds the original bytes and supplies an explicit movable scope.

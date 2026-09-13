@@ -941,3 +941,14 @@ without removing tests, relaxing limits or replacing native checks with mocks. T
 no implementation or test bytes. Final record review, exact-tip hosted validation and resulting
 main verification remain required. The static-expression limitation above and full five-area
 readiness, physics and human-approval gates remain open.
+
+2026-09-14 SEC-003 cutout workflow review: explicit Board IR0.5 and scene0.5 preserve missing
+material and owner geometry;0.4 bytes/interpretation remain frozen. Native multi-layer zones
+retain their source object and project context while per-layer IR projections carry an explicit
+source-zone binding. Reviewer identified an already-connected shortcut before cutout obstacles;
+shared retained-copper checks now precede connectivity claims and consume existing budgets.
+Exact capsule/annulus contact was independently reviewed as sound, including rejection of
+drill-only copper; it is enabled only for0.5. The duplicate material scan identified in review
+was removed while direct connectivity callers retain the check. No native/apply/consent authority
+is weakened. Current native controls are development evidence only; full validation, final
+integrated review and protected main CI remain outstanding for this feature.

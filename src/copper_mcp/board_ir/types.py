@@ -8,6 +8,8 @@ from enum import StrEnum
 
 BOARD_IR_SCHEMA = "copper.board-ir"
 BOARD_IR_SCHEMA_VERSION = "0.4.0"
+BOARD_IR_CUTOUT_SCHEMA_VERSION = "0.5.0"
+BOARD_IR_SUPPORTED_VERSIONS = frozenset({BOARD_IR_SCHEMA_VERSION, BOARD_IR_CUTOUT_SCHEMA_VERSION})
 JSON_SAFE_INTEGER = (1 << 53) - 1
 NM_PER_MM = 1_000_000
 UDEG_PER_DEGREE = 1_000_000
@@ -370,6 +372,7 @@ class Footprint:
     locked: bool = False
     far_side_courtyards: tuple[Ring, ...] = ()
     far_side_courtyard_circles: tuple[CourtyardCircle, ...] = ()
+    outline_cutouts: tuple[Ring, ...] = ()
 
     def __post_init__(self) -> None:
         _typed_id("footprint ID", self.id, "footprint:")
@@ -396,6 +399,11 @@ class Footprint:
         )
         if not isinstance(self.locked, bool):
             raise ValueError("footprint locked flag must be boolean")
+        _tuple_of("footprint outline cutouts", self.outline_cutouts, Ring)
+
+    @property
+    def owns_outline(self) -> bool:
+        return bool(self.outline_cutouts)
 
     @property
     def front_courtyards(self) -> tuple[tuple[Ring, ...], tuple[CourtyardCircle, ...]]:
@@ -656,9 +664,12 @@ class Zone:
     island_removal: ZoneIslandRemoval = ZoneIslandRemoval.ALWAYS
     fill_mode: str = "solid"
     locked: bool = False
+    source_zone_id: str | None = None
 
     def __post_init__(self) -> None:
         _typed_id("zone ID", self.id, "zone:")
+        if self.source_zone_id is not None:
+            _typed_id("source zone ID", self.source_zone_id, "zone:")
         _typed_id("net ID", self.net_id, "net:")
         _typed_id("layer ID", self.layer_id, "layer:")
         if not isinstance(self.boundary, Ring):
@@ -772,6 +783,9 @@ class BoardIRSnapshot:
             raise ValueError("snapshot content must be a BoardIRContent")
         if self.schema != BOARD_IR_SCHEMA:
             raise ValueError("Board IR schema discriminator is unsupported")
-        if self.schema_version != BOARD_IR_SCHEMA_VERSION:
+        if (
+            type(self.schema_version) is not str
+            or self.schema_version not in BOARD_IR_SUPPORTED_VERSIONS
+        ):
             raise ValueError("Board IR schema version is unsupported")
         _sha256("snapshot digest", self.snapshot_digest)

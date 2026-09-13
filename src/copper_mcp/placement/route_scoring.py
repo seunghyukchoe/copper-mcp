@@ -408,11 +408,17 @@ def project_legal_candidate_snapshot(
             snapshot.content,
             footprints=projected_footprints,
             pads=projected_pads,
-        )
+        ),
+        schema_version=snapshot.schema_version,
     )
 
 
 def _project_footprint(footprint: Footprint, placement: FootprintPlacement) -> Footprint:
+    if footprint.owns_outline and (
+        (placement.origin_x_nm, placement.origin_y_nm) != (footprint.origin.x, footprint.origin.y)
+        or placement.orientation_udeg != footprint.rotation_udeg
+    ):
+        raise ValueError("moving a footprint that defines board material is unsupported")
     return replace(
         footprint,
         origin=PointNM(placement.origin_x_nm, placement.origin_y_nm),

@@ -60,6 +60,7 @@ from copper_mcp.scene_render import SceneRenderEvidence
 from copper_mcp.security import read_workspace_file
 
 SCENE_VERSION = "0.4.0"
+SCENE_CUTOUT_VERSION = "0.5.0"
 
 #: Objects the router treats as given, versus objects a proposal could add or change.
 _STATIC_KINDS = ("outline", "footprints", "pads", "keepouts", "rules")
@@ -870,7 +871,10 @@ def _outline_object(contour: Any) -> SceneObject:
         ref_id=contour.id,
         kind="outline",
         layer_ids=(),
-        geometry={"outer_nm": _points(contour.outer)},
+        geometry={
+            "outer_nm": _points(contour.outer),
+            **({"holes_nm": [_points(hole) for hole in contour.holes]} if contour.holes else {}),
+        },
         ref_stability=_ref_stability(contour.id),
     )
 
@@ -918,7 +922,9 @@ def _kind_specs(content: Any, every_layer: tuple[str, ...]) -> tuple[_KindSpec, 
             static=True,
             items=tuple(content.outline),
             layer_ids=lambda _: every_layer,
-            vertices=lambda contour: len(contour.outer.points),
+            vertices=lambda contour: (
+                len(contour.outer.points) + sum(len(hole.points) for hole in contour.holes)
+            ),
             build=_outline_object,
         ),
         _KindSpec(
@@ -1279,6 +1285,9 @@ def _observe_board_scene(
         board_revision=board_revision,
         request=request,
         supported=True,
+        scene_version=SCENE_CUTOUT_VERSION
+        if any(contour.holes for contour in content.outline)
+        else SCENE_VERSION,
         snapshot_digest=snapshot.snapshot_digest,
         region=region,
         static_objects=static,

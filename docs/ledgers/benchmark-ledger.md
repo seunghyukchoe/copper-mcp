@@ -2106,3 +2106,15 @@ reconstructs historical source bytes; it does not attribute old timings to new c
 measurement. A main-only, no-tags clone demonstrably lacks `0a57d61`; all seven historical/current
 calibration controls pass against that object database. No branch ref, mutable source, relaxed
 hash check, resource-limit change or extra network lookup is introduced into test execution.
+
+2026-09-14 B-123 source-bound cutout integration replay: preserve the9/13 report unchanged and
+bind its exact source to durable main commit `1fd2a641735b43bb364ed5f83241340d51c454fc`.
+The [new report](../../benchmarks/results/routing/2026-09-14-layered-fill-island-budget-v1.json)
+has run ID `sha256:5c6e73af162249c51f7572d9a98d40bf44e37046c123dce1f9f166ebbc47b215` and
+records UTC2026-09-13 (local date2026-09-14), Python3.12.13, and current implementation hashes.
+All three unchanged gates pass; the shipped500,000-vertex case takes7.945s for proposal plus
+replay, and the counterfactual1,000,000-vertex single/split cases take15.949s/15.790s. The
+500,000 production cap is unchanged. No KiCad, network, route-quality or physics claim is made.
+The first invocation lacked the repository root on PYTHONPATH and failed before measurement;
+the successful invocation used `PYTHONPATH=src:.` with the committed runner. Original reports
+and their timings were not rewritten or re-signed.

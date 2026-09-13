@@ -29,6 +29,8 @@ from copper_mcp.board_ir.outline_arc import (
     inscribe_outline_arc,
 )
 from copper_mcp.board_ir.types import (
+    BOARD_IR_CUTOUT_SCHEMA_VERSION,
+    BOARD_IR_SCHEMA_VERSION,
     JSON_SAFE_INTEGER,
     Arc,
     ConstraintSet,
@@ -951,6 +953,7 @@ class _Converter:
         # set so that a reused identity is never projected as a Board IR identity.
         self.ambiguous_native_identities = ambiguous_native_identities
         self.native_identity_uses: Counter[tuple[str, str]] = Counter()
+        self.footprint_cutouts: list[Ring] = []
         self.source_revision = f"sha256:{hashlib.sha256(payload).hexdigest()}"
         # Largest single roundrect radius rounding, in nanometres, measured rather than asserted.
         self.max_roundrect_rounding_nm = 0
@@ -1475,6 +1478,9 @@ class _Converter:
                             )
                         continue
                     if self._is_routing_layer(layer):
+                        if layer == "Edge.Cuts" and head == "fp_rect":
+                            # Parsed with its owning footprint's exact transform below.
+                            continue
                         if (
                             layer != "Edge.Cuts"
                             and head == "fp_poly"
@@ -3878,9 +3884,51 @@ class _Converter:
                     locked=footprint_locked,
                     far_side_courtyards=far_side_courtyards,
                     far_side_courtyard_circles=far_side_courtyard_circles,
+                    outline_cutouts=self._footprint_cutout_rectangles(
+                        footprint, footprint_locator, origin=origin, turn=turn
+                    ),
                 )
             )
         return tuple(footprints), tuple(pads), tuple(tie_segments) + tuple(copper_segments)
+
+    def _footprint_cutout_rectangles(
+        self, footprint: SExpr, locator: str, *, origin: PointNM, turn: int
+    ) -> tuple[Ring, ...]:
+        cutouts: list[Ring] = []
+        for index, expression in enumerate(children(footprint, "fp_rect")):
+            rectangle_locator = f"{locator}.fp_rect[{index}]"
+            if self._graphic_layer(expression, rectangle_locator) != "Edge.Cuts":
+                continue
+            self._reject_unknown_children(
+                expression,
+                frozenset({"end", "fill", "layer", "locked", "start", "stroke", "tstamp", "uuid"}),
+                rectangle_locator,
+            )
+            self._validate_direct_atoms(
+                expression,
+                positional_atoms=0,
+                allowed=frozenset({"locked"}),
+                locator=rectangle_locator,
+            )
+            if self._values(expression, "fill", rectangle_locator, minimum=1, maximum=1) != ("no",):
+                self.fail(
+                    "unsupported.construct",
+                    "footprint Edge.Cuts rectangle must be unfilled",
+                    rectangle_locator,
+                    object_kind="outline",
+                )
+            start = self._point(expression, "start", rectangle_locator)
+            end = self._point(expression, "end", rectangle_locator)
+            cutouts.append(
+                Ring(
+                    tuple(
+                        self._transform(point, origin, turn, rectangle_locator)
+                        for point in (start, PointNM(end.x, start.y), end, PointNM(start.x, end.y))
+                    )
+                )
+            )
+        self.footprint_cutouts.extend(cutouts)
+        return tuple(cutouts)
 
     def _net_tie_copper_segments(
         self,
@@ -4666,6 +4714,7 @@ class _Converter:
                         "filled_polygon",
                         "hatch",
                         "layer",
+                        "layers",
                         "locked",
                         "min_thickness",
                         "name",
@@ -4681,10 +4730,6 @@ class _Converter:
                 locator,
             )
             layer_ids = self._layer_ids(expression, locator)
-            if len(layer_ids) != 1:
-                self.fail(
-                    "unsupported.construct", "solid zone must reference one copper layer", locator
-                )
             net_name = self._net_name(expression, locator)
             if net_name is None:
                 self.fail("net.unknown", "copper zone has no net", locator)
@@ -4833,6 +4878,20 @@ class _Converter:
                     locked=self._locked(expression),
                 )
             )
+            if len(layer_ids) > 1:
+                source_zone = zones.pop()
+                for layer_id in layer_ids:
+                    projection_key = f"{source_zone.id}:{layer_id}".encode("ascii")
+                    identity_kind = "assembled" if ":kicad:" in source_zone.id else "derived"
+                    projection_digest = hashlib.sha256(projection_key).hexdigest()
+                    zones.append(
+                        replace(
+                            source_zone,
+                            id=f"zone:{identity_kind}:{projection_digest}",
+                            source_zone_id=source_zone.id,
+                            layer_id=layer_id,
+                        )
+                    )
         return tuple(zones), tuple(keepouts)
 
     def _edge_cuts_edges(self) -> list[_OutlineEdge]:
@@ -5179,7 +5238,7 @@ class _Converter:
                 "kicad_pcb",
                 object_kind="outline",
             )
-        return tuple(contours)
+        return (replace(contours[0], holes=tuple(self.footprint_cutouts)),)
 
     def convert(self) -> ConversionResult:
         self._semantic_preflight()
@@ -5223,7 +5282,13 @@ class _Converter:
                 self.limits,
                 ambiguous_native_identities=self.ambiguous_native_identities | reused,
             ).convert()
+        schema_version = (
+            BOARD_IR_CUTOUT_SCHEMA_VERSION
+            if self.footprint_cutouts or any(zone.source_zone_id for zone in zones)
+            else BOARD_IR_SCHEMA_VERSION
+        )
         content = make_content(
+            schema_version=schema_version,
             source=source_info,
             outline=outline,
             copper_layers=self.layers,
@@ -5238,7 +5303,7 @@ class _Converter:
             keepouts=keepouts,
         )
         return ConversionResult(
-            snapshot=make_snapshot(content),
+            snapshot=make_snapshot(content, schema_version=schema_version),
             max_roundrect_rounding_nm=self.max_roundrect_rounding_nm,
             unmodelled_group_count=self.group_count,
             edge_connector_pad_count=self.edge_connector_pad_count,
@@ -5280,6 +5345,7 @@ def parse_kicad_bytes(
         validate_content(
             conversion.snapshot.content,
             replace(limits, max_total_vertices=remaining_vertices),
+            schema_version=conversion.snapshot.schema_version,
         )
         return conversion
     except _ConversionError as error:

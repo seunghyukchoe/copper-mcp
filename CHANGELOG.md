@@ -20,6 +20,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- Board IR 0.5 preserves footprint-owned rectangular cutouts and shared-source multi-layer solid
+  zones through native optimization. Placement keeps cutout owners fixed, routing avoids removed
+  material, and scene export carries versioned hole geometry. Exact annular connectivity retains
+  diagonal track/via contacts without counting drill voids as copper. Existing 0.4 identities and
+  v1 approval semantics remain unchanged; unsupported geometry still refuses.
+
 - V2 optimization can explicitly restore the pinned KiCad 10.0.5 editable error-check floor in
   private evaluation settings. Original project bytes and the prior default profile are preserved;
   exported evidence binds the original/effective contexts and raised checks. Wrong backend versions

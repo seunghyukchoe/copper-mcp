@@ -34,6 +34,12 @@ def _artifact() -> dict[str, Any]:
             "sha256:0e5578b780cbcbe0a919bc44d22c2f2c5ad75445f7e0992bb56e2722cb5d8d1f",
             True,
         ),
+        (
+            "2026-09-13",
+            "1fd2a641735b43bb364ed5f83241340d51c454fc",
+            "sha256:d53d2e748443247782ed456c77a06efc8ad4f323e443822d80ecff56d5a483ab",
+            True,
+        ),
     ],
 )
 def test_original_calibration_remains_bound_to_its_original_source(

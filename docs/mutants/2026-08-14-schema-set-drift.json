@@ -106,8 +106,8 @@
     {
       "id": "CV1-codec-accepts-any-envelope-version",
       "file": "src/copper_mcp/board_ir/codec.py",
-      "anchor": "            != BOARD_IR_SCHEMA_VERSION\n        ):\n            raise BoardIRValidationError(\n                SCHEMA_VERSION_UNSUPPORTED,\n                _SCHEMA_VERSION_REFUSAL,\n                \"snapshot.schema_version\",\n            )\n",
-      "replacement": "            != BOARD_IR_SCHEMA_VERSION\n        ):\n            pass\n",
+      "anchor": "        if schema_version not in BOARD_IR_SUPPORTED_VERSIONS:\n            raise BoardIRValidationError(\n                SCHEMA_VERSION_UNSUPPORTED,\n                _SCHEMA_VERSION_REFUSAL,\n                \"snapshot.schema_version\",\n            )\n",
+      "replacement": "        if schema_version not in BOARD_IR_SUPPORTED_VERSIONS:\n            schema_version = BOARD_IR_SCHEMA_VERSION\n",
       "expectation": "killed",
       "killing_tests": [
         "tests/test_board_ir_schema.py::test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_discriminated_code",
