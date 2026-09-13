@@ -597,3 +597,11 @@ and failed-cost attribution. An unavailable-runtime MCP control also passed with
 external execution. Independent correctness/security and Ponytail review accepted the source
 delta. Full integrated validation, the three ordinary development profiles, held-out acceptance,
 live mutation and engineering authorities remain separate unfinished gates.
+
+2026-09-14 D-285 hybrid integration verification: tree
+`c7f2f3c8e5855da900aa12ac2972872611e20cc9` passed complete `make check` on canonical Python 3.12
+with four loadfile workers and coverage: 6261 passed, 77 skipped in 390.89s, 88% coverage,
+plus lint/metadata, strict typing, security and builds. The explicit native regression batch
+passed 11 cases in 70.98s, including the real SRJ/internal recovery and deterministic replay.
+Merging corrected main `7b4abd8` left that entire tracked tree unchanged. Required hosted and
+protected-merge gates remain open for the hybrid feature; no release or five-area score follows.
