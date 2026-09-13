@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Hybrid deadline stops retain the actual failed attempt without inventing another backend;
+  truncated retryable routing histories are rejected before package review.
+
 - Historical fill-budget source verification now survives squash merges without depending on
   temporary PR commits; the original reports, source hashes and resource limits are unchanged.
 
@@ -16,6 +19,13 @@ All notable changes are documented here. The format follows
   otherwise valid jobs. Expiry/corruption checks, write-side fencing and delivery deadlines remain.
 
 ### Added
+
+- V2 optimization now tries an explicitly declared backend pool, with external routers first
+  and internal routing last only when authorized. Failed private derivatives are discarded;
+  attempts and their cumulative costs remain visible. Old v2 package digests and v1 behavior
+  remain compatible. A real SRJ-to-internal MCP run routes the complete moved candidate and
+  passes KiCad checks/replay without changing its grid or limits; its failed identity control
+  remains disclosed and earns no placement-improvement claim.
 
 - Development `optimization/v2` external-router execution records retain bounded failed-run
   output accounting and bind the selected local runtime. SRJ coordinates are explicitly projected

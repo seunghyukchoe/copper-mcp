@@ -367,6 +367,7 @@ def route_targets(
                 source, snapshot, repair = reset.source, reset.snapshot, reset.binding
 
     routing_plan: dict[str, tuple[tuple[Pad, ...], tuple[str, ...], int]] | None = None
+    routing_order = prepared.target_net_refs
     pending_search_units: int | None = None
     planned_layers = (
         tuple(sorted(snapshot.content.copper_layers, key=lambda layer: layer.index))
@@ -412,7 +413,21 @@ def route_targets(
             routing_plan[net] = pads, common, net_units
             pending_search_units += net_units
 
-    for index, net in enumerate(prepared.target_net_refs):
+        copper = (snapshot.content.segments, snapshot.content.vias, snapshot.content.arcs)
+        probe.reserve(ResourceUsage(obstacle_checks=sum(map(len, copper)) + len(routing_order)))
+        existing_nets = {item.net_id for group in copper for item in group}
+        routing_order = tuple(
+            sorted(
+                routing_order,
+                key=lambda net: (
+                    net not in existing_nets,
+                    -len(pads_by_net[net]),
+                    net,
+                ),
+            )
+        )
+
+    for index, net in enumerate(routing_order):
         probe.checkpoint()
         verified_fill = refresh_fill()
         if routing_plan is None:
@@ -624,7 +639,7 @@ def route_targets(
         snapshot,
         base,
         tuple(candidate_ids),
-        tuple(connected),
+        tuple(sorted(connected)),
         length,
         vias,
         probes,

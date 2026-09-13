@@ -111,20 +111,20 @@ def test_first_net_cannot_reserve_away_later_net_search(tmp_path: Path) -> None:
 
 
 def test_connected_net_releases_its_skipped_search_units(tmp_path: Path, monkeypatch) -> None:
-    prepared, settings = _prepared(tmp_path, FIXTURE.read_bytes())
-    power = next(net.id for net in prepared.snapshot.content.nets if net.name == "POWER")
-    actual_connected = routing._already_connected
+    source = (
+        FIXTURE.read_bytes().rstrip()[:-1]
+        + b"""\n
+      (via (at 20 17.5) (size 0.8) (drill 0.4) (layers "F.Cu" "B.Cu")
+        (net "POWER") (uuid "83000000-0000-0000-0000-000000000001"))\n)\n"""
+    )
+    prepared, settings = _prepared(tmp_path, source)
     actual_tree = routing.LayeredTreeRouter.propose
     tree_checks: list[int] = []
-
-    def connected(prepared, snapshot, net, fill, probe):
-        return net == power or actual_connected(prepared, snapshot, net, fill, probe)
 
     def observe_tree(router, snapshot, request, **kwargs):
         tree_checks.append(request.settings.max_obstacle_checks)
         return actual_tree(router, snapshot, request, **kwargs)
 
-    monkeypatch.setattr(routing, "_already_connected", connected)
     monkeypatch.setattr(routing.LayeredTreeRouter, "propose", observe_tree)
     slot = _slot(prepared)
 

@@ -53,7 +53,9 @@ Set these in the server's operator environment, not in `start_optimization` argu
 
 Use the image identities emitted by the reviewed local build, never mutable tags. The runtime
 must already be started; optimization does not install or start Docker, download images, expose
-the host filesystem, or add network access. Missing configuration refuses before placement work.
+the host filesystem, or add network access. A single external-backend request refuses missing
+configuration before placement work. A hybrid request records an unavailable backend and may
+continue only to another explicitly declared backend, within the same remaining allocation.
 Changes to the selected executable, image, socket identity or runtime configuration invalidate
 the captured request. Unused backend settings do not affect its identity.
 

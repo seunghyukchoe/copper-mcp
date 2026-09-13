@@ -144,6 +144,13 @@ class ObjectiveWeights(ClosedModel):
     intent_residual: Annotated[int, Field(ge=1, le=1_000_000)]
 
 
+def routing_backend_order(backends: tuple[Backend, ...]) -> tuple[Backend, ...]:
+    """External routing first; internal routing only when explicitly allowed."""
+    return tuple(backend for backend in backends if backend != "internal-layered-v1") + tuple(
+        backend for backend in backends if backend == "internal-layered-v1"
+    )
+
+
 class _OptimizationRequestFields(ClosedModel):
     identity_namespace = "copper-mcp/optimization/v1/request"
     schema_version: Literal["optimization/v1", "optimization/v2"]

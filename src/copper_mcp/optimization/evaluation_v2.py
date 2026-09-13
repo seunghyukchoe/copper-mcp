@@ -32,12 +32,14 @@ from copper_mcp.optimization.package import (
     ExternalRunV2,
     ObjectiveMetricsV2,
     OptimizationPackageV2,
+    RoutingAttemptV2,
     SlotBudget,
     SlotWork,
     SpecctraDisposalV2,
 )
-from copper_mcp.optimization.placement import search_placements_v2
+from copper_mcp.optimization.placement import PrivatePlacement, search_placements_v2
 from copper_mcp.optimization.repair import CopperRepairBinding
+from copper_mcp.optimization.routing import PrivateRouteComposition
 from copper_mcp.optimization.worker import OptimizationExecutionError, OptimizationExecutionProbe
 from copper_mcp.optimization.zone_fill import CandidateFillBinding, CandidateFillError
 from copper_mcp.routing.contracts import AStarSettings
@@ -56,11 +58,16 @@ class SlotProbe(OptimizationExecutionProbe):
         self.deadline = time.monotonic() + budget.wall_ms / 1000
         self.stopped = False
         self.external_runs: tuple[ExternalRunV2, ...] = ()
+        self.routing_attempts: tuple[RoutingAttemptV2, ...] = ()
 
     def record_external_run(self, run: ExternalRunV2) -> None:
-        if type(run) is not ExternalRunV2 or self.external_runs:
+        if (
+            type(run) is not ExternalRunV2
+            or len(self.external_runs) >= 2
+            or any(previous.backend == run.backend for previous in self.external_runs)
+        ):
             raise OptimizationExecutionError("invalid_candidate")
-        self.external_runs = (run,)
+        self.external_runs += (run,)
 
     def bind_external_normalization(
         self,
@@ -69,12 +76,13 @@ class SlotProbe(OptimizationExecutionProbe):
         coordinate_quantization: CoordinateQuantizationV2 | None = None,
         specctra_disposal: SpecctraDisposalV2 | None = None,
     ) -> None:
-        if len(self.external_runs) != 1:
+        if not self.external_runs or self.external_runs[-1].normalized_route_digest is not None:
             raise OptimizationExecutionError("invalid_candidate")
         self.external_runs = (
+            *self.external_runs[:-1],
             ExternalRunV2.model_validate(
                 {
-                    **self.external_runs[0].model_dump(),
+                    **self.external_runs[-1].model_dump(),
                     "converter_digest": converter_digest,
                     "normalized_route_digest": route_digest,
                     "coordinate_quantization": coordinate_quantization,
@@ -92,6 +100,19 @@ class SlotProbe(OptimizationExecutionProbe):
             validation_checks=self.validation_checks,
             external_output_bytes=self.usage.external_output_bytes,
         )
+
+    def charge_external_output(self, count: int) -> None:
+        """Meter an already observed bounded prefix, even after the slot deadline."""
+        self.root.checkpoint()
+        charge = ResourceUsage(external_output_bytes=count)
+        prospective = self.usage.plus(charge)
+        if prospective.external_output_bytes > self.budget.external_output_bytes:
+            self.stopped = True
+            raise OptimizationExecutionError("budget_exhausted")
+        record = self.root.reserve(charge)
+        if record.status in {"budget_exhausted", "cancelled", "failed"}:
+            raise OptimizationExecutionError("budget_exhausted")
+        self.usage = prospective
 
     def remaining_time_ms(self) -> int:
         return min(
@@ -186,6 +207,78 @@ def allocate_slots(
     return allocation, budget
 
 
+def _route_with_backends(
+    prepared: PreparedOptimization,
+    placed: PrivatePlacement,
+    settings: Settings,
+    slot: SlotProbe,
+) -> tuple[PrivateRouteComposition, BackendProvenanceV2 | None]:
+    """Try only declared backends, discarding failed private copper and retaining all costs."""
+    from copper_mcp.optimization.contracts import routing_backend_order
+    from copper_mcp.optimization.evaluation import verify_original_context
+    from copper_mcp.optimization.external_routing import _runtime, route_external_targets
+    from copper_mcp.optimization.routing import route_targets
+
+    last_failure = OptimizationExecutionError("backend_failure")
+    for backend in routing_backend_order(prepared.request.allowed_backends):
+        slot.checkpoint()
+        before = slot.charged_work()
+        before_runs = len(slot.external_runs)
+        routed: PrivateRouteComposition | None = None
+        provenance: BackendProvenanceV2 | None = None
+        error: OptimizationExecutionError | None = None
+        try:
+            if backend == "internal-layered-v1":
+                routed = route_targets(prepared, placed.source, placed.snapshot, settings, slot)
+            else:
+                _runtime(settings, backend)
+                execution = route_external_targets(
+                    prepared, placed.source, placed.snapshot, settings, slot, backend=backend
+                )
+                routed, provenance = execution.composition, execution.provenance
+        except (
+            KiCadRoutePatchError,
+            KiCadLayeredRoutePatchError,
+            KiCadLayeredTreePatchError,
+            CandidateFillError,
+        ):
+            error = OptimizationExecutionError("invalid_candidate")
+        except OptimizationExecutionError as caught:
+            if caught.code not in {
+                "backend_failure",
+                "unsupported_geometry",
+                "invalid_candidate",
+                "budget_exhausted",
+            }:
+                raise
+            error = caught
+        after = slot.charged_work().model_dump(exclude={"search_accounting"})
+        slot.routing_attempts += (
+            RoutingAttemptV2.model_validate(
+                {
+                    "backend": backend,
+                    "outcome": "composed" if error is None else error.code,
+                    "composition_digest": None if routed is None else routed.digest,
+                    "external_run_digest": slot.external_runs[-1].digest
+                    if len(slot.external_runs) > before_runs
+                    else None,
+                    "charged": SlotWork.model_validate(
+                        {field: value - getattr(before, field) for field, value in after.items()}
+                    ),
+                }
+            ),
+        )
+        if error is None:
+            assert routed is not None
+            return routed, provenance
+        slot.checkpoint()
+        verify_original_context(prepared, settings, deadline=slot.deadline)
+        if error.code == "budget_exhausted":
+            raise error
+        last_failure = error
+    raise last_failure
+
+
 def coordinate_v2(
     prepared: PreparedOptimization,
     settings: Settings,
@@ -206,18 +299,14 @@ def coordinate_v2(
         verify_original_context,
     )
     from copper_mcp.optimization.provenance import bounded_file_digest, native_implementation_digest
-    from copper_mcp.optimization.routing import route_targets
 
     external_backend = prepared.request.allowed_backends != ("internal-layered-v1",)
-    if external_backend and (
-        len(prepared.request.allowed_backends) != 1
-        or prepared.request.allowed_backends[0] == "internal-layered-v1"
-    ):
-        raise OptimizationExecutionError("backend_failure")
-    if external_backend:
+    if external_backend and len(prepared.request.allowed_backends) == 1:
         from copper_mcp.optimization.external_routing import _runtime
 
-        _runtime(settings, prepared.request.allowed_backends[0])
+        for backend in prepared.request.allowed_backends:
+            if backend != "internal-layered-v1":
+                _runtime(settings, backend)
     verify_original_context(prepared, settings)
     probe.advance("placing")
     placements = search_placements_v2(prepared, settings, probe)
@@ -241,31 +330,7 @@ def coordinate_v2(
         probe.reserve(ResourceUsage(candidates=1))
         slot = SlotProbe(probe, budget)
         try:
-            patch_failed = False
-            try:
-                if external_backend:
-                    from copper_mcp.optimization.external_routing import route_external_targets
-
-                    execution = route_external_targets(
-                        prepared, placed.source, placed.snapshot, settings, slot
-                    )
-                    routed = execution.composition
-                    backend_provenance = execution.provenance
-                else:
-                    routed = route_targets(prepared, placed.source, placed.snapshot, settings, slot)
-                    backend_provenance = None
-            except (
-                KiCadRoutePatchError,
-                KiCadLayeredRoutePatchError,
-                KiCadLayeredTreePatchError,
-                CandidateFillError,
-            ):
-                patch_failed = True
-            if patch_failed:
-                probe.checkpoint()
-                slot.checkpoint()
-                verify_original_context(prepared, settings, deadline=slot.deadline)
-                raise OptimizationExecutionError("invalid_candidate")
+            routed, backend_provenance = _route_with_backends(prepared, placed, settings, slot)
             if tuple(sorted(routed.connected_targets)) != prepared.target_net_refs:
                 raise OptimizationExecutionError("invalid_candidate")
             if routed.route_probes == 0:
@@ -390,6 +455,7 @@ def coordinate_v2(
                     route_probes=routed.route_probes,
                     charged=slot.charged_work(),
                     external_runs=slot.external_runs,
+                    routing_attempts=slot.routing_attempts,
                 )
             )
             evaluated.append((binding, metrics, judge, routed.source, backend_provenance))
@@ -410,6 +476,7 @@ def coordinate_v2(
                         "route_probes": None,
                         "charged": slot.charged_work(),
                         "external_runs": slot.external_runs,
+                        "routing_attempts": slot.routing_attempts,
                     }
                 )
             )

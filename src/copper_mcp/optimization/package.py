@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    model_serializer,
+    model_validator,
+)
 
 from copper_mcp.optimization.contracts import (
     AnyOptimizationRequest,
@@ -16,6 +23,7 @@ from copper_mcp.optimization.contracts import (
     OptimizationError,
     ResourceLimitsV2,
     digest_document,
+    routing_backend_order,
 )
 from copper_mcp.optimization.judge import JudgeReport, JudgeReportV2
 from copper_mcp.optimization.native_import import NativeImportBinding
@@ -371,6 +379,36 @@ class AllocationBasis(ClosedModel):
         )
 
 
+class RoutingAttemptV2(ClosedModel):
+    """One routing-stage attempt; composition is not engineering approval."""
+
+    backend: Backend
+    outcome: Literal[
+        "composed",
+        "backend_failure",
+        "budget_exhausted",
+        "unsupported_geometry",
+        "invalid_candidate",
+    ]
+    composition_digest: Digest | None
+    external_run_digest: Digest | None
+    charged: SlotWork
+
+    @model_validator(mode="after")
+    def composition(self) -> RoutingAttemptV2:
+        if (self.outcome == "composed") != (self.composition_digest is not None):
+            raise ValueError("routing attempt invents a composition")
+        if self.backend == "internal-layered-v1" and self.external_run_digest is not None:
+            raise ValueError("internal routing invents external execution")
+        if (
+            self.backend != "internal-layered-v1"
+            and self.outcome == "composed"
+            and self.external_run_digest is None
+        ):
+            raise ValueError("external composition lacks execution evidence")
+        return self
+
+
 class ComparisonOutcome(ClosedModel):
     placement_candidate_id: Digest
     role: Literal["identity", "alternative"]
@@ -387,7 +425,15 @@ class ComparisonOutcome(ClosedModel):
     metrics: ObjectiveMetricsV2 | None
     route_probes: Counter | None
     charged: SlotWork
-    external_runs: Annotated[tuple[ExternalRunV2, ...], Field(max_length=1)] = ()
+    external_runs: Annotated[tuple[ExternalRunV2, ...], Field(max_length=2)] = ()
+    routing_attempts: Annotated[tuple[RoutingAttemptV2, ...], Field(max_length=3)] = ()
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_document(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        document: dict[str, object] = handler(self)
+        if not self.routing_attempts:
+            document.pop("routing_attempts", None)
+        return document
 
     @model_validator(mode="after")
     def observed(self) -> ComparisonOutcome:
@@ -400,7 +446,59 @@ class ComparisonOutcome(ClosedModel):
             raise ValueError("successful probe accounting is inconsistent")
         if self.route_probes is not None and self.route_probes > self.charged.route_attempts:
             raise ValueError("comparison work was not charged")
-        if self.external_runs:
+        if self.routing_attempts:
+            attempts = self.routing_attempts
+            if len({attempt.backend for attempt in attempts}) != len(attempts):
+                raise ValueError("routing backend was repeated")
+            if any(
+                attempt.outcome in {"composed", "budget_exhausted"} for attempt in attempts[:-1]
+            ) or (ready and attempts[-1].outcome != "composed"):
+                raise ValueError("routing continued after composition or invented success")
+            # The slot/freshness deadline can expire after a real failed attempt, before
+            # another backend starts. Preserve that attempt rather than inventing one.
+            if attempts[-1].outcome != "composed" and self.status not in {
+                attempts[-1].outcome,
+                "budget_exhausted",
+            }:
+                raise ValueError("routing refusal differs from the comparison outcome")
+            for field in (
+                "expansions",
+                "route_attempts",
+                "repair_rounds",
+                "routing_checks",
+                "validation_checks",
+                "external_output_bytes",
+            ):
+                total = sum(getattr(attempt.charged, field) for attempt in attempts)
+                recorded = getattr(self.charged, field)
+                if total > recorded or (field != "validation_checks" and total != recorded):
+                    raise ValueError("routing attempt work was not charged")
+            runs = {run.digest: run for run in self.external_runs}
+            bindings = [
+                attempt.external_run_digest
+                for attempt in attempts
+                if attempt.external_run_digest is not None
+            ]
+            if (
+                len(runs) != len(self.external_runs)
+                or len(set(bindings)) != len(bindings)
+                or set(bindings) != set(runs)
+            ):
+                raise ValueError("external execution is missing or unaccounted")
+            for attempt in attempts:
+                if attempt.external_run_digest is not None:
+                    run = runs[attempt.external_run_digest]
+                    if (
+                        run.backend != attempt.backend
+                        or run.output_bytes > attempt.charged.external_output_bytes
+                        or attempt.charged.route_attempts < 1
+                    ):
+                        raise ValueError("routing attempt differs from its external execution")
+                    if attempt.outcome == "composed" and run.normalized_route_digest is None:
+                        raise ValueError("external composition was not normalized")
+        elif self.external_runs:
+            if len(self.external_runs) != 1:
+                raise ValueError("multiple external executions lack attempt evidence")
             run = self.external_runs[0]
             if (
                 self.charged.route_attempts < 1
@@ -655,14 +753,25 @@ class OptimizationPackageV2(_OptimizationPackageFields):
             or selected[0].status != "reviewable"
         ):
             raise ValueError("selected comparison result is inconsistent")
+        if selected[0].routing_attempts:
+            last = selected[0].routing_attempts[-1]
+            if (
+                len(self.backend_provenance) != 1
+                or last.backend != self.backend_provenance[0].backend
+                or last.composition_digest != self.binding.route_bundle_id
+            ):
+                raise ValueError("selected routing attempt differs from its bound composition")
         external = tuple(
             row for row in self.backend_provenance if row.backend != "internal-layered-v1"
         )
-        runs = tuple(row.external_runs for row in self.comparison.outcomes)
         if external:
-            selected_runs = selected[0].external_runs
-            run = selected_runs[0] if len(selected_runs) == 1 else None
             provenance = external[0] if len(external) == 1 else None
+            selected_runs = tuple(
+                run
+                for run in selected[0].external_runs
+                if provenance is not None and run.backend == provenance.backend
+            )
+            run = selected_runs[0] if len(selected_runs) == 1 else None
             if (
                 run is None
                 or provenance is None
@@ -682,6 +791,7 @@ class OptimizationPackageV2(_OptimizationPackageFields):
                 raise ValueError("selected external attempt lacks bound execution provenance")
             if any(
                 row.status == "reviewable"
+                and not row.routing_attempts
                 and not (
                     len(row.external_runs) == 1
                     and row.external_runs[0].normalized_route_digest is not None
@@ -689,7 +799,9 @@ class OptimizationPackageV2(_OptimizationPackageFields):
                 for row in self.comparison.outcomes
             ):
                 raise ValueError("external comparison run evidence is inconsistent")
-        elif any(item for item in runs):
+        elif any(
+            row.external_runs and not row.routing_attempts for row in self.comparison.outcomes
+        ):
             raise ValueError("internal comparison invents external attempts")
         others = tuple(
             sorted(
@@ -745,6 +857,28 @@ class OptimizationPackageV2(_OptimizationPackageFields):
             for run in row.external_runs
         ):
             raise OptimizationError("optimization comparison execution differs from its request")
+        order = routing_backend_order(request.allowed_backends)
+        for row in self.comparison.outcomes:
+            attempted = tuple(attempt.backend for attempt in row.routing_attempts)
+            if attempted != order[: len(attempted)] or (
+                len(order) > 1
+                and not attempted
+                and not (
+                    row.status == "budget_exhausted"
+                    and row.charged == SlotWork()
+                    and not row.external_runs
+                )
+            ):
+                raise OptimizationError(
+                    "optimization routing attempts differ from the declared policy"
+                )
+            if (
+                attempted
+                and len(attempted) < len(order)
+                and row.status != "budget_exhausted"
+                and row.routing_attempts[-1].outcome != "composed"
+            ):
+                raise OptimizationError("optimization routing history is incomplete")
         if any(
             row.metrics is not None
             and (
