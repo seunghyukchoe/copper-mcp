@@ -266,6 +266,10 @@ def _place(
         if proposal is not None:
             if footprint.locked:
                 raise _UnsupportedError("moving a locked footprint is not authorized")
+            if footprint.owns_outline:
+                raise _UnsupportedError(
+                    "moving a footprint that defines board material is unsupported"
+                )
             anchor = footprint if proposal.anchor is None else view.resolve(proposal.anchor)
             if anchor is None:
                 _reject_padless(view, proposal.anchor or "")
@@ -502,13 +506,15 @@ def _pad_overlap(placed: tuple[_PlacedFootprint, ...], budget: _Budget) -> tuple
 def _outline_containment(
     placed: tuple[_PlacedFootprint, ...], snapshot: BoardIRSnapshot, budget: _Budget
 ) -> str:
-    """Bracket KiCad edge collisions without inventing global containment semantics.
+    """Preserve the outer-edge bracket and reject proven intrusion into modeled cutouts.
 
     Bounds entirely inside an outer ring prove the pad is inside.  An under-approximating core
-    crossing an outer or hole boundary proves real copper crosses an edge.  The gap includes both
+    crossing an outer boundary proves real copper crosses an edge. The outer-edge gap includes
     rounded copper whose box clips an edge and copper wholly remote from every edge; KiCad 10.0.5's
     edge-clearance provider reports neither as a global containment failure, so both are disclosed
-    as ``inconclusive`` rather than collapsed into a parity claim.
+    as ``inconclusive`` rather than collapsed into a parity claim. Cutouts explicitly remove
+    material: bounds wholly within a hole, or any core contact with it, prove an illegal pad
+    placement even when native edge-only checking would miss a pad remote from the boundary.
     """
 
     contours = snapshot.content.outline
@@ -534,9 +540,17 @@ def _outline_containment(
             for contour in contours:
                 for hole in contour.holes:
                     budget.charge()
-                    if pad.core is not None and rect_touches_ring(pad.core, hole):
-                        if not rect_inside_ring(pad.core, hole):
-                            return "violated"
+                    # Board IR cutouts are exact rectangles. Closed containment also handles
+                    # a rotated pad whose conservative envelope touches the cut boundary.
+                    left, top, right, bottom = ring_bounds(hole)
+                    bound_in_hole = (
+                        left <= pad.bounds[0] <= pad.bounds[2] <= right
+                        and top <= pad.bounds[1] <= pad.bounds[3] <= bottom
+                    )
+                    if bound_in_hole or (
+                        pad.core is not None and rect_touches_ring(pad.core, hole)
+                    ):
+                        return "violated"
                     if rect_touches_ring(pad.bounds, hole):
                         inconclusive = True
     return "inconclusive" if inconclusive else "proven_inside"

@@ -251,7 +251,8 @@ def test_the_codec_refuses_a_persisted_v0_2_0_envelope_with_a_discriminated_code
     assert caught.value.source_locator == "snapshot.schema_version"
     assert caught.value.message == (
         "Board IR envelope declares a superseded or unknown schema version; this build accepts "
-        "0.4.0 only, and an envelope at any other version must be re-converted from its source "
+        "0.4.0, 0.5.0 only, and an envelope at any other version must be re-converted "
+        "from its source "
         "board"
     )
 

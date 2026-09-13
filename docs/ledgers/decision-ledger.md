@@ -643,3 +643,46 @@ the pre-merge tree above. Final production MCP runs again verified unchanged aud
 originals, 10/7 connected targets and zero hard DRC. The real native negative control passed
 in 1.53s. Hosted validation and protected main landing remain separate gates; no release,
 project ERC, placement improvement, physics calibration or five-area score is claimed.
+
+2026-09-14 D-285 cutout workflow: PR306 landed through normal squash merge as
+`1fd2a641735b43bb364ed5f83241340d51c454fc`; main CI34779055911 completed successfully.
+The next single feature retains footprint-owned rectangular cutouts and shared native zones
+through optimization (ADR-0162), not a standalone schema lane. The sensor's first refusal was
+multi-layer zone admission; after explicit per-layer projection with shared-source binding,
+its native request produced a blocked package. A saved-snapshot diagnostic identified a VIN
+diagonal-track/via annulus contact missed by the conservative rectangular cores. Adding an
+exact inward-rounded integer contact predicate, not overriding native/core disagreement,
+joined all seven VIN pads. A roundrect-band hypothesis did not help and was not implemented.
+
+An uninstrumented pinned sensor MCP run then retained16/16 existing targets, completed two
+matching fills (17 islands,3405 vertices), passed native DRC and exported review package
+`sha256:4eee0907450aa01b2baf757589e12d681468ef76b12abbffaccb582403aa15b2`
+in19256ms without altering source files. That pre-checkpoint result is identity-only and not
+held-out evidence; clearance is unavailable and ERC/physics remain inconclusive. The owned
+four-layer native MCP placement/routing cutout control also passed in7.33s: two complete target
+nets, equal identity/proposal budgets, strict copper-length improvement, zero hard DRC, no apply.
+Its initial search allowance exhausted; the declared development-case allowance is now3,000,000
+checks equally shared by both slots, without changing production maxima or deadlines. Final
+source-bound native replay, full validation and final independent review remain required.
+
+2026-09-14 D-285 cutout checkpoint: staged tree
+`0e6c5743ce353dd378cc9983b4d7f7c2d163476b` passed the final native sensor replay in19,789ms
+(16/16 retained targets, original files unchanged, package
+`sha256:18d8f0ab9ca1c73cd43d4cfb25fa779a1875a270e0f321fb80d09a8a94938fee`) and the complete
+four-layer placement/routing cutout control in7.37s. Independent correctness/security and
+Ponytail review accepted the integrated behavior. First full `make check` failed honestly:
+6290 passed,79 skipped,2 failed in395.25s at88% coverage. The failures were the stale CV1
+version-guard mutation anchor and the old router-source binding in fill-budget evidence.
+No product code changed to repair these evidence gates. The updated mutation spec passed all
+22 expectations (21 killed,1 pre-existing declared equivalent), including restored-source
+controls; fresh calibration and all11 focused evidence controls passed. The next full run is a
+post-fix validation, not an identical-source retry. No readiness or release completion is claimed.
+
+2026-09-14 D-285 final cutout integration gate: tree
+`0166e77baf479dde54d85d729458b8e34e9e3970` passed complete `make check` with canonical Python3.12,
+four workers,6293 passed and79 skipped in386.75s,88% coverage, plus lint/metadata, strict mypy,
+secret/dependency audit and wheel/sdist build. Native checks were separately executed as recorded
+above; skipped cases are not claimed as native passes. Independent review accepted both the
+working behavior and the evidence-only correction. This append records completed validation;
+product/test/benchmark bytes are unchanged. Protected PR, hosted compatibility/evidence and
+resulting main CI remain required; the full five-area program is not complete.

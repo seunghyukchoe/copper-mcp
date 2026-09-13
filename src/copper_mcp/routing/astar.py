@@ -52,6 +52,7 @@ from copper_mcp.routing.spatial_index import ConservativeSpatialIndex, SpatialIn
 from copper_mcp.routing.steiner_ordering import batched_one_steiner_order
 
 ROUTER_VERSION = "astar-grid/0.7.0"
+CUTOUT_ROUTER_VERSION = "astar-grid/0.8.0"
 ROUTING_POLICY = "orthogonal-a-star-spatial-index-v1"
 _PRE_BATCHED_ROUTER_VERSION = "astar-grid/0.4.0"
 _PRE_SPATIAL_INDEX_ROUTER_VERSION = "astar-grid/0.5.0"
@@ -91,7 +92,9 @@ class _RouterIdentity:
 
 
 _CURRENT_ROUTER_IDENTITY = _RouterIdentity(ROUTER_VERSION, ROUTING_POLICY, True)
+_CUTOUT_ROUTER_IDENTITY = _RouterIdentity(CUTOUT_ROUTER_VERSION, ROUTING_POLICY, True)
 _REPLAY_IDENTITIES = {
+    (CUTOUT_ROUTER_VERSION, ROUTING_POLICY): _CUTOUT_ROUTER_IDENTITY,
     (ROUTER_VERSION, ROUTING_POLICY): _CURRENT_ROUTER_IDENTITY,
     (_PRE_REGION_SCOPED_ROUTER_VERSION, ROUTING_POLICY): _RouterIdentity(
         _PRE_REGION_SCOPED_ROUTER_VERSION,
@@ -1361,6 +1364,31 @@ class _CopperObject:
     layer_ids: frozenset[str]
     cores: tuple[_Rect, ...] = ()
     polygon: tuple[PointNM, ...] = ()
+    segment: Segment | None = None
+    via: Via | None = None
+
+
+def _track_contacts_via(segment: Segment, via: Via) -> bool:
+    """Prove positive capsule/annulus overlap using inward-rounded integer dimensions.
+
+    The capsule must reach the outer disc and must not be wholly inside the drill.
+    Its greatest distance from the via center occurs at an endpoint plus its radius.
+    Both sets are connected, so these bounds imply contact with actual annular copper.
+    """
+    radius = segment.width_nm // 2
+    hole = (via.drill_nm + 1) // 2
+    if not _point_segment_distance_lt(
+        via.center, segment.start, segment.end, via.diameter_nm // 2 + radius
+    ):
+        return False
+    return (
+        hole < radius
+        or max(
+            (point.x - via.center.x) ** 2 + (point.y - via.center.y) ** 2
+            for point in (segment.start, segment.end)
+        )
+        > (hole - radius) ** 2
+    )
 
 
 def _polygon_touches_rect(points: tuple[PointNM, ...], rectangle: _Rect, work: _WorkBudget) -> bool:
@@ -1392,12 +1420,73 @@ def _polygon_touches_rect(points: tuple[PointNM, ...], rectangle: _Rect, work: _
     return inside
 
 
+def _check_retained_copper_cutouts(
+    snapshot: BoardIRSnapshot,
+    net_id: str,
+    work: _WorkBudget,
+    verified_fill: tuple[VerifiedFill, ...] = (),
+) -> None:
+    """Do not recognize copper fabricated away by a cutout as an existing connection."""
+    content = snapshot.content
+    for contour in content.outline:
+        for hole in contour.holes:
+            bounds = _rectangle(hole)
+            if bounds is None:
+                raise _fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, "cutout is not rectangular")
+            for pad in content.pads:
+                work.obstacle_check()
+                if pad.net_id != net_id:
+                    continue
+                envelope = _pad_obstacle_rect(pad)
+                if envelope is None or _rectangles_touch(envelope, bounds):
+                    raise _fail(
+                        RouteFailureCode.UNSUPPORTED_GEOMETRY, "retained pad may intersect a cutout"
+                    )
+            for segment in content.segments:
+                work.obstacle_check()
+                if segment.net_id == net_id and _polygon_touches_rect(
+                    (segment.start, segment.end),
+                    _inflate_rectangle(bounds, (segment.width_nm + 1) // 2),
+                    work,
+                ):
+                    raise _fail(
+                        RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                        "retained track may intersect a cutout",
+                    )
+            for via in content.vias:
+                work.obstacle_check()
+                if via.net_id == net_id and _inside_closed(
+                    via.center, _inflate_rectangle(bounds, (via.diameter_nm + 1) // 2)
+                ):
+                    raise _fail(
+                        RouteFailureCode.UNSUPPORTED_GEOMETRY, "retained via may intersect a cutout"
+                    )
+            for arc in content.arcs:
+                work.obstacle_check()
+                if arc.net_id != net_id:
+                    continue
+                arc_envelope = _arc_envelope(arc)
+                if arc_envelope is None or _polygon_touches_rect(arc_envelope, bounds, work):
+                    raise _fail(
+                        RouteFailureCode.UNSUPPORTED_GEOMETRY, "retained arc may intersect a cutout"
+                    )
+            for island in verified_fill:
+                work.obstacle_check()
+                if island.net_id == net_id and _polygon_touches_rect(island.points, bounds, work):
+                    raise _fail(
+                        RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                        "retained fill may intersect a cutout",
+                    )
+
+
 def _multilayer_via_count(
     snapshot: BoardIRSnapshot,
     request: RouteRequest,
     pads: tuple[Pad, ...],
     work: _WorkBudget,
     verified_fill: tuple[VerifiedFill, ...] = (),
+    *,
+    cutouts_checked: bool = False,
 ) -> tuple[int, int] | None:
     """Return via and fill-island counts when every pad is provably joined, else None.
 
@@ -1407,6 +1496,8 @@ def _multilayer_via_count(
     a through via shares every layer, which is exactly what makes it a joint.
     """
 
+    if not cutouts_checked:
+        _check_retained_copper_cutouts(snapshot, request.net_id, work, verified_fill)
     content = snapshot.content
     layer_ids = frozenset(layer.id for layer in content.copper_layers)
     objects: list[_CopperObject] = []
@@ -1445,7 +1536,13 @@ def _multilayer_via_count(
         cores = (orthogonal,) if orthogonal is not None else _diagonal_segment_cores(segment, work)
         if cores is None:
             return None
-        admit(_CopperObject(layer_ids=frozenset({segment.layer_id}), cores=tuple(cores)))
+        admit(
+            _CopperObject(
+                layer_ids=frozenset({segment.layer_id}),
+                cores=tuple(cores),
+                segment=segment if snapshot.schema_version == "0.5.0" else None,
+            )
+        )
     via_count = 0
     for index, via in enumerate(content.vias):
         if index % 64 == 0:
@@ -1456,7 +1553,13 @@ def _multilayer_via_count(
         if cores is None:
             return None
         via_count += 1
-        admit(_CopperObject(layer_ids=layer_ids, cores=cores))
+        admit(
+            _CopperObject(
+                layer_ids=layer_ids,
+                cores=cores,
+                via=via if snapshot.schema_version == "0.5.0" else None,
+            )
+        )
     fill_count = 0
     for island in verified_fill:
         work.checkpoint()
@@ -1466,6 +1569,10 @@ def _multilayer_via_count(
         admit(_CopperObject(layer_ids=frozenset({island.layer_id}), polygon=island.points))
 
     def touching(left: _CopperObject, right: _CopperObject) -> bool:
+        if left.segment is not None and right.via is not None:
+            return _track_contacts_via(left.segment, right.via)
+        if right.segment is not None and left.via is not None:
+            return _track_contacts_via(right.segment, left.via)
         if left.polygon and right.polygon:
             # KiCad emits one node per connected region, so two distinct islands of the same
             # net on the same layer are disjoint by construction.
@@ -1546,6 +1653,7 @@ def _prepare(
             "the routing request does not match the immutable board revision",
         )
 
+    _check_retained_copper_cutouts(snapshot, request.net_id, work, verified_fill)
     content = snapshot.content
     selected_layer = None
     for index, layer in enumerate(content.copper_layers):
@@ -1702,7 +1810,9 @@ def _prepare(
         # Routing stays single-layer, but a net already joined through its vias or its poured
         # copper needs no route at all, and refusing to look would report a problem the board
         # does not have.
-        multilayer = _multilayer_via_count(snapshot, request, pads, work, net_fill)
+        multilayer = _multilayer_via_count(
+            snapshot, request, pads, work, net_fill, cutouts_checked=True
+        )
         if multilayer is not None:
             multilayer_vias, multilayer_fill = multilayer
             raise _AlreadyConnectedError(
@@ -1846,7 +1956,7 @@ def _prepare(
         )
     start_pad, end_pad = pads[0], pads[-1]
 
-    if len(content.outline) != 1 or content.outline[0].holes:
+    if len(content.outline) != 1:
         raise _fail(
             RouteFailureCode.UNSUPPORTED_GEOMETRY,
             "the first routing slice requires one hole-free outline",
@@ -1940,6 +2050,13 @@ def _prepare(
                 margin_nm=margin_nm,
             )
         )
+
+    for hole in content.outline[0].holes:
+        work.checkpoint()
+        rectangle = _rectangle(hole)
+        if rectangle is None:
+            raise _fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, "cutout is not rectangular")
+        add_rect_obstacle(rectangle, 0)
 
     # Resolving a clearance per obstacle rescans the assignment and class tuples every time,
     # which is quadratic in board size and metered only for cancellation. The mapping is fixed
@@ -2889,6 +3006,7 @@ class AStarRouter:
 
     def __init__(self, identity: _RouterIdentity | None = None) -> None:
         self._identity = identity or _CURRENT_ROUTER_IDENTITY
+        self._replay_identity = identity is not None
 
     @classmethod
     def for_replay(
@@ -2997,6 +3115,16 @@ class AStarRouter:
         if malformed is not None:
             return _result_failure(_fail(RouteFailureCode.UNSUPPORTED_GEOMETRY, malformed))
         checked_snapshot, checked_request, cancellation_check, checked_penalty = validated
+        identity = self._identity
+        if any(contour.holes for contour in checked_snapshot.content.outline):
+            if self._replay_identity and identity != _CUTOUT_ROUTER_IDENTITY:
+                return _result_failure(
+                    _fail(
+                        RouteFailureCode.UNSUPPORTED_GEOMETRY,
+                        "recorded router does not support cutouts",
+                    )
+                )
+            identity = _CUTOUT_ROUTER_IDENTITY
         work = _WorkBudget(settings=checked_request.settings, cancelled=cancellation_check)
         try:
             problem = _prepare(
@@ -3005,9 +3133,9 @@ class AStarRouter:
                 work,
                 verified_fill,
                 checked_penalty,
-                self._identity.use_spatial_index,
+                identity.use_spatial_index,
             )
-            return RouteResult(candidate=_route_tree(problem, work, self._identity))
+            return RouteResult(candidate=_route_tree(problem, work, identity))
         except _AlreadyConnectedError as connection:
             return RouteResult(
                 connected=RouteConnection(

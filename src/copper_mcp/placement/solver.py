@@ -457,7 +457,7 @@ def _movable_refs(intent: PlacementIntent, view: PlacementView) -> tuple[str, ..
     refs: set[str] = set()
     for subject in intent.subject_refs:
         footprint = view.resolve(subject)
-        if footprint is not None and not footprint.locked:
+        if footprint is not None and not footprint.locked and not footprint.owns_outline:
             refs.add(footprint.ref_id)
     return tuple(sorted(refs))
 

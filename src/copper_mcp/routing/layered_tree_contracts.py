@@ -19,6 +19,7 @@ from copper_mcp.routing.layered_contracts import (
 _MAX_SAFE_INT = (1 << 53) - 1
 _EMPTY_DIGEST = f"sha256:{'0' * 64}"
 LAYERED_TREE_ROUTER_VERSION = "layered-tree-a-star/0.1.0"
+LAYERED_TREE_CUTOUT_ROUTER_VERSION = "layered-tree-a-star/0.2.0"
 LAYERED_TREE_POLICY = "private-branch-aware-layered-tree-v1"
 
 
@@ -253,7 +254,11 @@ class LayeredTreeCandidate:
             raise ValueError("tree metrics are malformed")
         if type(self.settings) is not LayeredAStarSettings:
             raise ValueError("tree settings are malformed")
-        if self.router_version != LAYERED_TREE_ROUTER_VERSION or self.policy != LAYERED_TREE_POLICY:
+        if (
+            self.router_version
+            not in {LAYERED_TREE_ROUTER_VERSION, LAYERED_TREE_CUTOUT_ROUTER_VERSION}
+            or self.policy != LAYERED_TREE_POLICY
+        ):
             raise ValueError("tree provenance is unsupported")
         _integer("tree seed", self.seed)
         if self.metrics.branch_count != len(self.branches):

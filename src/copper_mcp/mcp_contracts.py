@@ -756,9 +756,13 @@ class OutlineGeometryContract(_ClosedContract):
     outer_nm: Ring
 
 
+class CutoutOutlineGeometryContract(OutlineGeometryContract):
+    holes_nm: Annotated[list[Ring], Field(min_length=1, max_length=128)]
+
+
 class SceneOutlineContract(_SceneObjectContract):
     kind: Literal["outline"]
-    geometry: OutlineGeometryContract
+    geometry: OutlineGeometryContract | CutoutOutlineGeometryContract
 
 
 class PadGeometryContract(_ClosedContract):
@@ -1031,7 +1035,7 @@ class CircuitSceneToolResponse(_ClosedContract):
     """Strict structured output contract for ``observe_board_scene``."""
 
     schema_version: str
-    scene_version: Literal["0.4.0"]
+    scene_version: Literal["0.4.0", "0.5.0"]
     board_path: str
     board_revision: Digest
     snapshot_digest: Digest | None
@@ -1045,6 +1049,19 @@ class CircuitSceneToolResponse(_ClosedContract):
     truncation: SceneTruncationContract
     ref_stability: SceneRefStabilityContract
     conversion_diagnostic_counts: dict[str, int]
+
+    @model_validator(mode="after")
+    def cutouts_require_versioned_scene(self) -> CircuitSceneToolResponse:
+        if (
+            self.scene_version == "0.4.0"
+            and isinstance(self.static.outline, list)
+            and any(
+                isinstance(item.geometry, CutoutOutlineGeometryContract)
+                for item in self.static.outline
+            )
+        ):
+            raise ValueError("cutout geometry requires scene version 0.5.0")
+        return self
 
 
 class PostPlacementObservationRequestContract(_ClosedContract):

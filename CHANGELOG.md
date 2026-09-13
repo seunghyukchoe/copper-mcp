@@ -8,6 +8,9 @@ All notable changes are documented here. The format follows
 
 ### Fixed
 
+- Placement rejects pads wholly inside a board cutout, including rotated pads without a
+  conservative core; those proven missing-material placements cannot become applicable previews.
+
 - Hybrid deadline stops retain the actual failed attempt without inventing another backend;
   truncated retryable routing histories are rejected before package review.
 
@@ -19,6 +22,12 @@ All notable changes are documented here. The format follows
   otherwise valid jobs. Expiry/corruption checks, write-side fencing and delivery deadlines remain.
 
 ### Added
+
+- Board IR 0.5 preserves footprint-owned rectangular cutouts and shared-source multi-layer solid
+  zones through native optimization. Placement keeps cutout owners fixed, routing avoids removed
+  material, and scene export carries versioned hole geometry. Exact annular connectivity retains
+  diagonal track/via contacts without counting drill voids as copper. Existing 0.4 identities and
+  v1 approval semantics remain unchanged; unsupported geometry still refuses.
 
 - V2 optimization can explicitly restore the pinned KiCad 10.0.5 editable error-check floor in
   private evaluation settings. Original project bytes and the prior default profile are preserved;

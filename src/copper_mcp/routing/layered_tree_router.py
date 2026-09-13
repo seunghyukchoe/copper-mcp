@@ -42,6 +42,7 @@ from copper_mcp.routing.layered_contracts import (
     LayeredRouteVia,
 )
 from copper_mcp.routing.layered_tree_contracts import (
+    LAYERED_TREE_CUTOUT_ROUTER_VERSION,
     LAYERED_TREE_POLICY,
     LAYERED_TREE_ROUTER_VERSION,
     LayeredTreeBranch,
@@ -364,11 +365,7 @@ class LayeredTreeRouter:
                 LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY,
                 "selected-net copper and arcs are unsupported for layered trees",
             )
-        outline = (
-            snapshot.content.outline[0].outer
-            if len(snapshot.content.outline) == 1 and not snapshot.content.outline[0].holes
-            else None
-        )
+        outline = snapshot.content.outline[0].outer if len(snapshot.content.outline) == 1 else None
         board = _axis_aligned_rectangle(outline) if outline is not None else None
         if board is None:
             return _diagnostic(
@@ -438,6 +435,21 @@ class LayeredTreeRouter:
             )
             (via_obstacles if via else track_obstacles).append(obstacle)
             return True
+
+        for hole in snapshot.content.outline[0].holes:
+            rectangle = _axis_aligned_rectangle(hole)
+            if rectangle is None:
+                return _diagnostic(
+                    LayeredRouteFailureCode.UNSUPPORTED_GEOMETRY, "cutout is not rectangular"
+                )
+            for layer in range(len(layers)):
+                if not add_obstacle(rectangle, layer, half_width) or not add_obstacle(
+                    rectangle, layer, via_half, via=True
+                ):
+                    return _diagnostic(
+                        LayeredRouteFailureCode.OBSTACLE_BUDGET_EXCEEDED,
+                        "cutout obstacle budget is exhausted",
+                    )
 
         terminal_ids = set(requested_ids)
         for pad in snapshot.content.pads:
@@ -820,7 +832,9 @@ class LayeredTreeRouter:
                 bend_count=bends,
             ),
             settings=request.settings,
-            router_version=LAYERED_TREE_ROUTER_VERSION,
+            router_version=LAYERED_TREE_CUTOUT_ROUTER_VERSION
+            if snapshot.content.outline[0].holes
+            else LAYERED_TREE_ROUTER_VERSION,
             policy=LAYERED_TREE_POLICY,
             seed=request.seed,
             fill_binding=fill_binding_for(request.verified_fill),

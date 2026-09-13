@@ -11,8 +11,10 @@ from typing import Any, Literal, Never, TypeVar
 from copper_mcp.board_ir.canonical import normalize_content, verify_snapshot
 from copper_mcp.board_ir.limits import BUDGET_EXCEEDED_PREFIX, ParseBudget, ParseLimits
 from copper_mcp.board_ir.types import (
+    BOARD_IR_CUTOUT_SCHEMA_VERSION,
     BOARD_IR_SCHEMA,
     BOARD_IR_SCHEMA_VERSION,
+    BOARD_IR_SUPPORTED_VERSIONS,
     JSON_SAFE_INTEGER,
     Arc,
     BoardIRContent,
@@ -65,7 +67,8 @@ SCHEMA_VERSION_UNSUPPORTED = "schema.version"
 # caller-controlled and no diagnostic echoes caller-controlled bytes.
 _SCHEMA_VERSION_REFUSAL = (
     "Board IR envelope declares a superseded or unknown schema version; "
-    f"this build accepts {BOARD_IR_SCHEMA_VERSION} only, and an envelope at any "
+    f"this build accepts {', '.join(sorted(BOARD_IR_SUPPORTED_VERSIONS))} only, "
+    "and an envelope at any "
     "other version must be re-converted from its source board"
 )
 
@@ -468,7 +471,7 @@ def _constraints(value: object, path: str) -> ConstraintSet:
     )
 
 
-def _decode_content(value: object) -> BoardIRContent:
+def _decode_content(value: object, schema_version: str = BOARD_IR_SCHEMA_VERSION) -> BoardIRContent:
     item = _object(
         value,
         required={
@@ -564,7 +567,8 @@ def _decode_content(value: object) -> BoardIRContent:
                 "courtyard_circles",
                 "far_side_courtyards",
                 "far_side_courtyard_circles",
-            },
+            }
+            | ({"outline_cutouts"} if schema_version == BOARD_IR_CUTOUT_SCHEMA_VERSION else set()),
             path=entry_path,
         )
         courtyard_values = _array(entry["courtyards"], f"{entry_path}.courtyards")
@@ -613,6 +617,12 @@ def _decode_content(value: object) -> BoardIRContent:
                 for circle_index, circle in enumerate(circle_values)
             ),
             locked=_boolean(entry["locked"], f"{entry_path}.locked"),
+            outline_cutouts=tuple(
+                _ring(ring, f"{entry_path}.outline_cutouts[{index}]")
+                for index, ring in enumerate(
+                    _array(entry.get("outline_cutouts", []), f"{entry_path}.outline_cutouts")
+                )
+            ),
             far_side_courtyards=tuple(
                 _ring(courtyard, f"{entry_path}.far_side_courtyards[{courtyard_index}]")
                 for courtyard_index, courtyard in enumerate(far_courtyard_values)
@@ -764,6 +774,9 @@ def _decode_content(value: object) -> BoardIRContent:
             ),
             fill_mode=_string(entry["fill_mode"], f"{entry_path}.fill_mode"),
             locked=_boolean(entry["locked"], f"{entry_path}.locked"),
+            source_zone_id=_string(entry["source_zone_id"], f"{entry_path}.source_zone_id")
+            if "source_zone_id" in entry
+            else None,
         )
         for index, raw in enumerate(_array(items["zones"], "content.items.zones"))
         for entry_path in (f"content.items.zones[{index}]",)
@@ -785,6 +798,9 @@ def _decode_content(value: object) -> BoardIRContent:
                     "fill_mode",
                     "locked",
                 },
+                optional={"source_zone_id"}
+                if schema_version == BOARD_IR_CUTOUT_SCHEMA_VERSION
+                else set(),
                 path=entry_path,
             ),
         )
@@ -910,22 +926,21 @@ def decode_snapshot_json(payload: bytes, limits: ParseLimits | None = None) -> B
         )
         if _string(envelope["schema"], "snapshot.schema") != BOARD_IR_SCHEMA:
             raise ValueError("snapshot schema discriminator is unsupported")
-        if (
-            _string(envelope["schema_version"], "snapshot.schema_version")
-            != BOARD_IR_SCHEMA_VERSION
-        ):
+        schema_version = _string(envelope["schema_version"], "snapshot.schema_version")
+        if schema_version not in BOARD_IR_SUPPORTED_VERSIONS:
             raise BoardIRValidationError(
                 SCHEMA_VERSION_UNSUPPORTED,
                 _SCHEMA_VERSION_REFUSAL,
                 "snapshot.schema_version",
             )
-        content = _decode_content(envelope["content"])
-        validate_content(content, limits)
+        content = _decode_content(envelope["content"], schema_version)
+        validate_content(content, limits, schema_version=schema_version)
         content = normalize_content(content)
-        validate_content(content, limits)
+        validate_content(content, limits, schema_version=schema_version)
         snapshot = BoardIRSnapshot(
             snapshot_digest=_string(envelope["snapshot_digest"], "snapshot.snapshot_digest"),
             content=content,
+            schema_version=schema_version,
         )
         verify_snapshot(snapshot)
         return snapshot
@@ -937,7 +952,7 @@ def decode_snapshot_json(payload: bytes, limits: ParseLimits | None = None) -> B
         ) from error
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
         raise BoardIRValidationError(
-            "schema.invalid", "JSON does not conform to Board IR v0.2", "json"
+            "schema.invalid", "JSON does not conform to the Board IR contract", "json"
         ) from error
     # The version refusal keeps its own message and locator rather than being normalised into
     # "content failed semantic validation", which would be false: the content is fine and the

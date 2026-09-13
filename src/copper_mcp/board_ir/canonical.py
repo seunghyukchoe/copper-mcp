@@ -145,6 +145,8 @@ def _footprint(item: Footprint) -> dict[str, JsonValue]:
         "rotation_udeg": item.rotation_udeg,
         "side": item.side.value,
     }
+    if item.outline_cutouts:
+        payload["outline_cutouts"] = [_ring(ring, clockwise=True) for ring in item.outline_cutouts]
     # The key is emitted only when a circle exists.  Every snapshot digest minted before
     # circular courtyards were representable therefore keeps encoding byte-for-byte the same
     # payload, which is what keeps the committed golden identities - and every caller-persisted
@@ -232,6 +234,7 @@ def _arc(item: Arc) -> dict[str, JsonValue]:
 
 def _zone(item: Zone) -> dict[str, JsonValue]:
     return {
+        **({"source_zone_id": item.source_zone_id} if item.source_zone_id is not None else {}),
         "boundary": _ring(item.boundary),
         "clearance_nm": item.clearance_nm,
         "fill_mode": item.fill_mode,
@@ -360,6 +363,15 @@ def normalize_content(content: BoardIRContent) -> BoardIRContent:
                     replace(
                         item,
                         pad_ids=tuple(sorted(item.pad_ids)),
+                        outline_cutouts=tuple(
+                            sorted(
+                                (
+                                    Ring(_normalize_ring(ring, clockwise=True))
+                                    for ring in item.outline_cutouts
+                                ),
+                                key=lambda ring: ring.points,
+                            )
+                        ),
                         courtyards=tuple(
                             sorted(
                                 (
@@ -452,10 +464,12 @@ def constraint_digest(content: BoardIRContent) -> str:
     return _digest(_canonical_json(_constraint_payload(content)))
 
 
-def _canonicalized_content(content: BoardIRContent) -> BoardIRContent:
-    validate_content(content)
+def _canonicalized_content(
+    content: BoardIRContent, schema_version: str = BOARD_IR_SCHEMA_VERSION
+) -> BoardIRContent:
+    validate_content(content, schema_version=schema_version)
     normalized = normalize_content(content)
-    validate_content(normalized)
+    validate_content(normalized, schema_version=schema_version)
     expected = constraint_digest(normalized)
     if normalized.constraint_digest != expected:
         raise BoardIRValidationError(
@@ -464,10 +478,12 @@ def _canonicalized_content(content: BoardIRContent) -> BoardIRContent:
     return normalized
 
 
-def canonical_content_bytes(content: BoardIRContent) -> bytes:
+def canonical_content_bytes(
+    content: BoardIRContent, *, schema_version: str = BOARD_IR_SCHEMA_VERSION
+) -> bytes:
     """Encode the validated snapshot body using restricted canonical JSON."""
 
-    normalized = _canonicalized_content(content)
+    normalized = _canonicalized_content(content, schema_version)
     return _canonical_json(_content_payload(normalized))
 
 
@@ -485,6 +501,7 @@ def make_content(
     arcs: tuple[Arc, ...] = (),
     zones: tuple[Zone, ...] = (),
     keepouts: tuple[Keepout, ...] = (),
+    schema_version: str = BOARD_IR_SCHEMA_VERSION,
 ) -> BoardIRContent:
     """Build and validate a body with its semantic constraint digest."""
 
@@ -504,19 +521,23 @@ def make_content(
         zones=zones,
         keepouts=keepouts,
     )
-    validate_content(content)
+    validate_content(content, schema_version=schema_version)
     content = normalize_content(content)
     content = replace(content, constraint_digest=constraint_digest(content))
-    validate_content(content)
+    validate_content(content, schema_version=schema_version)
     return content
 
 
-def make_snapshot(content: BoardIRContent) -> BoardIRSnapshot:
+def make_snapshot(
+    content: BoardIRContent, *, schema_version: str = BOARD_IR_SCHEMA_VERSION
+) -> BoardIRSnapshot:
     """Create a self-verifying snapshot envelope without a recursive hash."""
 
-    normalized = _canonicalized_content(content)
+    normalized = _canonicalized_content(content, schema_version)
     digest = _digest(_canonical_json(_content_payload(normalized)))
-    snapshot = BoardIRSnapshot(snapshot_digest=digest, content=normalized)
+    snapshot = BoardIRSnapshot(
+        snapshot_digest=digest, content=normalized, schema_version=schema_version
+    )
     _encode_envelope(snapshot, enforce_default_budget=True)
     return snapshot
 
@@ -524,7 +545,7 @@ def make_snapshot(content: BoardIRContent) -> BoardIRSnapshot:
 def verify_snapshot(snapshot: BoardIRSnapshot) -> bool:
     """Raise on a stale or forged digest and otherwise return true."""
 
-    normalized = _canonicalized_content(snapshot.content)
+    normalized = _canonicalized_content(snapshot.content, snapshot.schema_version)
     if normalized != snapshot.content:
         raise BoardIRValidationError(
             "canonical.not_normalized",
@@ -600,7 +621,7 @@ def _encode_envelope(snapshot: BoardIRSnapshot, *, enforce_default_budget: bool)
     envelope: dict[str, JsonValue] = {
         "content": _content_payload(snapshot.content),
         "schema": BOARD_IR_SCHEMA,
-        "schema_version": BOARD_IR_SCHEMA_VERSION,
+        "schema_version": snapshot.schema_version,
         "snapshot_digest": snapshot.snapshot_digest,
     }
     payload = _canonical_json(envelope)

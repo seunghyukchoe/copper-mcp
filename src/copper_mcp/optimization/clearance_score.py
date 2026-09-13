@@ -227,6 +227,7 @@ def _admit_snapshot(snapshot: ir.BoardIRSnapshot, max_objects: int, work: _Work)
             max_total_vertices=_MAX_VERTICES,
             max_intersection_tests=_MAX_PAIR_CHECKS,
         ),
+        schema_version=snapshot.schema_version,
     )
     work.check()
     if canonical.normalize_content(content) != content:
