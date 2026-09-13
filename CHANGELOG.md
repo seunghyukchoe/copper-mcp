@@ -20,6 +20,12 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- V2 optimization can explicitly restore the pinned KiCad 10.0.5 editable error-check floor in
+  private evaluation settings. Original project bytes and the prior default profile are preserved;
+  exported evidence binds the original/effective contexts and raised checks. Wrong backend versions
+  and warning-downgraded findings cannot pass this policy. Real audio/supply board-stage controls
+  and a real suppressed-courtyard-hole negative control pass; project ERC/physics remain separate.
+
 - V2 optimization now tries an explicitly declared backend pool, with external routers first
   and internal routing last only when authorized. Failed private derivatives are discarded;
   attempts and their cumulative costs remain visible. Old v2 package digests and v1 behavior

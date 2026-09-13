@@ -22,7 +22,7 @@ from copper_mcp.optimization.contracts import (
     Domain,
     Verdict,
 )
-from copper_mcp.optimization.drc_profile import DrcProfileBinding
+from copper_mcp.optimization.drc_profile import AnyDrcProfileBinding
 
 Authority = Literal["kicad-drc-v1", "kicad-erc-v1", "kicad-drc-dfm-v1"]
 Reason = Literal[
@@ -210,7 +210,7 @@ class JudgeReportV2(_JudgeReportFields):
     project_required: bool
     project_evidence: ProjectEvidence | None
     drc_profile_digest: Digest
-    drc_profile: DrcProfileBinding | None
+    drc_profile: AnyDrcProfileBinding | None
 
     @model_validator(mode="after")
     def project_binding(self) -> JudgeReportV2:

@@ -11,7 +11,11 @@ from copper_mcp import kicad_cli
 from copper_mcp.config import Settings
 from copper_mcp.models import DrcSummary
 from copper_mcp.optimization.contracts import digest_document
-from copper_mcp.optimization.drc_profile import prepare_drc_profile
+from copper_mcp.optimization.drc_profile import (
+    NATIVE_ERROR_CHECKS,
+    NativeErrorFloorBinding,
+    prepare_drc_profile,
+)
 from copper_mcp.optimization.erc import judge_electrical_intent
 from copper_mcp.optimization.inputs import PreparedOptimization
 from copper_mcp.optimization.judge import (
@@ -124,7 +128,18 @@ def composition_context(
         _check_deadline(deadline)
         profile_failed = False
         try:
-            context, profile = prepare_drc_profile(context, prepared.board_path, settings, deadline)
+            policy = (
+                prepared.drc_profile.error_floor
+                if isinstance(prepared.drc_profile, NativeErrorFloorBinding)
+                else None
+            )
+            context, profile = prepare_drc_profile(
+                context,
+                prepared.board_path,
+                settings,
+                deadline,
+                **({"error_floor": policy} if policy is not None else {}),
+            )
         except (ValueError, OSError):
             profile_failed = True
         _check_deadline(deadline)
@@ -150,6 +165,10 @@ def _domain(
     binding: CandidateBinding,
     executable_digest: str,
 ) -> DomainResult:
+    if isinstance(prepared.drc_profile, NativeErrorFloorBinding) and any(
+        summary.kicad_version != "10.0.5" for summary in observations
+    ):
+        raise kicad_cli.KiCadCliError("native DRC error-floor backend version is unsupported")
     for summary in observations:
         if (
             summary.base_revision != binding.candidate_board_revision
@@ -180,7 +199,15 @@ def _domain(
         rule_context_digest=binding.rule_context_digest,
         samples=tuple(
             EvidenceSample(
-                verdict="pass" if summary.passed else "fail",
+                verdict="pass"
+                if summary.passed
+                and not (
+                    isinstance(prepared.drc_profile, NativeErrorFloorBinding)
+                    and any(
+                        summary.violation_type_counts.get(key, 0) for key in NATIVE_ERROR_CHECKS
+                    )
+                )
+                else "fail",
                 normalized_result_digest=digest_document(
                     "optimization-drc-observation/v1", summary.to_dict()
                 ),

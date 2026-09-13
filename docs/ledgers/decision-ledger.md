@@ -615,3 +615,31 @@ follow composition or budget exhaustion. Fifty-one focused controls passed in 25
 correctness/security and Ponytail review accepted the correction. Limits, source checks, native
 validation and approval/apply authority are unchanged. The earlier full/native evidence retains
 its original source scope; hosted validation of this correction remains a separate gate.
+
+2026-09-14 D-285 ordinary-project native checking: the pinned audio/supply projects explicitly
+ignored PTH/NPTH-inside-courtyard checks, whose native severity is error. A private-copy diagnostic
+restored those errors without finding hard defects; an initial path-alias refusal was confined to
+the ignored diagnostic harness and corrected by resolving its temporary workspace, not by changing
+source validation. Production now offers the explicit versioned editable-error-floor overlay,
+covering all 33 default-error editable keys from pinned KiCad 10.0.5 source. It preserves original
+project bytes, binds both contexts, refuses unsupported versions/malformed settings, and cannot
+pass a warning-downgraded floor finding. Independent source comparison and security/Ponytail
+review accepted the implementation.
+
+Real production MCP runs against the original audio/supply projects retained 10/7 existing
+target connections, completed fresh fill, returned zero hard DRC errors, and bound original
+project hashes without source edits. These were identity-only board-stage runs: no placement
+improvement, project ERC or physics completion is claimed. A real native negative control exposes
+the previously suppressed NPTH courtyard violation. Full integration, sensor footprint-local
+outline support, project-level inputs and the frozen program acceptance remain open.
+
+2026-09-14 D-285 error-floor integration verification: tracked tree
+`389206ec53c782839fa144379d3005d502231619` passed complete `make check`: 6275 passed,
+78 skipped in 386.47s, 88% coverage, canonical Python 3.12 with four workers, plus lint,
+typing, security and builds. Main integration produced documentation-only conflicts; the full
+run had started before those were noticed. The additions were preserved, markers removed and
+documentation/ledger checks rerun; production/tests never changed and the final tree matches
+the pre-merge tree above. Final production MCP runs again verified unchanged audio/supply
+originals, 10/7 connected targets and zero hard DRC. The real native negative control passed
+in 1.53s. Hosted validation and protected main landing remain separate gates; no release,
+project ERC, placement improvement, physics calibration or five-area score is claimed.
