@@ -54,13 +54,13 @@ dev = [
   "pytest>=9.0.3,<10",
   "pytest-cov>=6.2,<8",
   "pytest-xdist>=3.8,<4",
-  "ruff==0.16.6",
+  "ruff==0.16.9",
 ]
 security = [
   "pip-audit>=2.9,<3",
 ]
 kicad = [
-  "kicad-python>=0.7,<0.8",
+  "kicad-python>=0.7,<0.9",
 ]
 
 [project.scripts]
