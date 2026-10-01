@@ -40,7 +40,7 @@ dependencies = [
   # and move the bound only afterwards. `ADR-0121`'s audit table is a claim about how one specific
   # SDK classifies an escaping exception; 2.1.0 falsified that claim without a major bump, so
   # semantic versioning is not evidence here.
-  "mcp>=2.0.0,<2.2.0",
+  "mcp>=2.0.0,<2.3.0",
   "pydantic>=2.11,<3.0",
 ]
 
